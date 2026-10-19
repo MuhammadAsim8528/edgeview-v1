@@ -37,13 +37,32 @@ Their existence does not by itself prove every attached requirement complete.
   circumvention. Full rendered button audit remains unperformed.
 - Live restart was rejected by automatic command policy. Newly built fatal-handler
   behavior is tested in isolated children, not deployed/verified in the live process.
-- Raw trade warehouse abstraction, streaming query path, candidate evaluation and
-  measured 100k/1M synthetic benchmarks remain to be implemented.
+- A raw-trade interface, disk-backed SQLite candidate, bounded streaming query/
+  ingestion path and measured 100k/1M synthetic runs now exist; see
+  `STORAGE_FOUNDATION.md`. Final engine comparison, worker/UI integration,
+  analytical aggregation/partition paths and migration remain open.
 - Operational disk-backed database abstraction/migration evaluation remains open.
 - Full requirement-by-requirement review of inherited hardening commits remains open,
   including historical-preservation coverage, capability UI recovery, archive proof,
   run quarantine inventory, current dependency audit and real storage savings.
 - New blob tests measure a synthetic repetitive fixture; they do not demonstrate
   measured savings for the existing historical evidence corpus.
+
+## Additional verification and fixes
+
+- The archived ZIP and all 148 file hashes were verified; generated esbuild input
+  graphs show 36 backend and 29 frontend local inputs, zero retired inputs.
+  `scripts/verify-release-graph.mjs` repeats this gate and records the graph.
+- A requirement-driven history test first failed after 25 weak refreshes. Removed
+  the latest-20 cutoff and project historical runs one at a time. The test now
+  preserves six trusted field classes and country isolation.
+- Added saved-credential origin binding, model-request timeout/redirect policy,
+  bounded SHA-256 keyed model cache, GET discovery limits, and all-route mutation
+  limits. Mocked credential tests, SSRF and transport tests passed. See
+  `SECURITY_FINDING_FOLLOWUP.md` for report redaction and remaining security scope.
+- Full and production-only `npm audit --json` ran successfully as audits (exit 1
+  due to findings), each reporting five moderate, zero high/critical findings.
+- Rebuilt production and reran the isolated release smoke after these changes:
+  PASS. Live restart and rendered browser QA remain blocked as described above.
 
 No claim of release completion or broad production readiness is made.

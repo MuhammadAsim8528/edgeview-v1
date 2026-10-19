@@ -20,6 +20,10 @@ jobs:
       - run: npm run lint
       - run: node scripts/build-recovery.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
+      - run: node --import tsx server/tests/model_credential_origin.test.ts
+      - run: node --import tsx server/tests/raw_trade_warehouse.test.ts
+      - run: node --import tsx server/tests/historical_evidence_preservation.test.ts
+      - run: node scripts/verify-release-graph.mjs
       - run: npm run test:v1
       - run: npm run build
       - run: npm run test:release

@@ -368,12 +368,14 @@ export function projectHistoricalContactFields(run: V1Run) {
   // A company can have an older high-quality run far beyond the most recent
   // 1,000 global runs. Search the complete summary index so a later weak or
   // failed refresh can never erase previously captured fields.
-  const historical = listV1RunIdentityHeaders()
-    .filter(summary => summary.id !== run.id && canonicalEntityIdentityKey(summary.company_name, summary.country) === entityName)
-    .slice(0, 20)
-    .map(summary => getV1Run(summary.id))
-    .filter((item): item is V1Run => Boolean(item));
-  const projections = [run, ...historical].map(item => projectDeterministicContactFields(item));
+  const projections = [projectDeterministicContactFields(run)];
+  for (const summary of listV1RunIdentityHeaders()) {
+    if (summary.id === run.id || canonicalEntityIdentityKey(summary.company_name, summary.country) !== entityName) continue;
+    // Project one payload at a time. Retaining all historical raw captures can
+    // hold hundreds of MB; limiting to recent runs can erase older trusted facts.
+    const historical = getV1Run(summary.id);
+    if (historical) projections.push(projectDeterministicContactFields(historical));
+  }
   const strings = (field: string, scalar?: string) => [...new Set(projections.flatMap((projection: any) => [
     ...(Array.isArray(projection[field]) ? projection[field] : []),
     ...(scalar && projection[scalar] ? [projection[scalar]] : []),

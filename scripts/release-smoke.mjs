@@ -149,6 +149,23 @@ try {
   const logs = await (await fetch(`${base}/api/logs/system?tail=50000`)).json();
   assert.ok(Array.isArray(logs));
   assert.ok(logs.length <= 1000, 'runtime log API must remain bounded');
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const modelResponse = await fetch(`${base}/api/ai/models?provider=unsupported&refresh=true`);
+    assert.equal(modelResponse.status, 400);
+  }
+  const throttledModels = await fetch(`${base}/api/ai/models?refresh=true`);
+  assert.equal(throttledModels.status, 429, 'model discovery GET must have a bounded request budget');
+  assert.ok(Number(throttledModels.headers.get('retry-after')) > 0);
+  const throttledBody = await throttledModels.json();
+  assert.equal(throttledBody.code, 'LOCAL_RATE_LIMITED');
+  let uploadThrottled = false;
+  for (let attempt = 0; attempt <= 120; attempt += 1) {
+    const emptyUpload = await fetch(`${base}/upload`, { method: 'POST' });
+    if (emptyUpload.status === 429) { uploadThrottled = true; break; }
+    assert.equal(emptyUpload.status, 400, 'empty upload must be rejected without storing data');
+  }
+  assert.equal(uploadThrottled, true, 'non-API upload alias must share the mutation request budget');
+  assert.equal((await fetch(`${base}/files/upload`, { method: 'POST' })).status, 429, 'another upload alias cannot bypass the budget');
   console.log('PASS EdgeView production release smoke');
 } finally {
   child.kill('SIGTERM');

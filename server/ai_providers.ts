@@ -1,6 +1,7 @@
 import { getAppSettings, resolveApiKey } from './settings';
 import { assertSafeHeaderValue } from './utils/header_encoder';
 import { assertSafeOutboundUrl, isSafeExternalUrl } from './url_safety';
+import { createHash } from 'node:crypto';
 
 export interface AIModelInfo {
   id: string;
@@ -29,8 +30,19 @@ interface CacheEntry {
   models: AIModelInfo[];
   timestamp: number;
 }
-const modelCache: Record<string, CacheEntry> = {};
+const modelCache = new Map<string, CacheEntry>();
+const MAX_MODEL_CACHE_ENTRIES = 32;
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache
+
+function assertSavedCredentialOrigin(key: string, baseUrl?: string): void {
+  const settings = getAppSettings();
+  if (!key || key.trim() !== settings.nvidia_api_key?.trim()) return;
+  const configured = new URL(settings.nvidia_base_url?.trim() || 'https://integrate.api.nvidia.com/v1');
+  const requested = new URL(baseUrl?.trim() || configured.href);
+  if (requested.origin !== configured.origin) {
+    throw new Error('Saved NVIDIA credentials can only be used with the configured provider origin.');
+  }
+}
 
 export const NvidiaProvider: AIProvider = {
   name: 'NVIDIA',
@@ -39,15 +51,19 @@ export const NvidiaProvider: AIProvider = {
       throw new Error('NVIDIA API Key is missing or empty');
     }
     const cleanKey = apiKey.trim();
+    assertSavedCredentialOrigin(cleanKey, baseUrl);
     assertSafeHeaderValue(`Bearer ${cleanKey}`, 'NVIDIA API key');
 
     const endpoint = (baseUrl?.trim() || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
     if (!isSafeExternalUrl(endpoint)) {
       throw new Error('Blocked: NVIDIA base URL is not a safe external http(s) address (SSRF guard)');
     }
+    await assertSafeOutboundUrl(endpoint);
 
     const res = await fetch(`${endpoint}/models`, {
       method: 'GET',
+      redirect: 'error',
+      signal: AbortSignal.timeout(20_000),
       headers: {
         'Authorization': `Bearer ${cleanKey}`,
         'Accept': 'application/json',
@@ -139,6 +155,8 @@ export const GroqProvider: AIProvider = {
 
     const res = await fetch(endpoint, {
       method: 'GET',
+      redirect: 'error',
+      signal: AbortSignal.timeout(20_000),
       headers: {
         'Authorization': `Bearer ${cleanKey}`,
         'Accept': 'application/json',
@@ -238,6 +256,12 @@ export async function fetchProviderModels(
   const effectiveBaseUrl =
     baseUrl !== undefined && baseUrl !== '' ? baseUrl : settings.nvidia_base_url;
 
+  // A request may not redirect a saved credential to a different public host.
+  // SSRF checks alone cannot protect a credential from an attacker-owned host.
+  if (provider.name === 'NVIDIA' && effectiveKey && effectiveKey === storedKey?.trim()) {
+    assertSavedCredentialOrigin(effectiveKey, effectiveBaseUrl);
+  }
+
   if (provider.name === 'NVIDIA' && effectiveBaseUrl?.trim()) {
     await assertSafeOutboundUrl(effectiveBaseUrl.trim());
   }
@@ -246,22 +270,25 @@ export async function fetchProviderModels(
     throw new Error(`${provider.name} API Key is not configured. Please enter a valid API key.`);
   }
 
-  const cacheKey = `${provider.name}:${effectiveKey.trim().slice(-6)}:${(effectiveBaseUrl || '').trim()}`;
+  const keyDigest = createHash('sha256').update(effectiveKey.trim()).digest('hex');
+  const cacheKey = `${provider.name}:${keyDigest}:${(effectiveBaseUrl || '').trim()}`;
   const now = Date.now();
 
-  if (!bypassCache && modelCache[cacheKey] && now - modelCache[cacheKey].timestamp < CACHE_TTL_MS) {
+  const cached = modelCache.get(cacheKey);
+  if (!bypassCache && cached && now - cached.timestamp < CACHE_TTL_MS) {
     return {
-      models: modelCache[cacheKey].models,
+      models: cached.models,
       cached: true,
-      lastUpdated: new Date(modelCache[cacheKey].timestamp).toISOString(),
+      lastUpdated: new Date(cached.timestamp).toISOString(),
     };
   }
 
   const models = await provider.listModels(effectiveKey, effectiveBaseUrl);
-  modelCache[cacheKey] = {
+  if (modelCache.size >= MAX_MODEL_CACHE_ENTRIES) modelCache.delete(modelCache.keys().next().value!);
+  modelCache.set(cacheKey, {
     models,
     timestamp: now,
-  };
+  });
 
   return {
     models,

@@ -115,9 +115,13 @@ app.use((req, res, next) => {
 });
 
 const mutationWindows = new Map<string, { startedAt: number; count: number }>();
-app.use('/api', (req, res, next) => {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
-  const key = `${req.ip}:${req.path}`;
+app.use((req, res, next) => {
+  const modelDiscovery = req.path === '/api/ai/models';
+  if (!modelDiscovery && !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  // Fixed bucket names avoid unbounded map growth from attacker-chosen paths.
+  // Apply to upload aliases outside /api as well as API mutations.
+  const key = modelDiscovery ? 'model-discovery' : 'local-mutations';
+  const limit = modelDiscovery ? 12 : 120;
   const now = Date.now();
   const entry = mutationWindows.get(key);
   if (!entry || now - entry.startedAt >= 60_000) {
@@ -125,7 +129,10 @@ app.use('/api', (req, res, next) => {
     return next();
   }
   entry.count += 1;
-  if (entry.count > 120) return res.status(429).json({ error: 'Too many local requests. Try again in a moment.' });
+  if (entry.count > limit) {
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil((60_000 - (now - entry.startedAt)) / 1000))));
+    return res.status(429).json({ success: false, code: 'LOCAL_RATE_LIMITED', message: 'Too many local requests. Try again in a moment.', recoverable: true });
+  }
   next();
 });
 

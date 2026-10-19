@@ -47,3 +47,4 @@ v1-coverage-audit.json
 .edgeview-build-backup-*/
 .edgeview-meta-*
 .archive/
+EDGEVIEW_SECURITY_AUDIT_FULL.md
