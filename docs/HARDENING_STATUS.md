@@ -222,3 +222,39 @@ No claim of release completion or broad production readiness is made.
   credential origin binding; completed-call metric ordering; runtime offline and
   recovery; dependency/archive closure and known-pattern history audit (13 commits,
   325 historical paths, zero matches; still not an entropy scan).
+
+### Provider semantic-success and partial-normalization audit
+
+- Required envelopes are now validated after raw capture for Serper, Hunter and
+  both AI operation paths. HTTP-200 error objects and unusable response shapes
+  retain their complete payload but are not counted as successful empty research.
+  Valid empty search/email arrays remain valid negative evidence; unknown fields
+  are not stripped. Existing legacy captures are not retroactively relabeled.
+- Operation parsing failures now attach to the corresponding captured raw record,
+  so timeline failures no longer coexist with an incorrectly successful provider
+  metric. An extraction answer must contain a claims array; explicit `[]` remains
+  allowed. Unsupported claims remain rejected with evidence retained.
+- Query generation now requires at least two actual identity-anchored proposals.
+  Valid AI proposals precede deterministic coverage queries. Invalid AI answers
+  produce observable failures and the existing deterministic fallback rather than
+  falsely claiming successful AI generation.
+- Mixed malformed/valid Serper organic or Hunter email arrays now keep usable
+  siblings. Malformed entries remain in raw evidence with an explicit schema
+  failure and timeline warning, not a silent filter or whole-response loss.
+- New active JSON-provider captures retain actual `http_status` separately from
+  semantic success/failure. Metrics expose recorded successful statuses; legacy
+  missing statuses remain unknown rather than an invented HTTP 200. The existing
+  raw-record UI serializes the complete record, including this additive field.
+- Synthetic regression coverage includes HTTP-200 error envelopes, invalid AI
+  proposals, actual proposal priority, mixed organic/email records, unknown
+  metadata retention, malformed evidence persistence and recorded HTTP status.
+  The first Hunter fixture failed because its domain did not satisfy existing
+  ownership rules; the fixture was corrected to an exact synthetic company/domain
+  identity. Production identity validation was not weakened to pass the test.
+  No real-provider or full-dataset enrichment is claimed from these fixtures.
+- Explicit Serper/Hunter diagnostic checks now validate bounded successful bodies
+  instead of declaring health from status 200 alone. NVIDIA/Groq model discovery
+  shares bounded model-envelope validation, preserving support for both array and
+  `{data: [...]}` catalogs. Invalid/error catalogs are not healthy empty lists.
+  New tests cover malformed HTML, error objects, empty keys, unauthorized replies,
+  valid empty search/email records and both supported model-list envelopes.

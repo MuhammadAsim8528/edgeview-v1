@@ -1,5 +1,25 @@
 /** Bounded body consumption: a headers-only fetch timeout is not sufficient. */
-export async function readProviderResponse(response: Response, maxBytes = 8 * 1024 * 1024, timeoutMs = 20_000): Promise<{ body: unknown; failure?: { name: string; message: string; status: number } }> {
+export function providerSchemaError(message: string): Error {
+  return Object.assign(new Error(message), { name: 'ProviderSchemaError' });
+}
+
+/** Validate required provider envelopes without stripping unknown fields. */
+export function validateProviderEnvelope(body: unknown, kind: 'serper' | 'hunter' | 'ai'): void {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw providerSchemaError('Provider payload is not an object');
+  const value = body as Record<string, any>;
+  if (value.error || (Array.isArray(value.errors) && value.errors.length) || (typeof value.statusCode === 'number' && value.statusCode >= 400)) throw providerSchemaError('Provider returned an error payload');
+  if (kind === 'ai') {
+    if (!Array.isArray(value.choices) || typeof value.choices[0]?.message?.content !== 'string' || !value.choices[0].message.content.trim()) throw providerSchemaError('AI provider returned no usable message content');
+  } else if (kind === 'hunter') {
+    if (!value.data || typeof value.data !== 'object' || !Array.isArray(value.data.emails)) throw providerSchemaError('Hunter payload lacks domain email records');
+  } else {
+    const collections = ['organic', 'peopleAlsoAsk', 'relatedSearches', 'images', 'news', 'videos', 'places'];
+    if (collections.some(key => value[key] !== undefined && !Array.isArray(value[key]))) throw providerSchemaError('Serper result collection has an invalid shape');
+    if (!collections.some(key => Array.isArray(value[key])) && !value.searchParameters && !value.knowledgeGraph && !value.answerBox) throw providerSchemaError('Serper payload contains no recognized search envelope');
+  }
+}
+
+export async function readProviderResponse(response: Response, maxBytes = 8 * 1024 * 1024, timeoutMs = 20_000, allowArray = false): Promise<{ body: unknown; failure?: { name: string; message: string; status: number } }> {
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid provider response bounds');
   const reader = response.body?.getReader();
   // One bounded allocation avoids millions of tiny chunks and race callbacks
@@ -29,7 +49,7 @@ export async function readProviderResponse(response: Response, maxBytes = 8 * 10
     }
     try {
       const body: unknown = JSON.parse(text);
-      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('Expected a JSON object');
+      if (!body || typeof body !== 'object' || (!allowArray && Array.isArray(body))) throw new Error('Expected a JSON object');
       return { body };
     } catch {
       return { body: text, failure: { name: 'ProviderSchemaError', message: 'Provider returned malformed JSON or a non-object payload', status: response.status } };

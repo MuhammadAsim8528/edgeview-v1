@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readProviderResponse } from '../provider_response';
+import { readProviderResponse, validateProviderEnvelope } from '../provider_response';
 
 const payload = { organic: [], unknown: { deeply: ['retained', 17] } };
 assert.deepEqual((await readProviderResponse(Response.json(payload))).body, payload);
@@ -21,4 +21,15 @@ const tinyChunks = new ReadableStream<Uint8Array>({ pull(controller) {
 } });
 assert.deepEqual((await readProviderResponse(new Response(tinyChunks), 10_002)).body, {});
 await assert.rejects(readProviderResponse(Response.json({}), -1), /Invalid provider response bounds/);
+for (const kind of ['serper', 'hunter', 'ai'] as const) {
+  assert.throws(() => validateProviderEnvelope({}, kind), { name: 'ProviderSchemaError' });
+  assert.throws(() => validateProviderEnvelope({ error: { code: 'quota' } }, kind), /error payload/);
+}
+assert.doesNotThrow(() => validateProviderEnvelope({ organic: [], extra: 'preserved' }, 'serper'));
+assert.doesNotThrow(() => validateProviderEnvelope({ searchParameters: { q: 'empty' } }, 'serper'));
+assert.doesNotThrow(() => validateProviderEnvelope({ knowledgeGraph: { title: 'Company' } }, 'serper'));
+assert.throws(() => validateProviderEnvelope({ organic: {} }, 'serper'), /invalid shape/);
+assert.doesNotThrow(() => validateProviderEnvelope({ data: { emails: [] } }, 'hunter'));
+assert.doesNotThrow(() => validateProviderEnvelope({ choices: [{ message: { content: '[]' } }] }, 'ai'));
+assert.throws(() => validateProviderEnvelope({ choices: [] }, 'ai'), /no usable/);
 console.log('PASS bounded provider bodies retain malformed evidence and reject timeouts/oversize');

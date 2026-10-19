@@ -3,6 +3,7 @@ import path from 'path';
 import { config as loadDotEnv } from 'dotenv';
 import { getProjectRoot, isTestProcess } from './db_paths';
 import { assertSafeHeaderValue } from './utils/header_encoder';
+import { readProviderResponse, validateProviderEnvelope } from './provider_response';
 
 // Use the same validated, executable-first root as databases and health identity.
 // An unrelated working directory must not supply credentials or receive saves.
@@ -310,6 +311,9 @@ export async function testHunterKey(key: string): Promise<{ success: boolean; me
       redirect: 'error', signal: AbortSignal.timeout(20_000),
     });
     if (res.status === 200) {
+      const captured = await readProviderResponse(res, 256 * 1024);
+      if (captured.failure) return { success: false, message: captured.failure.message };
+      validateProviderEnvelope(captured.body, 'hunter');
       return { success: true, message: 'Hunter API key connection verified!' };
     } else if (res.status === 401 || res.status === 403) {
       return { success: false, message: 'Invalid Hunter API Key (Unauthorized)' };
@@ -344,6 +348,9 @@ export async function testSerperKey(key: string): Promise<{ success: boolean; me
     });
 
     if (res.status === 200) {
+      const captured = await readProviderResponse(res, 256 * 1024);
+      if (captured.failure) return { success: false, message: captured.failure.message };
+      validateProviderEnvelope(captured.body, 'serper');
       return { success: true, message: 'Serper API key connection verified!' };
     } else if (res.status === 403 || res.status === 401) {
       return { success: false, message: 'Invalid Serper API Key (Unauthorized)' };

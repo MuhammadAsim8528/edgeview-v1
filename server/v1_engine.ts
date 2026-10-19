@@ -6,7 +6,7 @@ import { getProjectRoot } from './db_paths';
 import { isSafeExternalUrl, safeFetchOutboundText } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
-import { readProviderResponse } from './provider_response';
+import { readProviderResponse, validateProviderEnvelope, providerSchemaError } from './provider_response';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -28,6 +28,7 @@ export interface V1RawRecord {
   provider: string;
   request: Record<string, unknown>;
   response?: unknown;
+  http_status?: number;
   failure?: { name: string; message: string; status?: number };
   requested_at: string;
   completed_at: string;
@@ -130,6 +131,10 @@ function safeError(error: unknown, status?: number) {
   if (!status && typeof responseStatus === 'number' && Number.isInteger(responseStatus) && responseStatus >= 100 && responseStatus <= 599) status = responseStatus;
   return { name: e.name || 'Error', message: e.message || 'Unknown failure', ...(status ? { status } : {}) };
 }
+function attachOperationFailure(run: V1Run, provider: string, request: Record<string, unknown>, failure: V1RawRecord['failure']): void {
+  const captured = run.raw_records.find(record => record.provider === provider && record.request === request);
+  if (captured && !captured.failure) captured.failure = failure;
+}
 function providerCircuitKey(provider: string) { return provider.replace(/-extraction$/, ''); }
 function emptyProviderMetric(): ProviderMetricAggregate {
   return { request_count: 0, success_count: 0, failure_count: 0, timeout_count: 0, rate_limit_count: 0, total_latency_ms: 0, last_error: null, last_http_status: null, last_completed_at: null };
@@ -160,7 +165,7 @@ function recordProviderMetrics(run: V1Run): void {
     if (completedAt && (!metric.last_completed_at || completedAt >= metric.last_completed_at)) {
       metric.last_completed_at = completedAt;
       metric.last_error = failureMessage;
-      metric.last_http_status = record.failure ? Number(record.failure.status) || null : null;
+      metric.last_http_status = Number(record.http_status) || (record.failure ? Number(record.failure.status) || null : null);
     }
     if (record.response !== undefined && !record.failure) metric.success_count += 1;
     if (record.failure) {
@@ -325,13 +330,15 @@ function parseQueries(text: string, company: string, country: string, maxQueries
   // only strings that still satisfy the exact deterministic identity anchor.
   const quotedCandidates = [...text.matchAll(/["“]([^"”\r\n]{3,240})["”]/g)].map(match => cleanText(match[1]));
   const anchored = [...jsonCandidates, ...quotedCandidates];
+  const valid = anchored.filter((q, index, all) => q && q.toLowerCase().includes(company.toLowerCase()) && q.toLowerCase().includes(country.toLowerCase()) && all.indexOf(q) === index);
+  if (valid.length < 2) throw providerSchemaError('AI provider did not return at least two identity-anchored queries');
   const deterministicCoverage = [
     `"${company}" "${country}"`,
     `${company} ${country} official website`,
     `${company} ${country} contact management leadership`,
     `${company} ${country} LinkedIn company`,
   ];
-  return [...deterministicCoverage, ...anchored]
+  return [...valid, ...deterministicCoverage]
     .filter((q, index, all) => q && q.toLowerCase().includes(company.toLowerCase()) && q.toLowerCase().includes(country.toLowerCase()) && all.indexOf(q) === index)
     .slice(0, maxQueries);
 }
@@ -381,9 +388,11 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
       const { body, failure: bodyFailure } = await readProviderResponse(response);
       const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
       run.raw_records.push(raw);
+      raw.http_status = response.status;
       if (!response.ok) rememberHardProviderFailure(provider.name, response.status);
       if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
       if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
+      validateProviderEnvelope(body, 'ai');
       const text = cleanText((body as any)?.choices?.[0]?.message?.content);
       const queries = parseQueries(text, run.company_name, run.country, run.limits.max_queries);
       if (queries.length < 2) throw new Error(`${provider.name} did not return at least two valid identity-anchored queries`);
@@ -391,6 +400,7 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
       return queries;
     } catch (error) {
       lastError = error; const failure = safeError(error);
+      attachOperationFailure(run, provider.name, request, failure);
       if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message)) {
         providerCooldowns.set(providerCircuitKey(provider.name), { until: Date.now() + 120_000, reason: failure.message });
       }
@@ -415,15 +425,23 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
     const { body, failure: bodyFailure } = await readProviderResponse(response);
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
+    raw.http_status = response.status;
     if (!response.ok) rememberHardProviderFailure(provider, response.status);
     if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
     if (!response.ok) throw new Error(`Serper returned HTTP ${response.status}`);
+    validateProviderEnvelope(body, 'serper');
     const items = Array.isArray((body as any).organic) ? (body as any).organic : [];
+    const usableItems = items.filter((item: unknown) => item && typeof item === 'object' && !Array.isArray(item) && typeof (item as any).link === 'string');
+    if (usableItems.length !== items.length) {
+      raw.failure = safeError(providerSchemaError(`${items.length - usableItems.length} malformed organic records retained in raw evidence`));
+      run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query, message: 'Some organic records could not be normalized; raw evidence and valid results retained', error: raw.failure.message });
+    }
     run.timeline.push({ at: now(), stage: 'search', status: 'success', provider, query, latency_ms: raw.latency_ms, message: `Captured ${items.length} search results` });
-    return items.slice(0, run.limits.max_results_per_query).map((item: any, index: number) => ({ id: id('result'), run_id: run.id, raw_record_id: raw.id, query, provider, rank: Number(item.position) || index + 1, title: cleanText(item.title), url: cleanText(item.link), snippet: cleanText(item.snippet), links: [], metadata: Object.fromEntries(Object.entries(item).filter(([key]) => !['title', 'link', 'snippet', 'position'].includes(key))), search_latency_ms: raw.latency_ms, status: 'success' as const }));
+    return usableItems.slice(0, run.limits.max_results_per_query).map((item: any, index: number) => ({ id: id('result'), run_id: run.id, raw_record_id: raw.id, query, provider, rank: Number(item.position) || index + 1, title: cleanText(item.title), url: cleanText(item.link), snippet: cleanText(item.snippet), links: [], metadata: Object.fromEntries(Object.entries(item).filter(([key]) => !['title', 'link', 'snippet', 'position'].includes(key))), search_latency_ms: raw.latency_ms, status: 'success' as const }));
   } catch (error) {
     const failure = safeError(error);
     if (!run.raw_records.some(r => r.kind === 'search' && (r.request as any).q === query)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+    attachOperationFailure(run, provider, request, failure);
     run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query, latency_ms: Date.now() - started, message: 'Search request failed', error: failure.message });
     return [];
   }
@@ -515,16 +533,24 @@ async function enrichHunter(run: V1Run, domain: string): Promise<V1Result[]> {
     const { body, failure: bodyFailure } = await readProviderResponse(response);
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
+    raw.http_status = response.status;
     if (!response.ok) rememberHardProviderFailure(provider, response.status);
     if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
     if (!response.ok) throw new Error(`Hunter returned HTTP ${response.status}`);
+    validateProviderEnvelope(body, 'hunter');
     const data = (body as any).data || {};
     const emails = Array.isArray(data.emails) ? data.emails : [];
+    const usableEmails = emails.filter((email: unknown) => email && typeof email === 'object' && !Array.isArray(email) && typeof (email as any).value === 'string');
+    if (usableEmails.length !== emails.length) {
+      raw.failure = safeError(providerSchemaError(`${emails.length - usableEmails.length} malformed email records retained in raw evidence`));
+      run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query: domain, message: 'Some email records could not be normalized; raw evidence and valid records retained', error: raw.failure.message });
+    }
     run.timeline.push({ at: now(), stage: 'search', status: 'success', provider, query: domain, latency_ms: raw.latency_ms, message: `Captured domain intelligence and ${emails.length} email records` });
-    return emails.slice(0, run.limits.max_results_per_query).map((email: any, index: number) => ({ id: id('result'), run_id: run.id, raw_record_id: raw.id, query: domain, provider, rank: index + 1, title: cleanText(`${email.first_name || ''} ${email.last_name || ''}`) || `Public email for ${domain}`, url: `https://${domain}`, snippet: cleanText(email.value), links: [], metadata: { ...email, organization: data.organization, pattern: data.pattern, domain }, search_latency_ms: raw.latency_ms, status: 'success' as const }));
+    return usableEmails.slice(0, run.limits.max_results_per_query).map((email: any, index: number) => ({ id: id('result'), run_id: run.id, raw_record_id: raw.id, query: domain, provider, rank: index + 1, title: cleanText(`${email.first_name || ''} ${email.last_name || ''}`) || `Public email for ${domain}`, url: `https://${domain}`, snippet: cleanText(email.value), links: [], metadata: { ...email, organization: data.organization, pattern: data.pattern, domain }, search_latency_ms: raw.latency_ms, status: 'success' as const }));
   } catch (error) {
     const failure = safeError(error);
     if (!run.raw_records.some(r => r.kind === 'search' && r.provider === provider && (r.request as any).domain === domain)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+    attachOperationFailure(run, provider, request, failure);
     run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query: domain, latency_ms: Date.now() - started, message: 'Domain enrichment request failed', error: failure.message });
     return [];
   }
@@ -722,12 +748,15 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
         const { body, failure: bodyFailure } = await readProviderResponse(response);
         const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
         run.raw_records.push(raw);
+        raw.http_status = response.status;
         if (!response.ok) rememberHardProviderFailure(provider.name, response.status);
         if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
         if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
+        validateProviderEnvelope(body, 'ai');
         const content = cleanText((body as any)?.choices?.[0]?.message?.content);
         const match = content.match(/\{[\s\S]*\}/);
-        const claims = match ? JSON.parse(match[0])?.claims : [];
+        const claims = match ? JSON.parse(match[0])?.claims : undefined;
+        if (!Array.isArray(claims)) throw providerSchemaError('AI extraction response lacks a claims array');
         for (const claim of Array.isArray(claims) ? claims : []) {
           const chunk = batchChunks.find(item => item.id === claim?.source_chunk_id);
           const field = cleanText(claim?.field) as 'address' | 'email' | 'phone' | 'leader';
@@ -744,6 +773,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
         break;
       } catch (error) {
         const failure = safeError(error);
+        attachOperationFailure(run, provider.name, request, failure);
         if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message)) {
           providerCooldowns.set(providerCircuitKey(provider.name), { until: Date.now() + 120_000, reason: failure.message });
         }

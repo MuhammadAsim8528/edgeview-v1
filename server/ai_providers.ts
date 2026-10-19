@@ -2,6 +2,7 @@ import { getAppSettings, resolveApiKey } from './settings';
 import { assertSafeHeaderValue } from './utils/header_encoder';
 import { assertSafeOutboundUrl, isSafeExternalUrl } from './url_safety';
 import { createHash } from 'node:crypto';
+import { readProviderResponse, providerSchemaError } from './provider_response';
 
 export interface AIModelInfo {
   id: string;
@@ -33,6 +34,16 @@ interface CacheEntry {
 const modelCache = new Map<string, CacheEntry>();
 const MAX_MODEL_CACHE_ENTRIES = 32;
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache
+
+async function readModelList(response: Response): Promise<any[]> {
+  const captured = await readProviderResponse(response, 1024 * 1024, 20_000, true);
+  if (captured.failure) throw providerSchemaError(captured.failure.message);
+  const body = captured.body as any;
+  if (body.error || (Array.isArray(body.errors) && body.errors.length)) throw providerSchemaError('Model endpoint returned an error payload');
+  const models = Array.isArray(body) ? body : body.data;
+  if (!Array.isArray(models) || models.some(model => typeof model !== 'string' && (!model || typeof model !== 'object' || typeof (model.id || model.name) !== 'string'))) throw providerSchemaError('Model endpoint returned an invalid model list');
+  return models;
+}
 
 function assertSavedCredentialOrigin(key: string, baseUrl?: string): void {
   const settings = getAppSettings();
@@ -82,8 +93,7 @@ export const NvidiaProvider: AIProvider = {
       throw new Error(msg);
     }
 
-    const data = await res.json();
-    const rawList = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+    const rawList = await readModelList(res);
 
     const models: AIModelInfo[] = rawList
       .map((m: any) => {
@@ -175,8 +185,7 @@ export const GroqProvider: AIProvider = {
       throw new Error(msg);
     }
 
-    const data = await res.json();
-    const rawList = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+    const rawList = await readModelList(res);
 
     const models: AIModelInfo[] = rawList
       .filter((m: any) => m.active !== false)
