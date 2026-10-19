@@ -4,12 +4,13 @@ import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
 import { hasInstitutionalRole } from './corporate_validation';
 import { isCountryCompatiblePhone } from './phone_country';
 import { canonicalEntityIdentityKey } from './company_identity';
+import { normalizeV1ContactOverlay } from '../shared/v1_contact_contract';
 
 const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'] as const;
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
 const emptyProviderUsage = (): Record<ResearchProvider, number> => Object.fromEntries(RESEARCH_PROVIDERS.map((id) => [id, 0])) as Record<ResearchProvider, number>;
 
-const V1_OVERLAY_VERSION = 16;
+const V1_OVERLAY_VERSION = 17;
 
 export function validPhone(value: string): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
@@ -388,7 +389,7 @@ export function projectHistoricalContactFields(run: V1Run) {
   const website = projections.find((projection: any) => projection.website)?.website || '';
   const hasChannel = emails.length > 0 || phones.length > 0;
   const hasOrganizationDetail = addresses.length > 0 || contactPersons.length > 0;
-  return {
+  return normalizeV1ContactOverlay({
     schema_version: V1_OVERLAY_VERSION,
     emails_list: emails.slice(0, 50), email: emails[0] || '',
     phones_list: phones.slice(0, 10), phone: phones[0] || '',
@@ -399,16 +400,17 @@ export function projectHistoricalContactFields(run: V1Run) {
     decision_makers: [], ceo: '',
     quality_status: website && hasChannel && hasOrganizationDetail ? 'COMPLETE' : website || hasChannel || hasOrganizationDetail ? 'PARTIAL' : 'NOT_FOUND',
     evidence: projections.flatMap((projection: any) => projection.evidence || []),
-  };
+  });
 }
 
-export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: Record<string, unknown>) {
+export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown) {
   const database = await getDb();
+  const canonicalOverlay = normalizeV1ContactOverlay(overlay);
   await database.run(
     `INSERT INTO v1_contact_enrichment (company_id, run_id, overlay_json, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(company_id) DO UPDATE SET run_id = excluded.run_id, overlay_json = excluded.overlay_json, updated_at = excluded.updated_at`,
-    [companyId, runId, JSON.stringify(overlay), new Date().toISOString()]
+    [companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString()]
   );
 }
 
@@ -427,7 +429,10 @@ export async function hydrateV1ContactEnrichment(): Promise<number> {
     }
     if (!contact) continue;
     try {
-      let overlay = JSON.parse(String(row.overlay_json || '{}'));
+      const storedOverlay = JSON.parse(String(row.overlay_json || '{}'));
+      // Normalize old persisted field aliases/shapes exactly once at the
+      // storage boundary. Active UI/backend code sees only the V1 contract.
+      const overlay = normalizeV1ContactOverlay(storedOverlay);
       // Startup must only hydrate the small persisted projection. Replaying
       // multi-gigabyte immutable run history here kept port 3901 offline for
       // minutes. A fresh enrichment reprojects the complete indexed history
@@ -737,7 +742,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
             companyState.metrics = {
               emailsFound: projected.emails_list.length,
               phonesFound: projected.phones_list.length,
-              socialsFound: projected.social_links.length,
+              socialsFound: projected.socials.length,
               leadershipFound: projected.contact_persons.length > 0,
               websiteFound: Boolean(projected.website),
             };
@@ -751,7 +756,9 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
               contact.phones_list = projected.phones_list;
               contact.phone = projected.phones_list[0] || '';
               contact.website = projected.website || '';
-              contact.social_links = projected.social_links;
+              contact.linkedin_urls = projected.linkedin_urls;
+              contact.socials = projected.socials;
+              contact.linkedin = projected.linkedin_urls[0] || '';
               contact.addresses = projected.addresses;
               contact.address = projected.address;
               contact.contact_persons = projected.contact_persons;
@@ -768,7 +775,8 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
                 phones_list: contact.phones_list,
                 phone: contact.phone,
                 website: contact.website,
-                social_links: contact.social_links,
+                linkedin_urls: contact.linkedin_urls,
+                socials: contact.socials,
                 addresses: contact.addresses,
                 address: contact.address,
                 contact_persons: contact.contact_persons,

@@ -5,6 +5,7 @@ import { computeSummary, SummaryResult } from './summary';
 import { canonicalCompanyIdentityKey, canonicalCountryIdentityKey, canonicalEntityIdentityKey } from './company_identity';
 import { normalizeCountryName } from '../src/utils/countryNormalizer';
 import { inferExporterCountryFromDataset } from './dataset_provenance';
+import type { V1CompanyAddress, V1ContactPerson, V1SocialAccount } from '../shared/v1_contact_contract';
 
 function stableCompanyId(entityKey: string): string {
   return `comp-${crypto.createHash('sha256').update(entityKey).digest('hex').slice(0, 16)}`;
@@ -42,10 +43,15 @@ export interface CompanyContact {
   country?: string;
   industry?: string;
   website?: string;
+  address?: string;
   emails_list?: string[];
   phones_list?: string[];
-  addresses?: Array<{ address: string; type?: string; source_url?: string }>;
-  contact_persons?: Array<{ name: string; designation?: string; email?: string; phone?: string; department?: string; country?: string; branch?: string; linkedin_url?: string; source_url?: string }>;
+  linkedin_urls?: string[];
+  socials?: V1SocialAccount[];
+  addresses?: V1CompanyAddress[];
+  contact_persons?: V1ContactPerson[];
+  evidence?: unknown[];
+  edgeview_v1_run_id?: string;
   sources?: Array<{ url: string; title?: string; source_type?: string }>;
   quality_status?: string;
   traded_with?: string[];

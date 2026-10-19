@@ -194,17 +194,43 @@ function runPath(runId: string) { return path.join(dataDir, `${runId}.json`); }
 function summarize(run: V1Run): V1RunSummary {
   return { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length, result_count: run.results.length, raw_record_count: run.raw_records.length, failure_count: run.timeline.filter(event => event.status === 'failed').length };
 }
-function persist(run: V1Run) {
+export function persistV1Run(run: V1Run) {
   fs.mkdirSync(dataDir, { recursive: true });
   const target = runPath(run.id);
-  if (fs.existsSync(target)) fs.renameSync(target, `${target}.immutable.${Date.now()}`);
-  fs.writeFileSync(target, JSON.stringify(run, null, 2), { encoding: 'utf8', flag: 'wx' });
-  recordProviderMetrics(run);
-  if (summaryCache) summaryCache.unshift(summarize(run));
-  if (identityHeaderCache) {
-    const header = { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length };
-    identityHeaderCache.unshift(header);
-    fs.appendFileSync(identityIndexPath, `${JSON.stringify(header)}\n`, 'utf8');
+  const temp = path.join(dataDir, `.${run.id}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  const payload = JSON.stringify(run, null, 2);
+  let handle: number | undefined;
+  try {
+    // Never stream directly into the final immutable filename. A process crash
+    // during write would otherwise leave a zero-byte/truncated run that looks
+    // final to the rest of the application.
+    handle = fs.openSync(temp, 'wx');
+    fs.writeFileSync(handle, payload, { encoding: 'utf8' });
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = undefined;
+
+    // Run IDs are expected to be unique. Preserve any unexpected prior file as
+    // immutable forensic evidence before promoting the complete temp payload.
+    if (fs.existsSync(target)) fs.renameSync(target, `${target}.immutable.${Date.now()}`);
+    fs.renameSync(temp, target);
+
+    // Derived metrics/caches/indexes are updated only after the final run file
+    // has been successfully promoted.
+    recordProviderMetrics(run);
+    if (summaryCache) summaryCache.unshift(summarize(run));
+    if (identityHeaderCache) {
+      const header = { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length };
+      identityHeaderCache.unshift(header);
+      fs.appendFileSync(identityIndexPath, `${JSON.stringify(header)}\n`, 'utf8');
+    }
+  } finally {
+    if (handle !== undefined) {
+      try { fs.closeSync(handle); } catch { /* best-effort cleanup */ }
+    }
+    if (fs.existsSync(temp)) {
+      try { fs.unlinkSync(temp); } catch { /* stale temp is ignored by run readers */ }
+    }
   }
 }
 
@@ -756,7 +782,7 @@ async function execute(companyName: string, country: string, profile: 'interacti
   } finally {
     run.completed_at = now();
     run.timeline.push({ at: now(), stage: 'storage', status: 'success', message: `Persisting ${run.raw_records.length} raw records and ${run.results.length} normalized results` });
-    persist(run);
+    persistV1Run(run);
   }
   return run;
 }

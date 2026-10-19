@@ -1,3 +1,5 @@
+import type { V1CompanyAddress, V1ContactPerson, V1SocialAccount } from '../../shared/v1_contact_contract';
+
 export interface FileSummary {
   total_rows: number;
   exporters_count: number;
@@ -24,13 +26,10 @@ export interface ParsedFile {
   doc_tables?: Array<{ title?: string; rows: string[][] }>;
 }
 
-export interface SocialAccount {
-  platform: string; // 'linkedin' | 'twitter' | 'x' | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'telegram' | 'threads' | string
-  url: string;
+export interface SocialAccount extends V1SocialAccount {
   handle?: string;
   display_name?: string;
   verified?: boolean;
-  source_url?: string;
 }
 
 export interface WhatsAppContact {
@@ -66,23 +65,9 @@ export interface GeneralCompanyContact {
   source_url?: string;
 }
 
-export interface ContactPerson {
-  name: string;
-  designation?: string;
-  email?: string;
-  phone?: string;
-  department?: string;
-  country?: string;
-  branch?: string;
-  linkedin_url?: string;
-  source_url?: string;
-}
+export interface ContactPerson extends V1ContactPerson {}
 
-export interface CompanyAddress {
-  address: string;
-  type?: string;
-  source_url?: string;
-}
+export interface CompanyAddress extends V1CompanyAddress {}
 
 export interface ContactSource {
   url: string;
