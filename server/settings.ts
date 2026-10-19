@@ -339,7 +339,9 @@ export function resetAppSettings(): AppSettings {
 export async function testHunterKey(key: string): Promise<{ success: boolean; message: string }> {
   if (!key || !key.trim()) return { success: false, message: 'Hunter API Key is empty' };
   try {
-    const res = await fetch(`https://api.hunter.io/v2/domain-search?domain=example.com&api_key=${key.trim()}`);
+    const res = await fetch(`https://api.hunter.io/v2/domain-search?domain=example.com&api_key=${encodeURIComponent(key.trim())}`, {
+      redirect: 'error', signal: AbortSignal.timeout(20_000),
+    });
     if (res.status === 200) {
       return { success: true, message: 'Hunter API key connection verified!' };
     } else if (res.status === 401 || res.status === 403) {
@@ -365,6 +367,8 @@ export async function testSerperKey(key: string): Promise<{ success: boolean; me
   try {
     const res = await fetch('https://google.serper.dev/search', {
       method: 'POST',
+      redirect: 'error',
+      signal: AbortSignal.timeout(20_000),
       headers: {
         'X-API-KEY': assertSafeHeaderValue(key.trim(), 'Serper API key'),
         'Content-Type': 'application/json',

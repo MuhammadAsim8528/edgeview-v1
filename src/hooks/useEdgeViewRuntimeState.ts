@@ -74,25 +74,71 @@ const listeners = new Set<(state: RuntimeState) => void>();
 let pollingActive = false;
 let pollTimer: NodeJS.Timeout | null = null;
 let visibilityHandler: (() => void) | null = null;
+let runtimeRequest: AbortController | null = null;
+let inFlight: Promise<RuntimeState> | null = null;
 
-async function fetchRuntimeState() {
-  try {
-    const { ok, data } = await safeFetchJson<any>('/api/runtime/state');
-    if (ok && data && data.success) {
-      globalState = {
-        resources: data.resources,
-        jobs: data.jobs,
-        enrichment: data.enrichment,
-        providers: data.providers,
-        capabilities: data.capabilities || DEFAULT_STATE.capabilities,
-        logs: data.logs,
-      };
-      // Trigger all registered hook listeners with the new snapshot
-      listeners.forEach((fn) => fn(globalState));
+function validRuntimePayload(value: unknown): value is RuntimeState & { success: true } {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  const counts = (candidate: unknown, template: object) => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const record = candidate as Record<string, unknown>;
+    return Object.keys(template).every(key => typeof record[key] === 'number' && Number.isFinite(record[key]) && Number(record[key]) >= 0);
+  };
+  if (data.success !== true || !counts(data.resources, DEFAULT_STATE.resources) || !counts(data.jobs, DEFAULT_STATE.jobs)
+    || !data.enrichment || typeof data.enrichment !== 'object' || !data.providers || typeof data.providers !== 'object'
+    || !data.capabilities || typeof data.capabilities !== 'object' || !Array.isArray(data.logs)) return false;
+  const enrichment = data.enrichment as Record<string, unknown>;
+  if (!counts(enrichment.quality, DEFAULT_STATE.enrichment.quality) || typeof enrichment.status !== 'string'
+    || !counts(enrichment, { completedCompanies: 0, totalCompanies: 0 })) return false;
+  const providers = data.providers as Record<string, unknown>;
+  if (!Object.keys(DEFAULT_STATE.providers).every(key => {
+    const provider = providers[key] as Record<string, unknown> | undefined;
+    return provider && typeof provider.configured === 'boolean' && typeof provider.reachable === 'boolean' && typeof provider.status === 'string';
+  })) return false;
+  const capabilities = data.capabilities as Record<string, unknown>;
+  return ['company_enrichment','batch_enrichment'].every(key => {
+    const capability = capabilities[key] as Record<string, unknown> | undefined;
+    return capability && typeof capability.available === 'boolean' && typeof capability.reason === 'string'
+      && ['READY','DEGRADED','UNAVAILABLE','CHECKING'].includes(String(capability.status));
+  });
+}
+
+export function fetchRuntimeState(): Promise<RuntimeState> {
+  if (inFlight) return inFlight;
+  const controller = new AbortController();
+  runtimeRequest = controller;
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
+  const operation = (async () => {
+    try {
+      const { ok, data, error } = await safeFetchJson<any>('/api/runtime/state', { signal: controller.signal });
+      if (controller.signal.aborted && !timedOut) return globalState;
+      if (ok && validRuntimePayload(data)) {
+        globalState = {
+          resources: data.resources, jobs: data.jobs, enrichment: data.enrichment, providers: data.providers,
+          capabilities: data.capabilities || DEFAULT_STATE.capabilities, logs: data.logs || [],
+        };
+      } else {
+        const reason = timedOut ? 'Backend status timed out. EdgeView will retry automatically.'
+          : error || 'The backend returned incomplete runtime state. EdgeView will retry automatically.';
+        // Preserve loaded data/counts while withdrawing capabilities that can
+        // no longer be confirmed. A successful refresh restores backend truth.
+        globalState = { ...globalState, capabilities: Object.fromEntries(Object.entries(globalState.capabilities).map(([id, capability]) => [id, {
+          ...capability, available: false, status: 'UNAVAILABLE' as const, reason,
+          remediation: 'Check that the EdgeView backend is running, then retry.',
+        }])) };
+      }
+      listeners.forEach(fn => fn(globalState));
+      return globalState;
+    } finally {
+      clearTimeout(timeout);
+      if (runtimeRequest === controller) runtimeRequest = null;
     }
-  } catch (err) {
-    console.error('Error fetching runtime state:', err);
-  }
+  })();
+  const shared = operation.finally(() => { if (inFlight === shared) inFlight = null; });
+  inFlight = shared;
+  return shared;
 }
 
 function startGlobalPolling() {
@@ -118,6 +164,10 @@ function startGlobalPolling() {
 function stopGlobalPolling() {
   if (!pollingActive) return;
   pollingActive = false;
+  const activeRequest = runtimeRequest;
+  runtimeRequest = null;
+  inFlight = null;
+  activeRequest?.abort();
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;

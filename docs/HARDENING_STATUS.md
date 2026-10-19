@@ -80,7 +80,8 @@ Their existence does not by itself prove every attached requirement complete.
   unused provider-test functions. Settings credential fields remain recoverable.
 - Dependency verification now checks this supplemental archive, forbids those
   retired exports, and rejects retired-provider transport hosts in both bundles.
-  Current closure is 35 backend inputs and 29 frontend inputs.
+  At that checkpoint the closure was 35 backend inputs and 29 frontend inputs;
+  `ACTIVE_DEPENDENCY_GRAPH.json` records the latest generated closure.
 - Expanded the deferred licensing design with issuer rotation, offline revocation
   limits, clock recovery, minimal device inputs and pre-activation acceptance tests.
 - Test-mode settings no longer load a local `.env`; an isolated subprocess fixture
@@ -106,5 +107,48 @@ Their existence does not by itself prove every attached requirement complete.
   upstream timings. NVIDIA/Groq checks validate model-list/auth access, not a fresh
   inference/enrichment run. The live process is still the existing installation;
   these checks do not prove the newly built backend has been deployed.
+
+## Telemetry/control recovery continuation
+
+- Separated diagnostic latency from completed-call averages; zero sample counts
+  now display Unknown instead of invented 0% success or 100% cache efficiency.
+- The health panel exposes request/test errors, bounds its extra polling, avoids
+  overlapping reads and aborts requests on cleanup. Rendered interaction remains
+  unverified while browser authority is denied.
+- Shared runtime refresh now validates required nested state, coalesces callers,
+  aborts a stalled request after 15 seconds and marks capabilities unavailable on
+  failure without clearing loaded data. A later valid response restores them.
+  Isolated client tests cover coalescing, offline/malformed data, timeout and recovery.
+- Provider snapshots follow request completion time; newer successes clear old
+  errors while older finishing jobs cannot overwrite the latest outcome. HTTP 408
+  is counted as a timeout. Counters still include all completed calls.
+- Mocked API tests prove failed-key suppression, replacement-key recovery without
+  restart, disabled precedence, separate timing/average denominators, and newer
+  HTTP 503 overriding an older successful check. Diagnostics expire after two
+  minutes for status classification.
+- Isolated server tests now select an unused port and verify the health PID
+  before mutations; a deliberate unrelated-port collision receives zero writes.
+- Packaging now refuses added/edited output files and creates the new artifact
+  before replacing existing output. Tests prove private fixture data, edits and
+  prior ZIP/folder survive refusal or source-copy failure.
+- Fixed omitted package build inputs (`server.ts` and the active lint/dev setup)
+  and preserved source/directory mtimes. Both the staged folder and the actual
+  ZIP extracted into a fresh temporary folder pass the no-change launch check
+  without modifying manifest-verified artifacts. This does not claim a full
+  first-run dependency install or a browser-driven `.bat` cold start.
+- The live backend's runtime payload was read through the new client validator:
+  it was accepted and research remained available. This is a data-contract check,
+  not rendered browser interaction or deployment of the changed backend.
+- Settings requests now reject unsupported fields/retired provider weights and
+  non-object payloads, with a regression proving rejected updates do not partially
+  save supported values.
+
+Validation for this continuation: typecheck, ESLint, the nine V1 suites,
+telemetry presentation/order tests, runtime capability/offline/timeout recovery,
+mocked telemetry API and key-recovery flow, unrelated-port refusal, release smoke,
+package preservation, package manifest verification, ZIP-extraction launch check,
+and dependency/archive verification passed. Browser click coverage and the live
+backend restart remain unverified/blocked; the packaged artifact is not proof of
+the running process version.
 
 No claim of release completion or broad production readiness is made.

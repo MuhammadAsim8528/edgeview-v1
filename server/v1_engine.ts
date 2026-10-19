@@ -152,14 +152,18 @@ function recordProviderMetrics(run: V1Run): void {
     const metric = store.providers[provider] ||= emptyProviderMetric();
     metric.request_count += 1;
     metric.total_latency_ms += Math.max(0, Number(record.latency_ms || 0));
-    metric.last_completed_at = record.completed_at || run.completed_at || null;
+    const completedAt = record.completed_at || run.completed_at || null;
+    const failureMessage = record.failure ? cleanText(record.failure.message).slice(0, 500) || 'Provider request failed' : null;
+    if (completedAt && (!metric.last_completed_at || completedAt >= metric.last_completed_at)) {
+      metric.last_completed_at = completedAt;
+      metric.last_error = failureMessage;
+      metric.last_http_status = record.failure ? Number(record.failure.status) || null : null;
+    }
     if (record.response !== undefined && !record.failure) metric.success_count += 1;
     if (record.failure) {
       metric.failure_count += 1;
-      metric.last_error = cleanText(record.failure.message).slice(0, 500) || 'Provider request failed';
-      metric.last_http_status = Number(record.failure.status) || null;
-      if (/timeout|aborted/i.test(metric.last_error)) metric.timeout_count += 1;
-      if (metric.last_http_status === 429 || /rate.?limit|quota/i.test(metric.last_error)) metric.rate_limit_count += 1;
+      if (record.failure.status === 408 || /timeout|aborted/i.test(failureMessage || '')) metric.timeout_count += 1;
+      if (record.failure.status === 429 || /rate.?limit|quota/i.test(failureMessage || '')) metric.rate_limit_count += 1;
     }
   }
   store.processed_run_ids.push(run.id);
@@ -190,6 +194,12 @@ function rememberHardProviderFailure(provider: string, status: number) {
     const cooldownMs = key === 'hunter' ? 6 * 60 * 60 * 1000 : 120_000;
     providerCooldowns.set(key, { until: Date.now() + cooldownMs, reason: key === 'hunter' ? 'quota/rate limit response' : 'HTTP 429' });
   }
+}
+export function resetV1ProviderFailureState(provider: string): void {
+  const key = providerCircuitKey(provider);
+  if (!['serper','hunter','nvidia','groq'].includes(key)) throw new Error('Unknown V1 provider.');
+  hardUnavailableProviders.delete(key);
+  providerCooldowns.delete(key);
 }
 function runPath(runId: string) { return path.join(dataDir, `${runId}.json`); }
 function summarize(run: V1Run): V1RunSummary {

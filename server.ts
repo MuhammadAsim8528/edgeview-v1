@@ -36,10 +36,11 @@ import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/uti
 import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey } from './server/company_identity';
-import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, runV1Enrichment } from './server/v1_engine';
+import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
 import { persistV1ContactOverlay, projectHistoricalContactFields } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
+import { hasRecentProviderObservation } from './shared/provider_telemetry';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -49,6 +50,13 @@ const PORT = Number(process.env.PORT) || 3000;
 const useViteDevServer = process.env.EDGEVIEW_DEV_SERVER === '1';
 const API_VERSION = '1.0';
 const V1_PROVIDER_IDS = new Set(['serper', 'hunter', 'nvidia', 'groq']);
+const V1_SETTING_FIELDS = new Set([
+  'serper_api_key','hunter_api_key','nvidia_api_key','groq_api_key',
+  'serper_enabled','hunter_enabled','nvidia_enabled','groq_enabled',
+  'nvidia_model','nvidia_fallback_model','groq_model','groq_fallback_model',
+  'nvidia_base_url','nvidia_reasoning_mode','primary_ai_provider',
+  'nvidia_temperature','groq_temperature','nvidia_max_tokens','groq_max_tokens','api_timeout_seconds',
+]);
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 if (!isTestProcess()) installRuntimeLogging(getProjectRoot());
 if (!isTestProcess()) installFatalErrorHandlers();
@@ -228,6 +236,7 @@ app.get('/api/health', (req, res) => {
     app: {
       status: 'ok',
       name: 'edgeview',
+      pid: process.pid,
       project_root: getProjectRoot(),
       node: process.version,
       port: PORT,
@@ -654,7 +663,13 @@ app.post('/api/settings/reset', async (req, res) => {
 
 app.post('/api/settings', (req, res) => {
   try {
-    const input = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ success: false, code: 'INVALID_SETTINGS', message: 'Settings must be a JSON object.', recoverable: true });
+    }
+    const input = req.body;
+    if (Object.keys(input).some(key => !V1_SETTING_FIELDS.has(key))) {
+      return res.status(400).json({ success: false, code: 'UNSUPPORTED_V1_SETTING', message: 'One or more settings are not supported by EdgeView V1.', recoverable: true, remediation: 'Use the V1 provider configuration form.' });
+    }
     const sanitized: Record<string, unknown> = {};
     for (const key of ['serper_api_key', 'hunter_api_key', 'nvidia_api_key', 'groq_api_key']) {
       if (Object.prototype.hasOwnProperty.call(input, key)) sanitized[key] = boundedText(input[key], key, 512) ?? '';
@@ -690,7 +705,15 @@ app.post('/api/settings', (req, res) => {
     }
     // Legacy provider credentials remain recoverable in the private config but
     // cannot be enabled or changed through the V1 UI/API.
+    const before = getAppSettings();
     const updated = saveAppSettings({ ...sanitized, firecrawl_enabled: false, gemini_enabled: false, tavily_enabled: false, exa_enabled: false, linkup_enabled: false, apify_enabled: false });
+    for (const provider of ['serper','hunter','nvidia','groq'] as const) {
+      const connectionChanged = before[`${provider}_api_key`] !== updated[`${provider}_api_key`]
+        || (provider === 'nvidia' && (before.nvidia_model !== updated.nvidia_model || before.nvidia_base_url !== updated.nvidia_base_url))
+        || (provider === 'groq' && before.groq_model !== updated.groq_model);
+      if (connectionChanged) resetV1ProviderFailureState(provider);
+      if (connectionChanged || before[`${provider}_enabled`] !== updated[`${provider}_enabled`]) v1ProviderTests.delete(provider);
+    }
     res.json({
       success: true,
       message: 'Settings saved successfully to config.json',
@@ -1197,21 +1220,27 @@ function buildV1ProviderReport() {
   };
   return Object.fromEntries([...V1_PROVIDER_IDS].map(provider => {
     const metric = metrics[provider] || { requestCount: 0, successCount: 0, failureCount: 0, timeoutCount: 0, rateLimitCount: 0, averageLatencyMs: null, lastError: null, lastHttpStatus: null, lastCompletedAt: null };
-    const test = v1ProviderTests.get(provider);
+    const testSample = v1ProviderTests.get(provider);
+    const test = hasRecentProviderObservation(testSample?.testedAt) ? testSample : undefined;
+    const operationAfterTest = Boolean(test && metric.lastCompletedAt && Date.parse(metric.lastCompletedAt) > Date.parse(test.testedAt));
     const suppressionReason = suppressed.get(provider) || '';
     const cooldown = coolingDown.get(provider);
-    const errorText = test?.message || suppressionReason || cooldown?.reason || metric.lastError || '';
-    const httpStatus = test?.httpStatus ?? metric.lastHttpStatus ?? (suppressionReason.match(/HTTP (\d+)/)?.[1] ? Number(suppressionReason.match(/HTTP (\d+)/)?.[1]) : null);
+    const errorText = suppressionReason || cooldown?.reason || (operationAfterTest ? metric.lastError : test?.message) || metric.lastError || '';
+    const httpStatus = (suppressionReason.match(/HTTP (\d+)/)?.[1] ? Number(suppressionReason.match(/HTTP (\d+)/)?.[1]) : null)
+      ?? (operationAfterTest ? metric.lastHttpStatus : test?.httpStatus) ?? metric.lastHttpStatus ?? null;
     let status = !config[provider].configured ? 'unconfigured' : !config[provider].enabled ? 'disabled' : 'unknown';
     let routingState = !config[provider].configured ? 'unconfigured' : !config[provider].enabled ? 'disabled' : 'available';
-    if (suppressionReason) {
+    if (!config[provider].configured || !config[provider].enabled) {
+      // Current settings override diagnostics from a previously enabled key.
+    } else if (suppressionReason) {
       routingState = 'suppressed';
       status = httpStatus === 401 || httpStatus === 403 ? 'auth_failed' : 'degraded';
     } else if (cooldown) {
       routingState = 'cooldown';
       status = /429|quota|rate.?limit/i.test(cooldown.reason) ? 'rate_limited' : /timeout|aborted/i.test(cooldown.reason) ? 'timeout' : 'degraded';
     } else if (test) {
-      status = test.success ? 'healthy' : httpStatus === 401 || httpStatus === 403 || /unauthor|invalid.*key/i.test(test.message) ? 'auth_failed' : httpStatus === 429 || /quota|rate.?limit|billing period/i.test(test.message) ? 'rate_limited' : /timeout|aborted|fetch failed/i.test(test.message) ? 'timeout' : httpStatus && httpStatus >= 500 ? 'degraded' : 'unknown';
+      const success = operationAfterTest ? !metric.lastError : test.success;
+      status = success ? 'healthy' : httpStatus === 401 || httpStatus === 403 || /unauthor|invalid.*key/i.test(errorText) ? 'auth_failed' : httpStatus === 429 || /quota|rate.?limit|billing period/i.test(errorText) ? 'rate_limited' : httpStatus === 408 || /timeout|aborted|timed out/i.test(errorText) ? 'timeout' : 'degraded';
     }
     return [provider, {
       provider,
@@ -1228,10 +1257,11 @@ function buildV1ProviderReport() {
       retryCount: 0,
       cacheHits: 0,
       cacheMisses: 0,
-      averageLatencyMs: test?.latencyMs ?? metric.averageLatencyMs,
+      averageLatencyMs: metric.averageLatencyMs,
+      lastDiagnosticLatencyMs: testSample?.latencyMs ?? null,
       lastError: status === 'healthy' ? null : errorText || null,
       lastHttpStatus: httpStatus,
-      lastTested: test?.testedAt || null,
+      lastTested: testSample?.testedAt || null,
       lastCompletedAt: metric.lastCompletedAt,
       successRate: metric.requestCount ? metric.successCount / metric.requestCount : null,
     }];
@@ -1390,22 +1420,21 @@ app.get('/api/system/health', async (_req, res) => {
 app.post('/api/system/health/test', async (req, res) => {
   try {
     const settings = getAppSettings();
-    const tests: Array<[string, Promise<{ success: boolean; message: string }>]> = [];
-    if (settings.serper_enabled && settings.serper_api_key?.trim()) tests.push(['serper', testSerperKey(settings.serper_api_key)]);
-    if (settings.hunter_enabled && settings.hunter_api_key?.trim()) tests.push(['hunter', testHunterKey(settings.hunter_api_key)]);
-    if (settings.nvidia_enabled && settings.nvidia_api_key?.trim()) tests.push(['nvidia', testNvidiaKey(settings.nvidia_api_key, settings.nvidia_model, settings.nvidia_base_url)]);
-    if (settings.groq_enabled && settings.groq_api_key?.trim()) tests.push(['groq', testGroqKey(settings.groq_api_key, settings.groq_model)]);
-    const testedAt = new Date().toISOString();
-    await Promise.all(tests.map(async ([provider, promise]) => {
+    const tests: Array<[string, () => Promise<{ success: boolean; message: string }>]> = [];
+    if (settings.serper_enabled && settings.serper_api_key?.trim()) tests.push(['serper', () => testSerperKey(settings.serper_api_key)]);
+    if (settings.hunter_enabled && settings.hunter_api_key?.trim()) tests.push(['hunter', () => testHunterKey(settings.hunter_api_key)]);
+    if (settings.nvidia_enabled && settings.nvidia_api_key?.trim()) tests.push(['nvidia', () => testNvidiaKey(settings.nvidia_api_key, settings.nvidia_model, settings.nvidia_base_url)]);
+    if (settings.groq_enabled && settings.groq_api_key?.trim()) tests.push(['groq', () => testGroqKey(settings.groq_api_key, settings.groq_model)]);
+    await Promise.all(tests.map(async ([provider, perform]) => {
       const started = performance.now();
       try {
-        const result = await promise;
+        const result = await perform();
         const statusMatch = result.message.match(/(?:status|HTTP)\s+(\d{3})/i);
-        v1ProviderTests.set(provider, { ...result, testedAt, latencyMs: Math.round(performance.now() - started), httpStatus: statusMatch ? Number(statusMatch[1]) : null });
+        v1ProviderTests.set(provider, { ...result, testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: statusMatch ? Number(statusMatch[1]) : null });
       }
-      catch (error: any) { v1ProviderTests.set(provider, { success: false, message: error?.message || 'Connection test failed', testedAt, latencyMs: Math.round(performance.now() - started), httpStatus: null }); }
+      catch (error: any) { v1ProviderTests.set(provider, { success: false, message: error?.message || 'Connection test failed', testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: null }); }
     }));
-    res.json({ success: true, providers: buildV1ProviderReport(), tested_at: testedAt });
+    res.json({ success: true, providers: buildV1ProviderReport(), tested_at: new Date().toISOString() });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to test system health' });
   }

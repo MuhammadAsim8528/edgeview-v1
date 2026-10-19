@@ -22,11 +22,15 @@ jobs:
       - run: npm run lint
       - run: node scripts/audit-git-secrets.mjs
       - run: node scripts/build-recovery.test.mjs
+      - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
       - run: node --import tsx server/tests/runtime_log_security.test.ts
+      - run: node --import tsx server/tests/telemetry_presentation.test.ts
+      - run: node --import tsx server/tests/provider_metrics_order.test.ts
+      - run: node --import tsx server/tests/runtime_capability_recovery.test.ts
       - run: node --import tsx server/tests/dotenv_test_isolation.test.ts
       - run: node --import tsx server/tests/v1_evidence_maintenance.test.ts
       - run: node --import tsx server/tests/raw_trade_warehouse.test.ts
@@ -34,7 +38,10 @@ jobs:
       - run: node scripts/verify-release-graph.mjs
       - run: npm run test:v1
       - run: npm run build
+      - run: node scripts/telemetry-runtime.test.mjs
+      - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release
       - run: npm run package:windows
       - run: npm run verify:package
+      - run: node scripts/package-launch-check.test.mjs
 

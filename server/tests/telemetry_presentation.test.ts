@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { formatObservedRate, formatObservedLatency } from '../../src/utils/telemetryFormat';
+import { hasRecentProviderObservation } from '../../shared/provider_telemetry';
+
+assert.equal(formatObservedRate(0,0), 'Unknown');
+assert.equal(formatObservedRate(0,10), '0%');
+assert.equal(formatObservedRate(9,10), '90%');
+assert.equal(formatObservedRate(11,10), 'Unknown');
+assert.equal(formatObservedRate(-1,10), 'Unknown');
+assert.equal(formatObservedLatency(null), 'Unknown');
+assert.equal(formatObservedLatency(undefined), 'Unknown');
+assert.equal(formatObservedLatency(NaN), 'Unknown');
+assert.equal(formatObservedLatency(0), '0 ms');
+assert.equal(formatObservedLatency(183), '183 ms');
+const now = Date.parse('2026-10-19T12:00:00.000Z');
+assert.equal(hasRecentProviderObservation('2026-10-19T11:59:30.000Z', now), true);
+assert.equal(hasRecentProviderObservation('2026-10-19T11:57:59.000Z', now), false);
+assert.equal(hasRecentProviderObservation('2026-10-19T12:01:00.000Z', now), false);
+assert.equal(hasRecentProviderObservation(undefined, now), false);
+assert.equal(hasRecentProviderObservation('not-a-date', now), false);
+console.log('PASS observed telemetry distinguishes missing samples, measured zero and valid rates.');

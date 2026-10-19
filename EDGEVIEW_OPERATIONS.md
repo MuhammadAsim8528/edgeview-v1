@@ -106,6 +106,41 @@ The Settings diagnostics panel is intentionally passive until the user selects t
 
 The Activity Logs panel renders a bounded tail of `logs/edgeview_runtime.log` and immutable enrichment timelines. Logs rotate at 10 MB with three archives. API keys, authorization headers, cookies, passwords, access tokens, and credential query parameters are redacted before writing. The log API accepts only a bounded `tail` count and cannot read arbitrary paths.
 
+Provider success rate is successful completed retrieval calls divided by completed
+retrieval calls. Average latency comes from those recorded calls. Connection-test
+latency is shown separately and does not overwrite that average or denominator.
+With no samples the UI shows `Unknown`; a zero cache denominator is also unknown,
+not 100% efficiency. Recorded totals are not provider billing/quota balances and
+do not imply all pre-instrumentation history was counted.
+
+Connection observations expire for health classification after two minutes.
+An active routing suppression/cooldown still takes precedence; a newer completed
+operation overrides an older diagnostic outcome. Settings changes to a key/model/
+endpoint clear the previous connection's guard and cached test state. Disabling
+a provider takes precedence over old successful checks or failures.
+
+Runtime polling coalesces concurrent refreshes, times out stalled requests after
+15 seconds, and cancels on final subscriber cleanup. Offline/malformed status
+withdraws research capabilities with a visible reason while retaining loaded
+data. A valid subsequent response restores backend capability state. The health
+panel reports failed tests and pauses its extra polling while hidden.
+
+### Rebuilding a Windows distribution
+
+The packager verifies an existing output folder before replacing it. Added files,
+runtime data, links or operator edits cause a refusal; preserve that folder and
+choose a clean distribution location instead of deleting its contents. Source
+copy and ZIP creation happen in a temporary build folder first. Publication can
+roll back to previous artifacts on failure; if rollback itself fails, recovery
+files are retained and their folder is printed. Do not run an output-folder copy
+while rebuilding that same distribution.
+
+Package copies preserve source timestamps and include the root server entrypoint,
+shared contracts and developer build setup. A fresh prebuilt ZIP should pass the
+no-change build check after extraction. First launch still needs Node/npm and an
+Internet connection if dependencies are absent. Run the launcher only after
+extracting the entire ZIP, not directly from inside the ZIP viewer.
+
 ## Release checklist
 
 - `npm run lint`

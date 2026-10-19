@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   RefreshCw, 
   Server, 
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { safeFetchJson } from '../utils/safeFetch';
+import { formatObservedLatency, formatObservedRate } from '../utils/telemetryFormat';
 
 export interface ProviderHealth {
   provider: string;
@@ -26,7 +27,8 @@ export interface ProviderHealth {
   retryCount: number;
   cacheHits: number;
   cacheMisses: number;
-  averageLatencyMs: number;
+  averageLatencyMs: number | null;
+  lastDiagnosticLatencyMs?: number | null;
   lastError: string;
 }
 
@@ -35,35 +37,63 @@ export const SystemHealthPanel: React.FC = () => {
   const { state: runtimeState, refresh } = useEdgeViewRuntimeState();
   const [isTesting, setIsTesting] = useState(false);
   const [healthReport, setHealthReport] = useState<Record<string, ProviderHealth>>({});
-  const [loading, setLoading] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const healthRequest = useRef<AbortController | null>(null);
+  const testRequest = useRef<AbortController | null>(null);
 
   const fetchHealthReport = async () => {
+    if (healthRequest.current) return;
+    const controller = new AbortController();
+    healthRequest.current = controller;
     try {
-      const { ok, data } = await safeFetchJson<any>('/api/governor/provider-metrics');
+      const { ok, data, error } = await safeFetchJson<any>('/api/governor/provider-metrics', { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (ok && data && data.success && data.report) {
         setHealthReport(data.report);
+        setHealthError(null);
+      } else {
+        setHealthError(error || 'Telemetry is unavailable. Check that EdgeView is running.');
       }
     } catch (err) {
-      console.error('Failed to fetch provider health report:', err);
+      if (!controller.signal.aborted) setHealthError('Telemetry could not be refreshed.');
+    } finally {
+      if (healthRequest.current === controller) healthRequest.current = null;
     }
   };
 
   useEffect(() => {
     fetchHealthReport();
-    const interval = setInterval(fetchHealthReport, 4000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchHealthReport(); }, 10000);
+    return () => {
+      clearInterval(interval);
+      const activeHealth = healthRequest.current;
+      const activeTest = testRequest.current;
+      healthRequest.current = null;
+      testRequest.current = null;
+      activeHealth?.abort(); activeTest?.abort();
+    };
   }, []);
 
   const testConnections = async () => {
     setIsTesting(true);
+    setTestError(null);
+    const controller = new AbortController();
+    testRequest.current = controller;
     try {
-      await safeFetchJson('/api/system/health/test', { method: 'POST' });
+      const { ok, data, error } = await safeFetchJson<any>('/api/system/health/test', { method: 'POST', signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (!ok || !data?.success) {
+        setTestError(error || 'Provider checks could not run. Try again after checking the backend.');
+        return;
+      }
       await fetchHealthReport();
       await refresh();
     } catch (err) {
-      console.error('Failed to test connections:', err);
+      if (!controller.signal.aborted) setTestError('Provider checks could not be completed.');
     } finally {
-      setIsTesting(false);
+      if (testRequest.current === controller) testRequest.current = null;
+      if (!controller.signal.aborted) setIsTesting(false);
     }
   };
 
@@ -92,7 +122,7 @@ export const SystemHealthPanel: React.FC = () => {
         statusLabel = 'Disabled';
         statusColor = 'bg-gray-800 text-gray-400 border-gray-700';
       } else {
-        statusLabel = 'Not Tested';
+      statusLabel = 'Unknown';
         statusColor = 'bg-sky-950/60 text-sky-400 border-sky-800/40';
       }
     } else {
@@ -139,9 +169,7 @@ export const SystemHealthPanel: React.FC = () => {
           <div className="flex justify-between">
             <span>Success rate:</span>
             <span className={providerData.requestCount > 0 ? 'text-emerald-400 font-semibold' : 'text-gray-500'}>
-              {providerData.requestCount > 0 
-                ? `${Math.round((providerData.successCount / providerData.requestCount) * 100)}%` 
-                : '0%'}
+              {formatObservedRate(providerData.successCount, providerData.requestCount)}
             </span>
           </div>
           <div className="flex justify-between">
@@ -152,8 +180,9 @@ export const SystemHealthPanel: React.FC = () => {
           </div>
           <div className="flex justify-between">
             <span>Avg Latency:</span>
-            <span className="text-white font-semibold">{providerData.averageLatencyMs == null ? 'Unknown' : `${providerData.averageLatencyMs} ms`}</span>
+            <span className="text-white font-semibold">{formatObservedLatency(providerData.averageLatencyMs)}</span>
           </div>
+          <div className="flex justify-between"><span>Last diagnostic:</span><span>{formatObservedLatency(providerData.lastDiagnosticLatencyMs)}</span></div>
         </div>
 
         {/* Error string if failed */}
@@ -173,7 +202,7 @@ export const SystemHealthPanel: React.FC = () => {
   };
 
   const totalQueries = (runtimeState.resources.cacheHits || 0) + (runtimeState.resources.cacheMisses || 0);
-  const cacheHitRate = totalQueries > 0 ? Math.round((runtimeState.resources.cacheHits / totalQueries) * 100) : 100;
+  const cacheHitRate = formatObservedRate(runtimeState.resources.cacheHits || 0, totalQueries);
 
   return (
     <div className="bg-[#262626] rounded-xl border border-[#333333] p-5 space-y-5">
@@ -182,10 +211,10 @@ export const SystemHealthPanel: React.FC = () => {
         <div>
           <div className="flex items-center space-x-2">
             <Activity className="w-5 h-5 text-[#10b981]" />
-            <h3 className="text-sm font-bold text-white">Resource Intelligence Telemetry & Health</h3>
+            <h3 className="text-sm font-bold text-white">Provider health</h3>
           </div>
           <p className="text-xs text-[#9ca3af] mt-0.5">
-            Live health verification, circuit breakers status, and request quotas for search & extraction engines
+            Recorded provider calls, routing guards and explicit connection checks
           </p>
         </div>
 
@@ -195,9 +224,11 @@ export const SystemHealthPanel: React.FC = () => {
           className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-white ${isTesting ? 'animate-spin' : ''}`} />
-          <span>{isTesting ? 'Testing Connectivity...' : 'Ping All Services'}</span>
+          <span>{isTesting ? 'Testing...' : 'Test enabled providers'}</span>
         </button>
       </div>
+
+      {(testError || healthError) && <div role="alert" className="rounded border border-rose-800 bg-rose-950/40 p-3 text-xs text-rose-200">{testError || healthError}{Object.keys(healthReport).length > 0 ? ' Previously loaded metrics remain visible.' : ''}</div>}
 
       {/* The V1 critical path intentionally exposes only approved providers. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -221,7 +252,7 @@ export const SystemHealthPanel: React.FC = () => {
             <span>System Cache Efficiency Summary</span>
           </h4>
           <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            Smart Cache Hit Ratio: {cacheHitRate}%
+            Cache hit rate: {cacheHitRate}
           </span>
         </div>
 

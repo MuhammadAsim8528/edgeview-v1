@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { unusedTestPort } from './test-server-port.mjs';
 
-const port = 3912;
+const port = Number(process.env.EDGEVIEW_RELEASE_TEST_PORT || await unusedTestPort());
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid isolated test port.');
 const base = `http://127.0.0.1:${port}`;
 const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-release-smoke-'));
 const isolatedEnv = {
@@ -13,6 +15,7 @@ const isolatedEnv = {
   NODE_ENV: 'test',
   EDGEVIEW_TEST_MODE: '1',
   EDGEVIEW_TEST_DB_DIR: testRoot,
+  EDGEVIEW_V1_DATA_DIR: path.join(testRoot, 'runs'),
   EDGEVIEW_CONFIG: path.join(testRoot, 'config.json'),
   SERPER_API_KEY: '',
   HUNTER_API_KEY: '',
@@ -37,10 +40,16 @@ child.stderr.on('data', chunk => { stderr += String(chunk); });
 async function waitForHealth() {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error('Isolated release server exited before becoming healthy.');
+    let response;
     try {
-      const response = await fetch(`${base}/api/health`);
-      if (response.ok) return response;
+      response = await fetch(`${base}/api/health`);
     } catch {}
+    if (response?.ok) {
+      const identity = await response.clone().json();
+      if (identity.app?.pid !== child.pid) throw new Error('Test port belongs to a different process; no mutations permitted.');
+      return response;
+    }
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   throw new Error(`release server did not become healthy: ${stderr.slice(-1000)}`);
@@ -99,6 +108,14 @@ try {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ groq_enabled: 'yes' }),
   });
   assert.equal(invalidSettings.status, 400);
+  const unsupportedSettings = await fetch(`${base}/api/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ primary_ai_provider: 'GROQ', provider_weights: { apify: 100 } }),
+  });
+  assert.equal(unsupportedSettings.status, 400);
+  assert.equal((await unsupportedSettings.json()).code, 'UNSUPPORTED_V1_SETTING');
+  assert.equal((await (await fetch(`${base}/api/settings`)).json()).primary_ai_provider, 'NVIDIA', 'rejected configuration must not partially save');
+  const arraySettings = await fetch(`${base}/api/settings`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '[]' });
+  assert.equal(arraySettings.status, 400);
 
   const oversizedIdentity = await fetch(`${base}/api/enrich/company`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ company_name: 'x'.repeat(301), country: 'Sri Lanka' }),
@@ -125,6 +142,11 @@ try {
     assert.ok(['available', 'cooldown', 'suppressed', 'disabled', 'unconfigured'].includes(metric.routingState));
     assert.equal(metric.status === 'healthy', false, 'GET telemetry must not fabricate a successful live check');
     assert.equal(metric.successRate === null || (metric.successRate >= 0 && metric.successRate <= 1), true);
+    if (metric.requestCount === 0) {
+      assert.equal(metric.successRate, null);
+      assert.equal(metric.averageLatencyMs, null, 'no completed retrieval samples must not produce an average');
+    }
+    assert.equal(metric.lastDiagnosticLatencyMs, null, 'passive telemetry must not fabricate a diagnostic timing');
   }
 
   const systemHealth = await (await fetch(`${base}/api/system/health`)).json();
@@ -168,7 +190,9 @@ try {
   assert.equal((await fetch(`${base}/files/upload`, { method: 'POST' })).status, 429, 'another upload alias cannot bypass the budget');
   console.log('PASS EdgeView production release smoke');
 } finally {
-  child.kill('SIGTERM');
-  await new Promise(resolve => child.once('exit', resolve));
+  if (child.exitCode === null && child.signalCode === null) {
+    const stopped = new Promise(resolve => child.once('exit', resolve));
+    child.kill('SIGTERM'); await stopped;
+  }
   try { fs.rmSync(testRoot, { recursive: true, force: true }); } catch {}
 }

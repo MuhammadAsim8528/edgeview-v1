@@ -16,7 +16,7 @@ This inventory covers the components reachable from `src/App.tsx`. The retired `
 | Batch enrichment selection/start/stop/resume | `BatchEnrichmentModal` → `/api/enrich/jobs*` | Persistent resumable job | Endpoints traced; production dataset job not restarted during release audit |
 | Research run selection/refresh/result expansion | `ResearchWorkspace` → `/api/v1/runs*` | Read-only immutable evidence | Runtime and release tests pass; visual expansion blocked |
 | Provider enable/model/primary/save | `SettingsTabV1` → `/api/settings` | Atomic `config.json`; consumed by V1 router | Save/read/restart persistence verified; routing-order regression test passes |
-| Provider test and Ping services | `SettingsTabV1`, `SystemHealthPanel` → `/api/settings/test`, `/api/system/health/test` | Process-local diagnostic result; small provider request | Serper/NVIDIA/Groq verified; invalid Serper key rejected; Hunter disabled |
+| Provider test / Test enabled providers | `SettingsTabV1`, `SystemHealthPanel` → `/api/settings/test`, `/api/system/health/test` | Process-local diagnostic result; small provider request | Serper/NVIDIA/Groq verified; invalid Serper key rejected; Hunter disabled; isolated timing/recovery API tests pass |
 | Telemetry refresh | `SystemHealthPanel` → `/api/governor/provider-metrics` | Read-only durable aggregates and live guard state | Runtime verified; no fabricated healthy state |
 | System/enrichment log tabs, refresh, search | `LogsViewerPanel` → `/api/logs/system`, `/api/logs/enrichment` | Read-only bounded log tail | Runtime verified including restart and secret-redaction probe |
 | Error-boundary retry | `ErrorBoundary` | Component remount/refresh | Source traced; deliberate UI crash not injected |
@@ -26,6 +26,9 @@ This inventory covers the components reachable from `src/App.tsx`. The retired `
 - The database-reseeding **Sample Files** button was removed from the active header. Its API now returns 404 unless the process is explicitly started with `EDGEVIEW_ENABLE_SAMPLE_DATA=1`.
 - The retired multi-provider `SettingsTab.tsx` and compatibility wrapper are excluded from the Windows package.
 - Log deletion and the empty legacy synchronization-log tab are not exposed in V1.
+- The pre-V1 dynamic scoring/capability-weight editor is not part of active V1.
+  `/api/governor/limits` returns 410, and unsupported settings (including obsolete
+  provider weights) are rejected rather than acknowledged as saved.
 
 ## Visual verification limitation
 

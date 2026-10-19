@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { verifyPackage } from './verify-package.mjs';
 
 const root = process.cwd();
 const deliverables = path.resolve(root, '..', '..', 'outputs');
-const stage = path.join(deliverables, 'EdgeView-V1-Windows');
-const zip = path.join(deliverables, 'EdgeView-V1-Windows.zip');
+const destinationStage = path.join(deliverables, 'EdgeView-V1-Windows');
+const destinationZip = path.join(deliverables, 'EdgeView-V1-Windows.zip');
 const excludedNames = new Set([
   '.git', '.agent', '.antigravity', '.vscode', '.npm-cache', '.test-cache', 'node_modules', 'data', 'uploads', 'backups', 'logs', 'AGENTS.md',
   'config.json', 'edgeview.db', 'edgeview.db.lock', 'edgeview_db.json',
@@ -16,8 +17,14 @@ const includedDirectories = ['assets', 'dist', 'public', 'server', 'shared', 'sr
 const includedFiles = [
   '.gitignore', 'EDGEVIEW_ARCHITECTURE.md', 'EDGEVIEW_CONTROL_AUDIT.md', 'EDGEVIEW_LICENSING_DESIGN.md', 'EDGEVIEW_OPERATIONS.md',
   'EDGEVIEW_QA_REPORT.md', 'EDGEVIEW_SECURITY_AUDIT.md', 'EDGEVIEW_V1_VERIFICATION.md', 'EdgeView.bat', 'README.md', 'index.html',
-  'package-lock.json', 'package.json', 'tsconfig.json', 'vite.config.ts',
+  'package-lock.json', 'package.json', 'tsconfig.json', 'vite.config.ts', 'server.ts', 'eslint.config.js',
 ];
+
+function copyFile(source, target) {
+  fs.copyFileSync(source, target);
+  const stat = fs.statSync(source);
+  fs.utimesSync(target, stat.atime, stat.mtime);
+}
 
 function copyTree(source, target, relative = '') {
   fs.mkdirSync(target, { recursive: true });
@@ -29,19 +36,24 @@ function copyTree(source, target, relative = '') {
     const from = path.join(source, entry.name);
     const to = path.join(target, entry.name);
     if (entry.isDirectory()) copyTree(from, to, childRelative);
-    else if (entry.isFile()) fs.copyFileSync(from, to);
+    else if (entry.isFile()) copyFile(from, to);
   }
+  const stat = fs.statSync(source);
+  fs.utimesSync(target, stat.atime, stat.mtime);
 }
 
 fs.mkdirSync(deliverables, { recursive: true });
-fs.rmSync(stage, { recursive: true, force: true });
-fs.rmSync(zip, { force: true });
+if (fs.existsSync(destinationStage)) verifyPackage(destinationStage, { rejectUnexpected: true });
+const buildRoot = fs.mkdtempSync(path.join(deliverables, '.edgeview-package-'));
+const stage = path.join(buildRoot, 'EdgeView-V1-Windows');
+const zip = path.join(buildRoot, 'EdgeView-V1-Windows.zip');
+let retainRecovery = false;
+try {
 fs.mkdirSync(stage, { recursive: true });
 for (const directory of includedDirectories) copyTree(path.join(root, directory), path.join(stage, directory), directory);
 fs.mkdirSync(path.join(stage, 'scripts'), { recursive: true });
-fs.copyFileSync(path.join(root, 'scripts', 'build-if-needed.mjs'), path.join(stage, 'scripts', 'build-if-needed.mjs'));
-fs.copyFileSync(path.join(root, 'scripts', 'verify-package.mjs'), path.join(stage, 'scripts', 'verify-package.mjs'));
-for (const file of includedFiles) fs.copyFileSync(path.join(root, file), path.join(stage, file));
+for (const script of ['build-if-needed.mjs','verify-package.mjs','dev-server.mjs']) copyFile(path.join(root,'scripts',script), path.join(stage,'scripts',script));
+for (const file of includedFiles) copyFile(path.join(root, file), path.join(stage, file));
 
 const prohibited = [];
 function audit(directory, relative = '') {
@@ -70,6 +82,28 @@ function hashTree(directory, relative = '') {
 hashTree(stage);
 fs.writeFileSync(path.join(stage, 'PACKAGE_MANIFEST.json'), `${JSON.stringify({ format: 1, files: manifest }, null, 2)}\n`, 'utf8');
 
-const archived = spawnSync('tar', ['-a', '-c', '-f', zip, '-C', deliverables, path.basename(stage)], { encoding: 'utf8' });
+const archived = spawnSync('tar', ['-a', '-c', '-f', zip, '-C', buildRoot, path.basename(stage)], { encoding: 'utf8' });
 if (archived.status !== 0) throw new Error(archived.stderr || 'Failed to create Windows ZIP');
-console.log(JSON.stringify({ stage, zip }));
+verifyPackage(stage, { rejectUnexpected: true });
+if (fs.existsSync(destinationStage)) verifyPackage(destinationStage, { rejectUnexpected: true });
+const oldStage = path.join(buildRoot, 'previous-stage');
+const oldZip = path.join(buildRoot, 'previous.zip');
+let publishedStage = false;
+try {
+  if (fs.existsSync(destinationStage)) fs.renameSync(destinationStage, oldStage);
+  if (fs.existsSync(destinationZip)) fs.renameSync(destinationZip, oldZip);
+  fs.renameSync(stage, destinationStage); publishedStage = true;
+  fs.renameSync(zip, destinationZip);
+} catch (error) {
+  retainRecovery = true;
+  if (publishedStage) fs.renameSync(destinationStage, stage);
+  if (fs.existsSync(oldStage)) fs.renameSync(oldStage, destinationStage);
+  if (fs.existsSync(oldZip)) fs.renameSync(oldZip, destinationZip);
+  retainRecovery = false;
+  throw error;
+}
+console.log(JSON.stringify({ stage: destinationStage, zip: destinationZip }));
+} finally {
+  if (!retainRecovery) fs.rmSync(buildRoot, { recursive: true, force: true });
+  else console.error(`Packaging recovery files retained at ${buildRoot}`);
+}

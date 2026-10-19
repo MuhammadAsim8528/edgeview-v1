@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-19T14:29:23.047Z",
+  "generated_at": "2026-10-19T14:59:51.304Z",
   "backend": {
     "files": [
       "server.ts",
@@ -35,11 +35,12 @@
       "server/v1_blob_store.ts",
       "server/v1_engine.ts",
       "server/v1_identity.ts",
+      "shared/provider_telemetry.ts",
       "shared/v1_contact_contract.ts",
       "src/utils/countryNormalizer.ts"
     ],
-    "count": 35,
-    "lines": 14674
+    "count": 36,
+    "lines": 14725
   },
   "frontend": {
     "files": [
@@ -71,10 +72,11 @@
       "src/utils/countryNormalizer.ts",
       "src/utils/exportValidator.ts",
       "src/utils/formatters.ts",
-      "src/utils/safeFetch.ts"
+      "src/utils/safeFetch.ts",
+      "src/utils/telemetryFormat.ts"
     ],
-    "count": 29,
-    "lines": 10350
+    "count": 30,
+    "lines": 10441
   },
   "retired_inputs": 0,
   "archive": {
