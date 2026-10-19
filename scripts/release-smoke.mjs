@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { unusedTestPort } from './test-server-port.mjs';
 
 const port = Number(process.env.EDGEVIEW_RELEASE_TEST_PORT || await unusedTestPort());
@@ -15,6 +16,8 @@ const isolatedEnv = {
   NODE_ENV: 'test',
   EDGEVIEW_TEST_MODE: '1',
   EDGEVIEW_TEST_DB_DIR: testRoot,
+  EDGEVIEW_JSON_DB: path.join(testRoot, 'persistence.json'),
+  EDGEVIEW_SQLITE_DB: path.join(testRoot, 'operational.db'),
   EDGEVIEW_V1_DATA_DIR: path.join(testRoot, 'runs'),
   EDGEVIEW_CONFIG: path.join(testRoot, 'config.json'),
   SERPER_API_KEY: '',
@@ -86,13 +89,78 @@ try {
 
   const validUpload = new FormData();
   const validName = `release-smoke-${Date.now()}.csv`;
-  validUpload.append('file', new Blob(['Importer,Exporter,Country,Item,TOT_FC\nSmoke Importer,Smoke Exporter,Kenya,Test Product,100\n']), validName);
+  validUpload.append('file', new Blob(['Date,Importer,Exporter,Country,Item,TOT_FC\n2026-01-01,Alpha,Exporter One,Niger,Product One,100\n2026-01-02,Alpha Trading,Exporter Two,Niger,Product Two,200\n2026-01-03,Alpha,Exporter Three,Nigeria,Product Three,300\n2026-01-04,Unicode Pharma,Exporter Four,Sri Lanka,Product Four,400\n']), validName);
   const validUploadResponse = await fetch(`${base}/api/files/upload`, { method: 'POST', body: validUpload });
   const validUploadBody = await validUploadResponse.json();
   assert.equal(validUploadResponse.status, 201, JSON.stringify(validUploadBody));
   assert.equal(validUploadBody.success, true);
   const uploadedId = validUploadBody.data?.id || validUploadBody.id;
   assert.ok(uploadedId, 'successful upload must return its persisted file id');
+
+  const fileScope = `file_id=${encodeURIComponent(uploadedId)}`;
+  const jsonGet = async route => {
+    const response = await fetch(`${base}${route}`);
+    assert.equal(response.status, 200, route); return response.json();
+  };
+  const page = await jsonGet(`/api/files/${uploadedId}/data?limit=1&offset=1&sort_by=Importer&sort_dir=asc`);
+  assert.equal(page.rows.length, 1); assert.equal(page.total_count, 4);
+  const filtered = await jsonGet(`/api/files/${uploadedId}/data?country=Niger&importer=Alpha`);
+  assert.equal(filtered.total_count, 1, 'file filters must retain exact country/company scope');
+  for (const query of ['limit=-1','limit=0','limit=1001','limit=abc','limit=1.5','offset=-1','limit=1&limit=2']) {
+    assert.equal((await fetch(`${base}/api/files/${uploadedId}/data?${query}`)).status, 400, `invalid pagination: ${query}`);
+  }
+  const countries = await jsonGet(`/api/countries?${fileScope}`);
+  assert.equal(countries.find(row => row.country === 'Niger').importers_count, 2);
+  const niger = await jsonGet(`/api/countries/Niger/summary?${fileScope}`);
+  assert.equal(niger.total_export_value, 300, 'Niger must not include Nigeria');
+  const importers = await jsonGet(`/api/countries/Niger/importers?${fileScope}`);
+  assert.equal(importers.length, 2);
+  const alpha = await jsonGet(`/api/countries/Niger/Alpha/details?${fileScope}`);
+  assert.equal(alpha.length, 1, 'Alpha must not include Alpha Trading or Nigerian records');
+  assert.equal(alpha[0].total_value, 100);
+  const statsAlpha = await jsonGet(`/api/stats/importers/Alpha/summary?country=Niger&${fileScope}`);
+  assert.equal(statsAlpha.total_export_value, 100); assert.equal(statsAlpha.total_shipments, 1);
+  const statsImporters = await jsonGet(`/api/stats/countries/Niger/importers?${fileScope}`);
+  assert.equal(statsImporters.length, 2);
+  assert.deepEqual(await jsonGet('/api/countries?file_id=missing-synthetic-file'), [], 'missing file scope must not silently widen to all files');
+  const savedHistory = await fetch(`${base}/api/files/${uploadedId}/save-to-history`, { method: 'POST' });
+  assert.equal(savedHistory.status, 200);
+  const savedHistoryBody = await savedHistory.json();
+  assert.equal(savedHistoryBody.success, true); assert.equal(savedHistoryBody.data.row_count, 4);
+  assert.ok(JSON.parse(fs.readFileSync(path.join(testRoot, 'persistence.json'), 'utf8')).some(file => file.id === uploadedId && file.row_count === 4), 'history save must be durable');
+  const history = await jsonGet('/api/stats/history-files');
+  assert.ok(!history.data.some(file => file.file_name === validName), 'test-mode records must remain excluded from the real history listing');
+
+  const exportRecords = [
+    { id: 'chosen', Date: '2026-01-01', Importer: 'Chosen Company', Country: 'Niger', Exporter: 'Fixture Exporter', Item: 'Fixture Product', TOT_FC: 100 },
+    { id: 'excluded', Date: '2026-01-02', Importer: 'Excluded Company', Country: 'Nigeria', Exporter: 'Fixture Exporter', Item: 'Fixture Product', TOT_FC: 200 },
+  ];
+  const exportPayload = { dataset: 'files', title: 'Release Fixture', records: exportRecords, selectedRows: ['chosen'], filenamePrefix: 'EdgeView_QA' };
+  for (const format of ['csv','xlsx','docx','pdf','all']) {
+    const response = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format }) });
+    assert.equal(response.status, 200, `export ${format}`);
+    assert.ok(response.headers.get('content-disposition')?.includes('attachment'));
+    assert.equal(response.headers.get('x-export-failed-formats'), null, `all requested formats must succeed: ${format}`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.ok(bytes.length > 50);
+    if (format === 'csv') {
+      assert.match(bytes.toString('utf8'), /Chosen Company/); assert.doesNotMatch(bytes.toString('utf8'), /Excluded Company/);
+    } else if (format === 'pdf') assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+    else {
+      const archive = await JSZip.loadAsync(bytes);
+      if (format === 'xlsx' || format === 'docx') {
+        const member = format === 'docx' ? 'word/document.xml' : 'xl/sharedStrings.xml';
+        const content = await archive.file(member).async('string');
+        assert.match(content, /Chosen Company/); assert.doesNotMatch(content, /Excluded Company/);
+      } else {
+        for (const extension of ['csv','xlsx','docx','pdf']) assert.ok(Object.keys(archive.files).some(name => name.endsWith(`.${extension}`)), `ZIP contains ${extension}`);
+      }
+    }
+  }
+  for (const patch of [{ selectedRows: ['missing'] }, { selectedRows: ['chosen','missing'] }, { format: 'exe' }, { records: {} }]) {
+    const response = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format: 'csv', ...patch }) });
+    assert.equal(response.status, 400, 'invalid export or stale selection must not produce a wider download');
+  }
 
   const deleteResponse = await fetch(`${base}/api/files/${encodeURIComponent(uploadedId)}`, { method: 'DELETE' });
   const deleteBody = await deleteResponse.json();

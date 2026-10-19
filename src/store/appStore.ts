@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ParsedFile, CompanyContact, EdgeViewReport, ActiveTab } from '../types';
 import { ToastMessage } from '../components/Toast';
-import { safeFetchJson } from '../utils/safeFetch';
+import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
 import { GlobalExportPayload } from '../components/GlobalExportModal';
 
 export function useAppStore() {
@@ -329,9 +329,9 @@ export function useAppStore() {
     let exportRecords = selectedFile.rows || [];
     if (exportRecords.length === 0) {
       try {
-        const { ok, data } = await safeFetchJson<any>(`/api/files/${encodeURIComponent(selectedFile.id)}/data?limit=1000000`);
+        const { ok, data } = await fetchAllFileRows(selectedFile.id);
         if (ok && data) {
-          exportRecords = data.rows || data.data || [];
+          exportRecords = data.rows;
         }
       } catch (err) {
         console.warn('Failed to load full dataset for CSV export:', err);

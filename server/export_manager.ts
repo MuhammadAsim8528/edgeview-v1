@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { selectExportRecords, validateExportRequest } from './export_validation';
 import {
   Document,
   Packer,
@@ -789,18 +790,7 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
       ? (payload.report_type as 'importer' | 'exporter' | 'both' | 'international_importer')
       : 'importer';
 
-  let rawRecords: any[] = [];
-  if (Array.isArray(payload.selectedRows) && payload.selectedRows.length > 0) {
-    if (typeof payload.selectedRows[0] === 'string') {
-      const idSet = new Set(payload.selectedRows);
-      rawRecords = payload.records.filter((r) => idSet.has(r.id || r.company_id || r._id));
-      if (rawRecords.length === 0) rawRecords = payload.records;
-    } else {
-      rawRecords = payload.selectedRows;
-    }
-  } else {
-    rawRecords = Array.isArray(payload.records) ? payload.records : [];
-  }
+  const rawRecords = selectExportRecords(payload);
 
   if (rawRecords.length === 0) {
     throw new Error('No valid contact records found to export.');
@@ -1140,18 +1130,7 @@ export async function processFullDatasetExport(payload: NormalizedExportPayload)
   failedFormats?: string[];
 }> {
   const { title, format, filenamePrefix = 'EdgeView_Dataset_Export' } = payload;
-  let rawRecords: any[] = [];
-  if (Array.isArray(payload.selectedRows) && payload.selectedRows.length > 0) {
-    if (typeof payload.selectedRows[0] === 'string') {
-      const idSet = new Set(payload.selectedRows);
-      rawRecords = payload.records.filter((r) => idSet.has(r.id || r.company_id || r._id));
-      if (rawRecords.length === 0) rawRecords = payload.records;
-    } else {
-      rawRecords = payload.selectedRows;
-    }
-  } else {
-    rawRecords = Array.isArray(payload.records) ? payload.records : [];
-  }
+  const rawRecords = selectExportRecords(payload);
 
   if (rawRecords.length === 0) {
     throw new Error('No valid records found in dataset to export.');
@@ -1255,6 +1234,7 @@ export async function processExportRequest(payload: NormalizedExportPayload): Pr
   filename: string;
   failedFormats?: string[];
 }> {
+  validateExportRequest(payload);
   const isContactDataset = payload.dataset === 'contacts' || payload.dataset === 'outreach';
   if (isContactDataset) {
     return processContactExport(payload);

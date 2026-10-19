@@ -82,7 +82,7 @@ export function extractRowData(row: Record<string, any>) {
 
 function getAllDatasetRows(fileId?: string) {
   let rawRows: Record<string, any>[] = [];
-  if (fileId && db.files.has(fileId)) {
+  if (fileId) {
     rawRows = db.files.get(fileId)?.rows || [];
   } else {
     for (const f of db.files.values()) {
@@ -161,7 +161,7 @@ statsRouter.get('/countries', (req: Request, res: Response) => {
 
 // 3. GET /api/stats/countries/:country/importers -> Importers for a country (or all importers if ALL)
 statsRouter.get('/countries/:country/importers', (req: Request, res: Response) => {
-  const rawCountry = decodeURIComponent(req.params.country).trim();
+  const rawCountry = safeDecode(req.params.country);
   const countryParam = rawCountry.toLowerCase();
   const fileId = req.query.file_id as string;
   const rows = getAllDatasetRows(fileId);
@@ -170,7 +170,7 @@ statsRouter.get('/countries/:country/importers', (req: Request, res: Response) =
   const matched = isAll
     ? rows
     : rows.filter(
-        (r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam)
+        (r) => r.country.toLowerCase() === countryParam
       );
 
   const impMap = new Map<string, { importer: string; exporters: Set<string>; total_value: number; shipments: number }>();
@@ -200,8 +200,8 @@ statsRouter.get('/countries/:country/importers', (req: Request, res: Response) =
 
 // 4. GET /api/stats/importers/:importer/summary -> Summary stats for selected importer
 statsRouter.get('/importers/:importer/summary', (req: Request, res: Response) => {
-  const importerParam = decodeURIComponent(req.params.importer).trim().toLowerCase();
-  const countryParam = req.query.country ? decodeURIComponent(req.query.country as string).trim().toLowerCase() : '';
+  const importerParam = safeDecode(req.params.importer).toLowerCase();
+  const countryParam = parseQueryString(req.query.country).toLowerCase();
   const startDate = req.query.start as string;
   const endDate = req.query.end as string;
   const fileId = req.query.file_id as string;
@@ -209,10 +209,10 @@ statsRouter.get('/importers/:importer/summary', (req: Request, res: Response) =>
   let rows = getAllDatasetRows(fileId);
 
   if (countryParam && countryParam !== 'all') {
-    rows = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+    rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
   }
 
-  let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam || r.importer.toLowerCase().includes(importerParam));
+  let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam);
   matched = filterByDate(matched, startDate, endDate);
 
   const exporters = new Set<string>();
@@ -224,7 +224,7 @@ statsRouter.get('/importers/:importer/summary', (req: Request, res: Response) =>
   }
 
   const displayCountry = matched.length > 0 ? matched[0].country : (req.query.country as string || 'All Countries');
-  const displayImporter = matched.length > 0 ? matched[0].importer : decodeURIComponent(req.params.importer);
+  const displayImporter = matched.length > 0 ? matched[0].importer : safeDecode(req.params.importer);
 
   res.json({
     country: displayCountry,
@@ -237,8 +237,8 @@ statsRouter.get('/importers/:importer/summary', (req: Request, res: Response) =>
 
 // 5. GET /api/stats/importers/:importer/products -> Product breakdown with repetition tracking
 statsRouter.get('/importers/:importer/products', (req: Request, res: Response) => {
-  const importerParam = decodeURIComponent(req.params.importer).trim().toLowerCase();
-  const countryParam = req.query.country ? decodeURIComponent(req.query.country as string).trim().toLowerCase() : '';
+  const importerParam = safeDecode(req.params.importer).toLowerCase();
+  const countryParam = parseQueryString(req.query.country).toLowerCase();
   const startDate = req.query.start as string;
   const endDate = req.query.end as string;
   const fileId = req.query.file_id as string;
@@ -246,10 +246,10 @@ statsRouter.get('/importers/:importer/products', (req: Request, res: Response) =
   let rows = getAllDatasetRows(fileId);
 
   if (countryParam && countryParam !== 'all') {
-    rows = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+    rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
   }
 
-  let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam || r.importer.toLowerCase().includes(importerParam));
+  let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam);
   matched = filterByDate(matched, startDate, endDate);
 
   const totalValAll = matched.reduce((acc, r) => acc + r.total_value, 0);
@@ -298,10 +298,10 @@ statsRouter.get('/importers/:importer/exporters', (req: Request, res: Response) 
     let rows = getAllDatasetRows(fileId);
 
     if (countryParam && countryParam !== 'all') {
-      rows = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+      rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
     }
 
-    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam || r.importer.toLowerCase().includes(importerParam));
+    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam);
     matched = filterByDate(matched, startDate, endDate);
 
     const totalValAll = matched.reduce((acc, r) => acc + r.total_value, 0);
@@ -353,10 +353,10 @@ statsRouter.get('/importers/:importer/shipments', (req: Request, res: Response) 
     let rows = getAllDatasetRows(fileId);
 
     if (countryParam && countryParam !== 'all') {
-      rows = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+      rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
     }
 
-    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam || r.importer.toLowerCase().includes(importerParam));
+    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam);
     
     if (exporterParam) {
       matched = matched.filter((r) => r.exporter.toLowerCase() === exporterParam || r.exporter.toLowerCase().includes(exporterParam));
@@ -391,10 +391,10 @@ statsRouter.get('/importers/:importer/export', (req: Request, res: Response) => 
     let rows = getAllDatasetRows(fileId);
 
     if (countryParam && countryParam !== 'all') {
-      rows = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+      rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
     }
 
-    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam.toLowerCase() || r.importer.toLowerCase().includes(importerParam.toLowerCase()));
+    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam.toLowerCase());
     matched = filterByDate(matched, startDate, endDate);
 
     const totalVal = matched.reduce((acc, r) => acc + r.total_value, 0);

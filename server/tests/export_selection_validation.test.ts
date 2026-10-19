@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { selectExportRecords, validateExportRequest } from '../export_validation';
+const records = [{ id: 'a', value: 'selected' }, { id: 'b', value: 'not selected' }];
+assert.deepEqual(selectExportRecords({ records, selectedRows: ['a'] }), [records[0]]);
+assert.deepEqual(selectExportRecords({ records, selectedRows: [] }), records);
+assert.deepEqual(selectExportRecords({ records, selectedRows: [records[1]] }), [records[1]]);
+for (const selectedRows of [['missing'], ['a','missing'], ['a', records[0]], 'a', [null]]) assert.throws(() => selectExportRecords({ records, selectedRows }), { name: 'ExportValidationError' });
+const base = { dataset: 'files', format: 'csv', records, title: 'Fixture' };
+assert.doesNotThrow(() => validateExportRequest(base));
+for (const payload of [null, [], { ...base, dataset: 'unknown' }, { ...base, format: 'exe' }, { ...base, records: {} }, { ...base, records: [null] }, { ...base, title: {} }, { ...base, report_type: 'unknown' }, { ...base, columns: [{}] }]) assert.throws(() => validateExportRequest(payload), { name: 'ExportValidationError' });
+console.log('PASS explicit export selections never widen to all records and malformed requests are rejected');

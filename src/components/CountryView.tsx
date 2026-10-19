@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
-import { safeFetchJson } from '../utils/safeFetch';
+import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
 import {
   Globe,
   Download,
@@ -312,9 +312,9 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
       let exportRecords = clientRows.length > 0 ? clientRows : (selectedFile?.rows || []);
       if (exportRecords.length === 0 && selectedFile) {
         try {
-          const { ok, data } = await safeFetchJson<any>(`/api/files/${encodeURIComponent(selectedFile.id)}/data?limit=1000000`);
+          const { ok, data } = await fetchAllFileRows(selectedFile.id);
           if (ok && data) {
-            exportRecords = data.rows || data.data || [];
+            exportRecords = data.rows;
           }
         } catch (err) {
           console.warn('Failed to load full dataset for country export:', err);

@@ -14,7 +14,7 @@ import { ToastContainer } from './components/Toast';
 import { GlobalExportModal } from './components/GlobalExportModal';
 import { RefreshCw, Download, FileText, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatFullCurrency } from './utils/formatters';
-import { safeFetchJson } from './utils/safeFetch';
+import { fetchAllFileRows } from './utils/safeFetch';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ResearchWorkspace } from './components/ResearchWorkspace';
 
@@ -129,9 +129,9 @@ export default function App() {
                           let exportRecords = store.selectedFile.rows || [];
                           if (exportRecords.length === 0) {
                             try {
-                              const { ok, data } = await safeFetchJson<any>(`/api/files/${encodeURIComponent(store.selectedFile.id)}/data?limit=1000000`);
+                              const { ok, data } = await fetchAllFileRows(store.selectedFile.id);
                               if (ok && data) {
-                                exportRecords = data.rows || data.data || [];
+                                exportRecords = data.rows;
                               }
                             } catch (err) {
                               console.warn('Failed to load full dataset for quick export:', err);

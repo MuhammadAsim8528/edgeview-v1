@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { safeFetchJson } from '../utils/safeFetch';
+import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
 import {
   Download,
   Search,
@@ -1112,9 +1112,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 // complete dataset from the server so the export is not empty.
                 if (exportRecords.length === 0) {
                   try {
-                    const { ok, data } = await safeFetchJson<any>(`/api/files/${encodeURIComponent(file.id)}/data?limit=1000000`);
+                    const { ok, data } = await fetchAllFileRows(file.id);
                     if (ok && data) {
-                      exportRecords = data.rows || data.data || [];
+                      exportRecords = data.rows;
                     }
                   } catch (err) {
                     console.warn('Failed to load full dataset for export:', err);

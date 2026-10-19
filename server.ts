@@ -32,6 +32,7 @@ import {
 } from './server/settings';
 import { processExportRequest, transformFullDatasetRecords, FULL_DATASET_COLUMNS, generateCsvData, generateXlsxWorkbook, contactReportColumns, flattenContactReportRows } from './server/export_manager';
 import { buildContactReport } from './server/contact_report_model';
+import { ExportValidationError } from './server/export_validation';
 import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/utils/header_encoder';
 import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { selectContactEntity } from './server/contact_projection';
@@ -341,8 +342,10 @@ app.get('/api/files/:id/data', (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+    const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
+    if ((req.query.limit !== undefined && (typeof req.query.limit !== 'string' || !/^\d+$/.test(req.query.limit))) || !Number.isInteger(limit) || limit < 1 || limit > 1000
+      || (req.query.offset !== undefined && (typeof req.query.offset !== 'string' || !/^\d+$/.test(req.query.offset))) || !Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ error: 'Pagination requires limit 1–1000 and a non-negative integer offset.' });
     const search = (req.query.search as string || '').toLowerCase().trim();
     const sortBy = req.query.sort_by as string;
     const sortDir = (req.query.sort_dir as string || 'asc').toLowerCase();
@@ -1708,6 +1711,7 @@ app.post('/api/export', async (req, res) => {
     return res.send(buffer);
   } catch (err: any) {
     console.error('Unified Export Error:', err);
+    if (err instanceof ExportValidationError) return res.status(400).json({ error: err.message, code: 'INVALID_EXPORT_REQUEST' });
     return res.status(500).json({ error: err?.message || 'Failed to process export request' });
   }
 });
@@ -2203,7 +2207,7 @@ function getAllDatasetRows(fileId?: string): Array<{
   unit: string;
 }> {
   let rawRows: Record<string, any>[] = [];
-  if (fileId && db.files.has(fileId)) {
+  if (fileId) {
     rawRows = db.files.get(fileId)?.rows || [];
   } else {
     for (const f of db.files.values()) {
@@ -2273,7 +2277,7 @@ app.get('/api/countries/:country/summary', (req, res) => {
     const fileId = parseQueryString(req.query.file_id);
     const rows = getAllDatasetRows(fileId);
 
-    const matched = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+    const matched = rows.filter((r) => r.country.toLowerCase() === countryParam);
 
     const importers = new Set<string>();
     const exporters = new Set<string>();
@@ -2304,7 +2308,7 @@ app.get('/api/countries/:country/importers', (req, res) => {
     const fileId = parseQueryString(req.query.file_id);
     const rows = getAllDatasetRows(fileId);
 
-    const matched = rows.filter((r) => r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam));
+    const matched = rows.filter((r) => r.country.toLowerCase() === countryParam);
 
     const importerMap = new Map<string, { importer: string; total_export_value: number; exporters: Set<string> }>();
 
@@ -2346,8 +2350,7 @@ app.get('/api/countries/:country/:importer/details', (req, res) => {
 
     const matched = rows.filter(
       (r) =>
-        (r.country.toLowerCase() === countryParam || r.country.toLowerCase().includes(countryParam)) &&
-        (r.importer.toLowerCase() === importerParam || r.importer.toLowerCase().includes(importerParam))
+        r.country.toLowerCase() === countryParam && r.importer.toLowerCase() === importerParam
     );
 
     const aggregated = new Map<string, { exporter: string; product: string; quantity: number; unit: string; total_value: number }>();

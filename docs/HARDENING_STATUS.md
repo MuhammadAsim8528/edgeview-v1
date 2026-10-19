@@ -258,3 +258,40 @@ No claim of release completion or broad production readiness is made.
   `{data: [...]}` catalogs. Invalid/error catalogs are not healthy empty lists.
   New tests cover malformed HTML, error objects, empty keys, unauthorized replies,
   valid empty search/email records and both supported model-list envelopes.
+
+### File/history/export control-path audit
+
+- Stale selected export IDs previously fell back to the whole input dataset.
+  Both contact and full-dataset processors now share selection validation; missing
+  or mixed IDs are rejected and cannot widen the export. The unified endpoint
+  validates datasets, formats, record shape, titles, columns and report type and
+  returns 400 for these request errors rather than a server-error download.
+- Country and statistics drilldowns now use exact case-insensitive country and
+  importer identities, not substrings (Niger/Nigeria; Alpha/Alpha Trading).
+  Explicit missing file IDs yield no rows instead of silently selecting all files.
+- File data pages reject malformed/negative/zero/oversized limits and negative or
+  unsafe offsets; page size is 1–1000. Six existing million-row export fetch calls
+  were replaced by a shared sequential page collector. It fails on missing pages,
+  changed totals or totals beyond the prior million-row ceiling rather than
+  silently returning a partial dataset. It still collects export rows in browser
+  memory; this is not a streaming export or a million-row capacity claim. Backend
+  filtering/normalization still operates on existing in-memory file rows.
+- React best-practices review kept fetching in event paths with no new hooks,
+  timers, libraries or concurrent page burst. Dependent pages remain sequential;
+  the shared helper removes duplicated fetch logic without a UI redesign.
+- Expanded isolated release workflow exercises paging/filtering, exact country
+  and importer drilldowns, history save plus durable row count, five unified export
+  formats and stale/malformed export rejection. CSV/XLSX/DOCX content excludes an
+  unselected synthetic company. PDF header/size and all-format ZIP membership are
+  checked; rendered PDF layout and browser download gestures are not verified.
+  Synthetic test-mode history remains hidden from the real-history listing by
+  design; no real production record was changed to force a passing history check.
+- Checks passed after these changes: TypeScript, ESLint, nine V1 suites, bounded
+  paging and selection-validation regressions, contact-directory export suite,
+  expanded isolated release smoke, telemetry runtime, dependency/archive graph,
+  package preservation, 108-file package verification and extracted-ZIP launch.
+- Remaining provenance finding: a read-only probe confirmed
+  `isTestRecord('file-customer-001', 'latest.xlsx') === true` because it uses broad
+  substring matching. That can hide a legitimate filename from history. This
+  classification path still needs a narrow forward fix and preservation-focused
+  regression; existing records must not be mass-reclassified without evidence.

@@ -9,6 +9,25 @@ export interface SafeFetchResult<T = any> {
   requestId?: string;
 }
 
+/** Export-only collector: bounded sequential pages, never a partial success. */
+export async function fetchAllFileRows(fileId: string, signal?: AbortSignal): Promise<SafeFetchResult<{ rows: any[]; total_count: number }>> {
+  const rows: any[] = [];
+  let total: number | undefined;
+  while (total === undefined || rows.length < total) {
+    const page = await safeFetchJson<any>(`/api/files/${encodeURIComponent(fileId)}/data?limit=1000&offset=${rows.length}`, { signal });
+    if (!page.ok) return { ...page, data: null };
+    const next = page.data?.rows;
+    const count = page.data?.total_count;
+    if (!Array.isArray(next) || next.length > 1000 || !Number.isSafeInteger(count) || count < 0 || count > 1_000_000 || (total !== undefined && total !== count)
+      || (next.length === 0 && rows.length < count) || rows.length + next.length > count) {
+      return { ok: false, status: 0, data: null, error: 'Dataset paging was incomplete or changed. Refresh the file before exporting.', code: 'INCOMPLETE_EXPORT_DATA' };
+    }
+    total = count;
+    rows.push(...next);
+  }
+  return { ok: true, status: 200, data: { rows, total_count: total } };
+}
+
 export async function safeFetchJson<T = any>(
   input: RequestInfo | URL,
   init?: RequestInit

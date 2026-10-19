@@ -33,6 +33,8 @@ jobs:
       - run: node --import tsx server/tests/telemetry_presentation.test.ts
       - run: node --import tsx server/tests/provider_metrics_order.test.ts
       - run: node --import tsx server/tests/provider_response.test.ts
+      - run: node --import tsx server/tests/export_selection_validation.test.ts
+      - run: node --import tsx server/tests/export_paging_client.test.ts
       - run: node --import tsx server/tests/provider_diagnostic_payload.test.ts
       - run: node --import tsx server/tests/runtime_capability_recovery.test.ts
       - run: node --import tsx server/tests/dotenv_test_isolation.test.ts
