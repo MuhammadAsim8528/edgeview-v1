@@ -6,6 +6,7 @@ import { getProjectRoot } from './db_paths';
 import { isSafeExternalUrl, safeFetchOutboundText } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
+import { readProviderResponse } from './provider_response';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -125,6 +126,8 @@ function sha(value: unknown) { return crypto.createHash('sha256').update(JSON.st
 function cleanText(value: unknown) { return typeof value === 'string' ? value.trim() : ''; }
 function safeError(error: unknown, status?: number) {
   const e = error instanceof Error ? error : new Error(String(error));
+  const responseStatus = (e as Error & { status?: unknown }).status;
+  if (!status && typeof responseStatus === 'number' && Number.isInteger(responseStatus) && responseStatus >= 100 && responseStatus <= 599) status = responseStatus;
   return { name: e.name || 'Error', message: e.message || 'Unknown failure', ...(status ? { status } : {}) };
 }
 function providerCircuitKey(provider: string) { return provider.replace(/-extraction$/, ''); }
@@ -375,10 +378,11 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` },
         body: JSON.stringify(aiPayload),
       }, provider.name === 'nvidia' ? 8_000 : 12_000);
-      const body = await response.json().catch(() => ({}));
+      const { body, failure: bodyFailure } = await readProviderResponse(response);
       const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
       run.raw_records.push(raw);
       if (!response.ok) rememberHardProviderFailure(provider.name, response.status);
+      if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
       if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
       const text = cleanText((body as any)?.choices?.[0]?.message?.content);
       const queries = parseQueries(text, run.company_name, run.country, run.limits.max_queries);
@@ -408,10 +412,11 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
   try {
     if (!settings.serper_enabled || !settings.serper_api_key) throw new Error('Serper is not configured and enabled');
     const response = await boundedFetch('https://google.serper.dev/search', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-KEY': settings.serper_api_key }, body: JSON.stringify(request) });
-    const body = await response.json().catch(() => ({}));
+    const { body, failure: bodyFailure } = await readProviderResponse(response);
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
     if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
     if (!response.ok) throw new Error(`Serper returned HTTP ${response.status}`);
     const items = Array.isArray((body as any).organic) ? (body as any).organic : [];
     run.timeline.push({ at: now(), stage: 'search', status: 'success', provider, query, latency_ms: raw.latency_ms, message: `Captured ${items.length} search results` });
@@ -507,10 +512,11 @@ async function enrichHunter(run: V1Run, domain: string): Promise<V1Result[]> {
     const endpoint = new URL('https://api.hunter.io/v2/domain-search');
     endpoint.searchParams.set('domain', domain); endpoint.searchParams.set('api_key', settings.hunter_api_key);
     const response = await boundedFetch(endpoint.toString(), { method: 'GET' });
-    const body = await response.json().catch(() => ({}));
+    const { body, failure: bodyFailure } = await readProviderResponse(response);
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
     if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
     if (!response.ok) throw new Error(`Hunter returned HTTP ${response.status}`);
     const data = (body as any).data || {};
     const emails = Array.isArray(data.emails) ? data.emails : [];
@@ -713,10 +719,11 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
       const started = Date.now(); const requestedAt = now();
       try {
         const response = await boundedFetch(provider.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` }, body: JSON.stringify({ model: provider.model, temperature: 0, max_tokens: 2200, messages: [{ role: 'system', content: 'You are a strict evidence extractor. Output JSON only.' }, { role: 'user', content: JSON.stringify(request) }], ...(provider.name.startsWith('nvidia') ? { chat_template_kwargs: { thinking: false } } : {}) }) }, 20_000);
-        const body = await response.json().catch(() => ({}));
+        const { body, failure: bodyFailure } = await readProviderResponse(response);
         const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
         run.raw_records.push(raw);
         if (!response.ok) rememberHardProviderFailure(provider.name, response.status);
+        if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
         if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
         const content = cleanText((body as any)?.choices?.[0]?.message?.content);
         const match = content.match(/\{[\s\S]*\}/);

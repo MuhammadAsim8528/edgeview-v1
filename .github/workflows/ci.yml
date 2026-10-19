@@ -30,6 +30,7 @@ jobs:
       - run: node --import tsx server/tests/runtime_log_security.test.ts
       - run: node --import tsx server/tests/telemetry_presentation.test.ts
       - run: node --import tsx server/tests/provider_metrics_order.test.ts
+      - run: node --import tsx server/tests/provider_response.test.ts
       - run: node --import tsx server/tests/runtime_capability_recovery.test.ts
       - run: node --import tsx server/tests/dotenv_test_isolation.test.ts
       - run: node --import tsx server/tests/v1_evidence_maintenance.test.ts
@@ -44,4 +45,5 @@ jobs:
       - run: npm run package:windows
       - run: npm run verify:package
       - run: node scripts/package-launch-check.test.mjs
+      - run: node scripts/package-cold-runtime.test.mjs
 

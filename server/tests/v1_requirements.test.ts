@@ -48,4 +48,12 @@ assert.ok(run.raw_records.some(record => record.kind === 'scrape' && record.fail
 assert.ok(run.timeline.some(event => event.stage === 'scrape' && event.status === 'failed'), 'timeline exposes downstream failure');
 assert.ok(run.raw_records.every(record => /^[a-f0-9]{64}$/.test(record.sha256)), 'raw records have integrity hashes');
 assert.deepEqual(getV1Run(run.id), JSON.parse(JSON.stringify(run)), 'persisted JSON run can be read without information loss');
+const malformedText = '<html>provider gateway error, not a search result</html>';
+global.fetch = (async () => new Response(malformedText, { status: 200 })) as typeof fetch;
+const malformedRun = await runV1Enrichment('Malformed Provider Example', 'Kenya');
+const malformedSearch = malformedRun.raw_records.filter(record => record.kind === 'search');
+assert.ok(malformedSearch.length > 0);
+assert.ok(malformedSearch.every(record => record.response === malformedText && record.failure?.name === 'ProviderSchemaError'), 'malformed successful HTTP responses retain complete text and explicit schema failure');
+assert.ok(malformedRun.timeline.some(event => event.stage === 'search' && event.status === 'failed'));
+assert.deepEqual(getV1Run(malformedRun.id), JSON.parse(JSON.stringify(malformedRun)), 'malformed provider evidence survives storage round trip');
 console.log('PASS EdgeView V1 requirement-driven tests');

@@ -58,6 +58,7 @@ async function waitForHealth() {
 try {
   const healthResponse = await waitForHealth();
   const health = await healthResponse.json();
+  assert.equal(fs.realpathSync(health.app.project_root), fs.realpathSync(process.cwd()), 'isolated server must resolve the installation being tested');
   assert.deepEqual(Object.keys(health.providers).sort(), ['groq', 'hunter', 'nvidia', 'serper']);
   assert.equal(healthResponse.headers.get('x-content-type-options'), 'nosniff');
   assert.match(healthResponse.headers.get('content-security-policy') || '', /frame-ancestors 'none'/);

@@ -152,3 +152,33 @@ backend restart remain unverified/blocked; the packaged artifact is not proof of
 the running process version.
 
 No claim of release completion or broad production readiness is made.
+
+### 2026-10-19: provider-body capture and cold-install verification
+
+- The four active JSON-provider paths now consume bodies through
+  `server/provider_response.ts`: 8 MiB maximum and a 20-second body deadline,
+  independently of the existing headers timeout. Malformed JSON text is retained
+  with a schema failure rather than silently replaced by `{}`. Invalid UTF-8 is
+  retained as base64. Oversize/stalled streams produce structured failures;
+  their complete bodies are not claimed captured. Unknown valid JSON fields remain.
+- Targeted stream tests and an enrichment/storage-round-trip regression cover
+  malformed HTTP-200 responses without real external calls. Existing successful
+  results and historical raw payloads are not rewritten.
+- Removed the unused Google SDK dependency. Windows first-run install omits
+  development-only dependencies; local build tools remain runtime dependencies so
+  source updates can rebuild locally. No lifecycle scripts were enabled.
+- Added an extracted-ZIP cold-install/start/rebuild check to CI. The local attempt
+  failed during dependency installation after roughly seven minutes with registry
+  ECONNRESET and Windows EPERM. Startup/rebuild stages were NOT reached. The
+  extracted test directory was cleaned; the live installation was not modified.
+- Browser access was retried after the user's permission update. The origin gate
+  still explicitly denied observation and alternate-surface workarounds. No
+  browser clicks, visual QA, or full dataset enrichment are claimed for this run.
+- A fresh npm vulnerability audit also failed with registry ECONNRESET; previous
+  audit results must not be presented as a fresh scan.
+- Post-change checks passed: TypeScript, ESLint, all nine V1 suites, the targeted
+  provider-body suite (including invalid UTF-8), the added malformed-response
+  enrichment regression, production build and isolated release smoke, dependency
+  closure/archive validation (37 backend / 30 frontend inputs), 106-file Windows
+  manifest verification, and staged/ZIP-extracted unchanged-build launch checks.
+  Live `/api/health` remained `ok`; the live backend was not restarted.

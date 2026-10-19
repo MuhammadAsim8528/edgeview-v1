@@ -13,7 +13,7 @@ if not errorlevel 1 (
 )
 if not exist "node_modules\" (
   echo EdgeView dependencies are missing. Installing them now...
-  call npm ci --ignore-scripts --cache .npm-cache
+  call npm ci --omit=dev --ignore-scripts --cache .npm-cache
   if errorlevel 1 goto :error
 )
 node scripts\build-if-needed.mjs
