@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 const root = process.cwd();
 const outputs = [path.join(root, 'dist', 'server.cjs'), path.join(root, 'dist', 'index.html')];
-const watchRoots = ['src', 'server', 'public', 'index.html', 'server.ts', 'package.json', 'vite.config.ts', 'tsconfig.json'];
+const watchRoots = ['src', 'server', 'shared', 'public', 'index.html', 'server.ts', 'package.json', 'package-lock.json', 'vite.config.ts', 'tsconfig.json'];
 
 function newestMtime(target) {
   if (!fs.existsSync(target)) return 0;

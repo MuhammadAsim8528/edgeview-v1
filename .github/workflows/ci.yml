@@ -18,8 +18,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
+      - run: node scripts/build-recovery.test.mjs
+      - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: npm run test:v1
       - run: npm run build
       - run: npm run test:release
       - run: npm run package:windows
+      - run: npm run verify:package
 

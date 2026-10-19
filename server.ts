@@ -39,18 +39,7 @@ import { canonicalCompanyIdentityKey } from './server/company_identity';
 import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, runV1Enrichment } from './server/v1_engine';
 import { persistV1ContactOverlay, projectHistoricalContactFields } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
-
-// Provider/transport failures must never take the whole process down with an
-// unhandled rejection or exception: log clearly and keep serving. These are
-// NOT installed in test processes so test failures still surface normally.
-if (!isTestProcess()) {
-  process.on('unhandledRejection', (reason) => {
-    console.error('EdgeView unhandled promise rejection:', reason);
-  });
-  process.on('uncaughtException', (err) => {
-    console.error('EdgeView uncaught exception:', err);
-  });
-}
+import { installFatalErrorHandlers } from './server/fatal_errors';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -62,6 +51,7 @@ const API_VERSION = '1.0';
 const V1_PROVIDER_IDS = new Set(['serper', 'hunter', 'nvidia', 'groq']);
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 if (!isTestProcess()) installRuntimeLogging(getProjectRoot());
+if (!isTestProcess()) installFatalErrorHandlers();
 
 function boundedText(value: unknown, field: string, maxLength: number, required = false): string | undefined {
   if (value === undefined) return undefined;

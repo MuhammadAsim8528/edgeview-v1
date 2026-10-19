@@ -12,7 +12,7 @@ const excludedNames = new Set([
   'config.json', 'edgeview.db', 'edgeview.db.lock', 'edgeview_db.json',
 ]);
 const excludedPatterns = [/^\.env(?:\.|$)/i, /^edgeview\.db(?:[-.].*)?$/i, /\.log$/i, /\.tmp$/i];
-const includedDirectories = ['assets', 'backend', 'dist', 'public', 'server', 'src'];
+const includedDirectories = ['assets', 'dist', 'public', 'server', 'shared', 'src', 'docs'];
 const includedFiles = [
   '.gitignore', 'EDGEVIEW_ARCHITECTURE.md', 'EDGEVIEW_CONTROL_AUDIT.md', 'EDGEVIEW_LICENSING_DESIGN.md', 'EDGEVIEW_OPERATIONS.md',
   'EDGEVIEW_QA_REPORT.md', 'EDGEVIEW_SECURITY_AUDIT.md', 'EDGEVIEW_V1_VERIFICATION.md', 'EdgeView.bat', 'README.md', 'index.html',
