@@ -23,7 +23,6 @@ function findRepoRoot(): string {
 }
 
 const REPO_ROOT = findRepoRoot();
-const AGENT_BACKUP_DIR = path.join(REPO_ROOT, '.agent', 'backups');
 
 // Optionally load a local .env (AI Studio secrets / local dev). Never overrides
 // already-exported environment variables and never breaks startup if absent.
@@ -246,44 +245,44 @@ export function maskKey(key: string | undefined): string {
   return trimmed.substring(0, 4) + '••••••••' + trimmed.substring(trimmed.length - 4);
 }
 
-// Atomic write: write to a temp file then rename over the target so a crash
-// mid-write can never corrupt the only copy of the API-key config.
+// Atomic write: fully write + fsync a temp file before promoting it over the
+// target. A crash must never leave a partial API-key config as the final file.
 function atomicWriteJson(filePath: string, data: unknown): void {
   const dir = path.dirname(filePath);
-  if (dir && !fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  const tmpPath = path.join(dir, `.config.${process.pid}.tmp`);
+  if (dir && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmpPath = path.join(dir, `.config.${process.pid}.${Date.now()}.tmp`);
+  let handle: number | undefined;
   try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    handle = fs.openSync(tmpPath, 'wx');
+    fs.writeFileSync(handle, JSON.stringify(data, null, 2), { encoding: 'utf8' });
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = undefined;
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
-    try {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    } catch {
-      // best-effort cleanup
+    if (handle !== undefined) {
+      try { fs.closeSync(handle); } catch { /* best-effort cleanup */ }
     }
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch { /* best-effort cleanup */ }
     throw err;
   }
 }
 
-// Back up the existing config before any write so keys can be recovered even
-// after an accidental reset/overwrite. Creates a timestamped copy plus a
-// rolling config.prev.json. Files live under .agent/backups (gitignored).
-function backupConfigFile(): string | null {
+// Reset is the only operation that intentionally keeps a recoverable previous
+// credential state. Keep exactly one rolling copy beside the active config.
+// Test configs never create backups, preventing secrets/fixtures from leaking
+// into repo-local agent history.
+function backupConfigForReset(): string | null {
+  if (isTestProcess()) return null;
   const src = getConfigPath();
   if (!src || !fs.existsSync(src)) return null;
+  const backupPath = path.join(path.dirname(src), 'config.prev.json');
   try {
-    if (!fs.existsSync(AGENT_BACKUP_DIR)) {
-      fs.mkdirSync(AGENT_BACKUP_DIR, { recursive: true });
-    }
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(AGENT_BACKUP_DIR, `config.backup.${stamp}.json`);
     fs.copyFileSync(src, backupPath);
-    fs.copyFileSync(src, path.join(AGENT_BACKUP_DIR, 'config.prev.json'));
+    try { fs.chmodSync(backupPath, 0o600); } catch { /* Windows may ignore POSIX modes */ }
     return backupPath;
   } catch (err) {
-    console.error('Failed to back up config.json before write:', err);
+    console.error('Failed to preserve config before reset:', err);
     return null;
   }
 }
@@ -315,7 +314,6 @@ export function saveAppSettings(settings: Partial<AppSettings>): AppSettings {
   });
 
   try {
-    backupConfigFile();
     atomicWriteJson(getConfigPath(), updated);
     // Sync with environment variables
     process.env.SERPER_API_KEY = updated.serper_api_key;
@@ -338,7 +336,7 @@ export function saveAppSettings(settings: Partial<AppSettings>): AppSettings {
 
 export function resetAppSettings(): AppSettings {
   try {
-    backupConfigFile();
+    backupConfigForReset();
     atomicWriteJson(getConfigPath(), DEFAULT_SETTINGS);
     process.env.SERPER_API_KEY = DEFAULT_SETTINGS.serper_api_key;
     process.env.FIRECRAWL_API_KEY = DEFAULT_SETTINGS.firecrawl_api_key;

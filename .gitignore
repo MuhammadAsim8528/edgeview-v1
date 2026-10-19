@@ -10,6 +10,7 @@ __pycache__/
 .env*
 !.env.example
 config.json
+config.prev.json
 *.db
 *.db-journal
 *.db.tmp

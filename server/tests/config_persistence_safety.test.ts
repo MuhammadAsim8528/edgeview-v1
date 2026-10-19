@@ -2,7 +2,6 @@ import assert from 'assert';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import {
   getConfigPath,
   getAppSettings,
@@ -26,9 +25,6 @@ function restoreEnv() {
   }
 }
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const AGENT_BACKUP_DIR = path.join(REPO_ROOT, '.agent', 'backups');
-
 let tempDir = '';
 
 function newTempDir(): string {
@@ -38,15 +34,6 @@ function newTempDir(): string {
 
 function tempConfigPath(): string {
   return path.join(tempDir, 'config.json');
-}
-
-function backupCount(): number {
-  try {
-    if (!fs.existsSync(AGENT_BACKUP_DIR)) return 0;
-    return fs.readdirSync(AGENT_BACKUP_DIR).filter((f) => f.startsWith('config.backup.')).length;
-  } catch {
-    return 0;
-  }
 }
 
 async function run() {
@@ -137,14 +124,13 @@ async function run() {
   assert.strictEqual(getAppSettings().serper_api_key, 'new-serper-key-789', 'New unmasked key must replace');
   console.log('✅ Test 8: New unmasked key replaces stored key');
 
-  // [9] resetAppSettings backs up the config first and then clears keys.
-  const beforeReset = backupCount();
+  // [9] Test resets clear keys without creating credential-bearing backups.
   resetAppSettings();
-  const afterReset = backupCount();
-  assert.ok(afterReset > beforeReset, 'reset must create a timestamped backup before clearing');
   assert.strictEqual(getAppSettings().serper_api_key, '', 'reset must clear keys');
   assert.strictEqual(getAppSettings().nvidia_api_key, '', 'reset must clear nvidia key');
-  console.log('✅ Test 9: reset backs up config then clears keys');
+  assert.strictEqual(fs.existsSync(path.join(tempDir, 'config.prev.json')), false, 'test config reset must not retain a secret backup');
+  assert.strictEqual(fs.readdirSync(tempDir).some((name) => name.startsWith('config.backup.')), false, 'test config must not create timestamped secret backups');
+  console.log('✅ Test 9: reset clears keys without retaining test credential backups');
 
   console.log('🎉 ALL API CONFIG PERSISTENCE & SAFETY TESTS PASSED 100%');
 }
