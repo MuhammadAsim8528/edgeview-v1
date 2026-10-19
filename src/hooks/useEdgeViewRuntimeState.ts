@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { safeFetchJson } from '../utils/safeFetch';
 
+export interface RuntimeCapability {
+  id: string;
+  available: boolean;
+  status: 'READY' | 'DEGRADED' | 'UNAVAILABLE' | 'CHECKING';
+  reason: string;
+  dependencies: string[];
+  remediation?: string;
+}
+
 export interface RuntimeState {
   resources: {
     serper: number;
@@ -38,6 +47,7 @@ export interface RuntimeState {
     serper: { configured: boolean; reachable: boolean; status: string; message: string };
     hunter: { configured: boolean; reachable: boolean; status: string; message: string };
   };
+  capabilities: Record<string, RuntimeCapability>;
   logs: any[];
 }
 
@@ -50,6 +60,10 @@ const DEFAULT_STATE: RuntimeState = {
     groq: { configured: false, reachable: false, status: 'checking', message: 'checking...' },
     serper: { configured: false, reachable: false, status: 'checking', message: 'checking...' },
     hunter: { configured: false, reachable: false, status: 'checking', message: 'checking...' },
+  },
+  capabilities: {
+    company_enrichment: { id: 'company_enrichment', available: false, status: 'CHECKING', reason: 'Checking research capability...', dependencies: ['serper'] },
+    batch_enrichment: { id: 'batch_enrichment', available: false, status: 'CHECKING', reason: 'Checking research capability...', dependencies: ['serper'] },
   },
   logs: [],
 };
@@ -70,6 +84,7 @@ async function fetchRuntimeState() {
         jobs: data.jobs,
         enrichment: data.enrichment,
         providers: data.providers,
+        capabilities: data.capabilities || DEFAULT_STATE.capabilities,
         logs: data.logs,
       };
       // Trigger all registered hook listeners with the new snapshot

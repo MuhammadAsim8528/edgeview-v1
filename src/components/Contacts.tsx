@@ -34,6 +34,7 @@ import { SummaryCards } from './SummaryCards';
 import { safeFetchJson } from '../utils/safeFetch';
 import { normalizeCountryName } from '../utils/countryNormalizer';
 import { GlobalExportPayload } from './GlobalExportModal';
+import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 
 interface ContactsProps {
   contacts: CompanyContact[];
@@ -73,6 +74,11 @@ export const Contacts: React.FC<ContactsProps> = ({
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [evidenceContact, setEvidenceContact] = useState<CompanyContact | null>(null);
+  const { state: runtimeState } = useEdgeViewRuntimeState();
+  const researchCapability = runtimeState.capabilities?.company_enrichment;
+  const researchAvailable = Boolean(researchCapability?.available);
+  const researchReason = researchCapability?.reason || 'Checking company research capability...';
+  const researchRemediation = researchCapability?.remediation || '';
 
   const [selectedIds, setSelectedIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('edgeview_contacts_selected') || '[]'); } catch { return []; }
@@ -186,6 +192,10 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   const handleFetchDetails = async (companyName: string, id: string, forceFetch: boolean = false) => {
     if (!onFetchDetailsAutomated) return;
+    if (!researchAvailable) {
+      console.warn(`Company research unavailable: ${researchReason}`);
+      return;
+    }
     setFetchingDetailsId(id);
     try {
       await onFetchDetailsAutomated(companyName, id, forceFetch);
@@ -263,7 +273,9 @@ export const Contacts: React.FC<ContactsProps> = ({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsBatchModalOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#10b981] hover:bg-[#10b981]/80 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+              disabled={!researchAvailable}
+              title={researchAvailable ? 'Research selected or eligible companies' : `${researchReason}${researchRemediation ? ` ${researchRemediation}` : ''}`}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#10b981] hover:bg-[#10b981]/80 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#10b981]"
             >
               <Bot className="w-3.5 h-3.5 text-white" />
               <span>Research Companies</span>
@@ -303,13 +315,25 @@ export const Contacts: React.FC<ContactsProps> = ({
 
             <button
               onClick={handleRetryFailed}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-800 text-amber-300 font-semibold text-xs transition-colors cursor-pointer"
+              disabled={!researchAvailable}
+              title={researchAvailable ? 'Research records that still need details' : researchReason}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-800 text-amber-300 font-semibold text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-950/80"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
               <span>Research Missing</span>
             </button>
           </div>
         </div>
+
+        {researchCapability && !researchAvailable && (
+          <div className="px-4 py-2 bg-amber-950/50 border-y border-amber-900/60 text-[11px] text-amber-200 flex items-start space-x-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <span className="font-semibold">Company research unavailable:</span> {researchReason}
+              {researchRemediation && <span className="text-amber-300/80"> {researchRemediation}</span>}
+            </div>
+          </div>
+        )}
 
         {/* Selected Items Floating Action Bar */}
         {selectedIds.length > 0 && (
@@ -322,7 +346,9 @@ export const Contacts: React.FC<ContactsProps> = ({
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setIsBatchModalOpen(true)}
-                className="px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 font-bold transition-colors cursor-pointer"
+                disabled={!researchAvailable}
+                title={researchAvailable ? 'Enrich selected companies' : researchReason}
+                className="px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-sky-600"
               >
                 Enrich Selected ({selectedIds.length})
               </button>
@@ -643,9 +669,9 @@ export const Contacts: React.FC<ContactsProps> = ({
                         <div className="flex flex-col items-center space-y-1.5">
                           <button
                             onClick={() => handleFetchDetails(contact.company_name, contact.id, false)}
-                            disabled={fetchingDetailsId === contact.id}
-                            className="w-full inline-flex items-center justify-center space-x-1 px-2.5 py-1 rounded text-[10px] font-semibold bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] border border-[#10b981]/40 transition-colors shadow-xs cursor-pointer"
-                            title="Fetch details (Uses cache if available)"
+                            disabled={fetchingDetailsId === contact.id || !researchAvailable}
+                            className="w-full inline-flex items-center justify-center space-x-1 px-2.5 py-1 rounded text-[10px] font-semibold bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] border border-[#10b981]/40 transition-colors shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#10b981]/20"
+                            title={researchAvailable ? 'Fetch details (uses existing evidence where available)' : researchReason}
                           >
                             {fetchingDetailsId === contact.id ? (
                               <RefreshCw className="w-3 h-3 animate-spin text-[#10b981]" />
@@ -657,9 +683,9 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                           <button
                             onClick={() => handleFetchDetails(contact.company_name, contact.id, true)}
-                            disabled={fetchingDetailsId === contact.id}
-                            className="w-full inline-flex items-center justify-center space-x-1 px-2.5 py-1 rounded text-[10px] font-semibold bg-[#262626] hover:bg-[#333] text-[#e5e7eb] border border-[#444] transition-colors shadow-xs cursor-pointer"
-                            title="Force re-fetch (Ignores cache, uses AI APIs)"
+                            disabled={fetchingDetailsId === contact.id || !researchAvailable}
+                            className="w-full inline-flex items-center justify-center space-x-1 px-2.5 py-1 rounded text-[10px] font-semibold bg-[#262626] hover:bg-[#333] text-[#e5e7eb] border border-[#444] transition-colors shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#262626]"
+                            title={researchAvailable ? 'Force a fresh bounded V1 research run' : researchReason}
                           >
                             {fetchingDetailsId === contact.id ? (
                               <RefreshCw className="w-3 h-3 animate-spin text-[#e5e7eb]" />

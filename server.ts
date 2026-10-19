@@ -743,6 +743,8 @@ app.post('/api/settings/test', async (req, res) => {
 // provider retrieval, immutable raw capture, normalization and display.
 app.post('/api/enrich/company', async (req, res) => {
   try {
+    const capability = buildV1Capabilities().company_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const { company_name, id, forceFetch, country, entity_key } = req.body;
     let cleanCompany: string;
     let cleanCountry: string | undefined;
@@ -818,14 +820,8 @@ app.post('/api/enrich/batch', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please select at least one company.' });
     }
 
-    const settings = getAppSettings();
-    const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY?.trim());
-    const hasAiKey = Boolean(settings.nvidia_api_key?.trim() || settings.groq_api_key?.trim() || hasGeminiKey);
-    const hasSerperKey = Boolean(settings.serper_api_key?.trim() || hasGeminiKey);
-
-    if (!hasAiKey || !hasSerperKey) {
-      return res.status(400).json({ success: false, error: 'API key not connected. Cannot fetch info.' });
-    }
+    const capability = buildV1Capabilities().batch_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -946,6 +942,8 @@ app.post('/api/enrich/batch', async (req, res) => {
 
 app.post('/api/enrich/jobs', async (req, res) => {
   try {
+    const capability = buildV1Capabilities().batch_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const { company_ids, mode } = req.body;
     if (!Array.isArray(company_ids) || company_ids.length === 0) {
       return res.status(400).json({ success: false, error: 'Please select at least one company.' });
@@ -1131,6 +1129,8 @@ app.get('/api/enrich/job/:id/progress', async (req, res) => {
 
 app.post('/api/enrich/job/:id/start', async (req, res) => {
   try {
+    const capability = buildV1Capabilities().batch_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const jobId = req.params.id;
     const { forceFetch } = req.body;
     const { getJob, runJobLoop } = await import('./server/job_manager');
@@ -1230,6 +1230,140 @@ function buildV1ProviderReport() {
     }];
   }));
 }
+
+type V1CapabilityStatus = 'READY' | 'DEGRADED' | 'UNAVAILABLE';
+type V1Capability = {
+  id: string;
+  available: boolean;
+  status: V1CapabilityStatus;
+  reason: string;
+  dependencies: string[];
+  remediation?: string;
+};
+
+function buildV1Capabilities(providerReport: Record<string, any> = buildV1ProviderReport()): Record<string, V1Capability> {
+  const serper = providerReport.serper || {};
+  const nvidia = providerReport.nvidia || {};
+  const groq = providerReport.groq || {};
+  const hunter = providerReport.hunter || {};
+
+  const searchBlocked = !serper.configured
+    || !serper.enabled
+    || serper.routingState === 'suppressed'
+    || serper.routingState === 'cooldown'
+    || serper.status === 'auth_failed'
+    || serper.status === 'rate_limited';
+  const searchDegraded = !searchBlocked && ['timeout', 'degraded'].includes(String(serper.status || ''));
+  const searchReason = !serper.configured
+    ? 'Serper search is not configured.'
+    : !serper.enabled
+      ? 'Serper search is disabled in Settings.'
+      : serper.status === 'auth_failed'
+        ? 'Serper authentication failed.'
+        : serper.status === 'rate_limited'
+          ? 'Serper is rate limited or out of quota.'
+          : serper.routingState === 'cooldown'
+            ? `Serper is temporarily cooling down${serper.retryAt ? ` until ${serper.retryAt}` : ''}.`
+            : serper.routingState === 'suppressed'
+              ? `Serper is temporarily suppressed${serper.lastError ? `: ${serper.lastError}` : '.'}`
+              : searchDegraded
+                ? `Serper is degraded${serper.lastError ? `: ${serper.lastError}` : '.'}`
+                : serper.status === 'healthy'
+                  ? 'Serper search is verified and ready.'
+                  : 'Serper is configured; connectivity has not been verified yet.';
+  const searchRemediation = !serper.configured
+    ? 'Add a Serper API key in Settings.'
+    : !serper.enabled
+      ? 'Enable Serper in Settings.'
+      : searchBlocked
+        ? 'Open Settings > System Health, test Serper, or wait for provider recovery.'
+        : undefined;
+
+  const aiUsable = [nvidia, groq].some((provider: any) => provider.configured && provider.enabled && provider.routingState !== 'suppressed');
+  const aiVerified = [nvidia, groq].some((provider: any) => provider.status === 'healthy');
+  const hunterUsable = hunter.configured && hunter.enabled && !['suppressed', 'cooldown'].includes(String(hunter.routingState || '')) && !['auth_failed', 'rate_limited'].includes(String(hunter.status || ''));
+  const runCount = listV1RunSummaries(1).length;
+
+  const companyEnrichment: V1Capability = {
+    id: 'company_enrichment',
+    available: !searchBlocked,
+    status: searchBlocked ? 'UNAVAILABLE' : searchDegraded ? 'DEGRADED' : 'READY',
+    reason: searchReason,
+    dependencies: ['serper'],
+    ...(searchRemediation ? { remediation: searchRemediation } : {}),
+  };
+
+  return {
+    company_enrichment: companyEnrichment,
+    batch_enrichment: { ...companyEnrichment, id: 'batch_enrichment' },
+    ai_query_generation: {
+      id: 'ai_query_generation',
+      available: true,
+      status: aiVerified ? 'READY' : aiUsable ? 'DEGRADED' : 'DEGRADED',
+      reason: aiVerified
+        ? 'AI query generation is verified.'
+        : aiUsable
+          ? 'An AI provider is configured but not verified; deterministic query fallback remains available.'
+          : 'No active AI provider is available; deterministic query fallback remains available.',
+      dependencies: ['nvidia|groq'],
+      remediation: aiVerified ? undefined : 'Optional: configure/test NVIDIA or Groq for AI-assisted query design.',
+    },
+    hunter_contact_enrichment: {
+      id: 'hunter_contact_enrichment',
+      available: Boolean(hunterUsable),
+      status: hunterUsable ? (hunter.status === 'healthy' ? 'READY' : 'DEGRADED') : 'UNAVAILABLE',
+      reason: hunterUsable
+        ? (hunter.status === 'healthy' ? 'Hunter contact enrichment is verified.' : 'Hunter is configured but not verified.')
+        : !hunter.configured ? 'Hunter is not configured; core company research can still run.' : 'Hunter is currently unavailable; core company research can still run.',
+      dependencies: ['hunter'],
+      remediation: hunterUsable ? undefined : 'Optional: configure or recover Hunter in Settings.',
+    },
+    contact_export: {
+      id: 'contact_export',
+      available: db.contacts.size > 0,
+      status: db.contacts.size > 0 ? 'READY' : 'UNAVAILABLE',
+      reason: db.contacts.size > 0 ? `${db.contacts.size} company records are available to export.` : 'No company records are loaded.',
+      dependencies: ['contacts'],
+      remediation: db.contacts.size > 0 ? undefined : 'Import a trade/company dataset first.',
+    },
+    trade_export: {
+      id: 'trade_export',
+      available: db.files.size > 0,
+      status: db.files.size > 0 ? 'READY' : 'UNAVAILABLE',
+      reason: db.files.size > 0 ? `${db.files.size} dataset(s) are loaded.` : 'No source dataset is loaded.',
+      dependencies: ['dataset'],
+      remediation: db.files.size > 0 ? undefined : 'Import a dataset first.',
+    },
+    evidence_history: {
+      id: 'evidence_history',
+      available: runCount > 0,
+      status: runCount > 0 ? 'READY' : 'UNAVAILABLE',
+      reason: runCount > 0 ? 'Immutable V1 evidence history is available.' : 'No V1 research runs exist yet.',
+      dependencies: ['v1-runs'],
+    },
+  };
+}
+
+function unavailableCapabilityResponse(res: express.Response, capability: V1Capability) {
+  return res.status(503).json({
+    success: false,
+    code: 'CAPABILITY_UNAVAILABLE',
+    error: capability.reason,
+    message: capability.reason,
+    recoverable: true,
+    remediation: capability.remediation,
+    capability,
+  });
+}
+
+app.get('/api/capabilities', (_req, res) => {
+  try {
+    const providers = buildV1ProviderReport();
+    res.json({ success: true, capabilities: buildV1Capabilities(providers), checked_at: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, code: 'CAPABILITY_CHECK_FAILED', error: err?.message || 'Failed to determine runtime capabilities.' });
+  }
+});
 
 app.get('/api/governor/provider-metrics', async (_req, res) => {
   const report = buildV1ProviderReport();
@@ -1357,6 +1491,7 @@ app.get('/api/runtime/state', async (req, res) => {
     // 4. Providers — use the same factual V1 report as the Settings panel.
     // A stored key is never reported as reachable until a live test succeeds.
     const providerReport = buildV1ProviderReport();
+    const capabilities = buildV1Capabilities(providerReport);
     const providers = Object.fromEntries(Object.entries(providerReport).map(([provider, value]: [string, any]) => [provider, {
       configured: value.configured,
       enabled: value.enabled,
@@ -1374,6 +1509,7 @@ app.get('/api/runtime/state', async (req, res) => {
       jobs,
       enrichment,
       providers,
+      capabilities,
       logs,
     };
     runtimeStateCache = { at: Date.now(), payload };
