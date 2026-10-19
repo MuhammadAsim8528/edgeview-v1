@@ -5,6 +5,7 @@ import { getAppSettings } from './settings';
 import { getProjectRoot } from './db_paths';
 import { isSafeExternalUrl, safeFetchOutboundText } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
+import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -198,7 +199,8 @@ export function persistV1Run(run: V1Run) {
   fs.mkdirSync(dataDir, { recursive: true });
   const target = runPath(run.id);
   const temp = path.join(dataDir, `.${run.id}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
-  const payload = JSON.stringify(run, null, 2);
+  const persistedRun = externalizeV1RunForStorage(run as any, dataDir);
+  const payload = JSON.stringify(persistedRun, null, 2);
   let handle: number | undefined;
   try {
     // Never stream directly into the final immutable filename. A process crash
@@ -804,13 +806,17 @@ export async function runV1Enrichment(companyName: string, country: string, opti
 export function getV1Run(runId: string): V1Run | null {
   if (!/^[a-z0-9-]+$/i.test(runId)) return null;
   const file = runPath(runId); if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf8')) as V1Run;
+  const persisted = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return hydrateV1RunFromStorage(persisted, dataDir) as V1Run;
 }
 
 export function listV1Runs(): V1Run[] {
   if (!fs.existsSync(dataDir)) return [];
   return fs.readdirSync(dataDir).filter(name => /^run-[a-z0-9-]+\.json$/i.test(name)).map(name => {
-    try { return JSON.parse(fs.readFileSync(path.join(dataDir, name), 'utf8')) as V1Run; } catch { return null; }
+    try {
+      const persisted = JSON.parse(fs.readFileSync(path.join(dataDir, name), 'utf8'));
+      return hydrateV1RunFromStorage(persisted, dataDir) as V1Run;
+    } catch { return null; }
   }).filter((run): run is V1Run => Boolean(run)).sort((a, b) => b.started_at.localeCompare(a.started_at));
 }
 
