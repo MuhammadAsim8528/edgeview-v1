@@ -17,18 +17,17 @@ import {
   BorderStyle,
   PageOrientation,
 } from 'docx';
-import { ReportCompanyContact, cleanMarkdown } from './docx_report';
+import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
 import { generateDocxReportStream, generateGenericDocxReportStream, generateInternationalImporterDirectoryDocx } from './docx_stream';
 import { generatePdfReport, generateInternationalImporterDirectoryPdf } from './pdf_report';
 import { TradeRelationshipResolver } from './trade_relationship_resolver';
-import { buildContactReport, getReportColumnLabels } from './contact_report_model';
+import { buildContactReport, getReportColumnLabels, type ContactReport } from './contact_report_model';
 import {
   getInternationalImporterDirectory,
   flattenInternationalImporterRows,
   INTERNATIONAL_IMPORTER_COLUMNS,
+  type InternationalImporterDirectory,
 } from './international_importer_directory';
-import type { ContactReport } from './contact_report_model';
-import type { InternationalImporterDirectory } from './international_importer_directory';
 
 function logMem(label: string) {
   const m = process.memoryUsage();

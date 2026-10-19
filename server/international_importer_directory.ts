@@ -28,8 +28,7 @@
 //   - No data is fabricated.
 
 import { TradeRelationshipResolver } from './trade_relationship_resolver';
-import { mergeContacts, normalizePeople, normalizeContactInfo } from './contact_report_model';
-import type { TradeIndex } from './contact_report_model';
+import { mergeContacts, normalizePeople, normalizeContactInfo, type TradeIndex } from './contact_report_model';
 import type { ReportCompanyContact } from './docx_report';
 import { normalizeCountryName, isPakistanCountry } from '../src/utils/countryNormalizer';
 

@@ -9,12 +9,9 @@
 // model + the document.xml string (a few % of the old object graph).
 
 import JSZip from 'jszip';
-import { buildContactReport, getReportColumnLabels, getReportTitle } from './contact_report_model';
-import { getInternationalImporterDirectory } from './international_importer_directory';
-import type { InternationalImporterDirectory } from './international_importer_directory';
-import { cleanMarkdown } from './docx_report';
-import type { ContactReport } from './contact_report_model';
-import type { ReportCompanyContact } from './docx_report';
+import { buildContactReport, getReportColumnLabels, getReportTitle, type ContactReport } from './contact_report_model';
+import { getInternationalImporterDirectory, type InternationalImporterDirectory } from './international_importer_directory';
+import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
 
 function escXml(s: string): string {
   return String(s)

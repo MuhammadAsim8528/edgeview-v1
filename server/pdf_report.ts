@@ -1,10 +1,7 @@
 import PDFDocument from 'pdfkit';
-import { cleanMarkdown } from './docx_report';
-import { buildContactReport, getReportColumnLabels, getReportTitle } from './contact_report_model';
-import { getInternationalImporterDirectory } from './international_importer_directory';
-import type { InternationalImporterDirectory, InternationalImporterRow } from './international_importer_directory';
-import type { ReportCompanyContact } from './docx_report';
-import type { NormalizedImporterReport, TradeIndex, ContactReport } from './contact_report_model';
+import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
+import { buildContactReport, getReportColumnLabels, getReportTitle, type NormalizedImporterReport, type TradeIndex, type ContactReport } from './contact_report_model';
+import { getInternationalImporterDirectory, type InternationalImporterDirectory, type InternationalImporterRow } from './international_importer_directory';
 
 interface PDFCellLine {
   text: string;

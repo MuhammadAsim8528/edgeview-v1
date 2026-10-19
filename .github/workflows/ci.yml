@@ -16,6 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:v1
       - run: npm run build

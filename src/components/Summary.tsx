@@ -9,12 +9,12 @@ import {
   AlertCircle,
   HelpCircle,
   TrendingUp,
+  Download,
 } from 'lucide-react';
 import { ParsedFile } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { formatCurrency, formatFullCurrency } from '../utils/formatters';
 import { safeFetchJson } from '../utils/safeFetch';
-import { Download } from 'lucide-react';
 
 interface SummaryProps {
   file: ParsedFile | null;

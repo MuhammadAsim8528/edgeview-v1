@@ -1,6 +1,5 @@
 import { isSafeExternalUrl, assertSafeOutboundUrl, isPrivateIPv4, isPrivateIPv6 } from '../url_safety';
-import { fetchProviderModels } from '../ai_providers';
-import { NvidiaProvider } from '../ai_providers';
+import { fetchProviderModels, NvidiaProvider } from '../ai_providers';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(`SSRF Security Guard Test Failed: ${msg}`);

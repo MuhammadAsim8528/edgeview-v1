@@ -1,6 +1,5 @@
 import { db } from '../db';
-import { loadAllFilesFromDb, deleteFileFromHistory, saveFileToDb } from '../sqlite_persistence';
-import { computeFileHash } from '../sqlite_persistence';
+import { loadAllFilesFromDb, deleteFileFromHistory, saveFileToDb, computeFileHash } from '../sqlite_persistence';
 import { computeSummary } from '../summary';
 
 function assert(condition: boolean, msg: string) {

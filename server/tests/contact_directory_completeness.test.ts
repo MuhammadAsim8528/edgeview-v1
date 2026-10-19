@@ -12,9 +12,8 @@ import { computeSummary } from '../summary';
 import { TradeRelationshipResolver } from '../trade_relationship_resolver';
 import { buildContactReport } from '../contact_report_model';
 import { generatePdfReport } from '../pdf_report';
-import { generateDocxReport } from '../docx_report';
+import { generateDocxReport, type ReportCompanyContact } from '../docx_report';
 import { extractPdfText, pdfTextContains } from './pdf_inspect';
-import type { ReportCompanyContact } from '../docx_report';
 
 const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_tests';
 fs.mkdirSync(SCRATCH, { recursive: true });

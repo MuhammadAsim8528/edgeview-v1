@@ -8,14 +8,16 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "set NODE_ENV=production&& node dist/server.cjs",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
+    "lint": "eslint server.ts server shared src",
     "test:v1": "node -r ./server/tests/node_userinfo_shim.cjs --import tsx server/tests/v1_requirements.test.ts && node --import tsx server/tests/v1_quality_regression.test.ts && node --import tsx server/tests/v1_contact_contract.test.ts && node --import tsx server/tests/v1_atomic_persistence.test.ts && node --import tsx server/tests/dataset_provenance.test.ts && node --import tsx server/tests/excel_parser_security.test.ts",
     "test:release": "node scripts/release-smoke.mjs",
     "test:load": "node scripts/local-load-smoke.mjs",
     "backup": "node scripts/backup-runtime.mjs",
     "package:safe": "node scripts/package-safe-source.mjs",
     "package:windows": "node scripts/package-windows.mjs",
-    "verify:package": "node scripts/verify-package.mjs ../../outputs/EdgeView-V1-Windows"
+    "verify:package": "node scripts/verify-package.mjs ../../outputs/EdgeView-V1-Windows",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run test:v1"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -42,6 +44,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/express": "^4.17.21",
     "@types/jszip": "^3.4.1",
     "@types/multer": "^2.2.0",
@@ -50,9 +53,12 @@
     "@types/react-dom": "^19.2.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.71.2",
     "vite": "^6.2.3"
   }
 }

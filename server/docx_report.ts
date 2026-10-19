@@ -11,8 +11,7 @@
   BorderStyle,
   VerticalAlign,
 } from 'docx';
-import { buildContactReport, getReportColumnLabels, getReportTitle } from './contact_report_model';
-import type { NormalizedImporterReport, TradeIndex, ContactReport } from './contact_report_model';
+import { buildContactReport, getReportColumnLabels, getReportTitle, type NormalizedImporterReport, type TradeIndex, type ContactReport } from './contact_report_model';
 
 export interface ReportCompanyContact {
   id: string;

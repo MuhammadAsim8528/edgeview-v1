@@ -1,5 +1,4 @@
-import { TradeRelationshipResolver } from './trade_relationship_resolver';
-import type { ResolvedTradeRelationship } from './trade_relationship_resolver';
+import { TradeRelationshipResolver, type ResolvedTradeRelationship } from './trade_relationship_resolver';
 import type { ReportCompanyContact } from './docx_report';
 import { canonicalEntityIdentityKey } from './company_identity';
 import { normalizeCountryName } from '../src/utils/countryNormalizer';

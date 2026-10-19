@@ -195,6 +195,7 @@ Do not simplify this into “ask another LLM whether the answer is correct.”
 At minimum, run the checks relevant to the change. For release-impacting work run:
 
 ```text
+npm run typecheck
 npm run lint
 npm run test:v1
 npm run build
@@ -203,7 +204,7 @@ npm run package:windows
 npm run verify:package
 ```
 
-Note: as of the 2026-10-19 baseline, the script named `lint` still performs TypeScript typechecking. A real ESLint/static-quality gate is a known hardening task. Do not claim otherwise until it is actually implemented.
+`typecheck` runs TypeScript without emitting files. `lint` is a separate ESLint static-quality gate. Keep both green for release-impacting changes.
 
 For dependency/security claims, state exactly which audit ran and what remained unresolved.
 
