@@ -1,172 +1,238 @@
-# EdgeView — Engineering Architecture & Fast Production Engineering Contract
+# EdgeView V1 — Engineering Contract
 
-This document is the persistent engineering specification and system contract for **EdgeView** (Parent product: **Pharma AI**). It outlines the existing architecture, file mappings, development constraints, enrichment pipeline design, export specifications, and multi-agent operational rules.
+This file is the authoritative orientation document for coding agents working on the current EdgeView repository.
 
----
+## 1. Current product boundary
 
-## 1. Project Overview & Architecture Map
+EdgeView V1 is a local-first trade/company intelligence application. It is not the retired autonomous-research system that previously existed in this repository.
 
-- **Product Identity**: EdgeView (Standalone desktop/web application for pharmaceutical export and trade data analysis).
-- **Parent Product**: Pharma AI.
-- **Architectural Boundary**: EdgeView runs independently as a full-stack application (Vite + React frontend, Express/Node backend, SQLite + JSON database). **Hermes is NOT integrated**, is NOT required, and MUST NOT be introduced. EdgeView must remain 100% functional independently.
+The current V1 pipeline is intentionally bounded:
 
-### Tech Stack
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons, Recharts, Motion.
-- **Backend Server**: Node.js (v20+), Express, `tsx` (TypeScript runner), `esbuild` (bundler).
-- **Database Layer**: SQLite (`sql.js` in-memory with file persistence to `edgeview.db`) + File-backed JSON store (`sqlite_persistence.ts` reading `edgeview_db.json`).
-- **AI & Enrichment**: Primary LLM: NVIDIA NIM (`server/ai_providers.ts`), Fallback LLM: Groq (`llama-3.3-70b-versatile`), Web Scraper: Firecrawl (`https://api.firecrawl.dev`), Search Provider: Serper (`https://google.serper.dev`).
-- **Export Frameworks**: `docx` (Word documents), `pdfkit` (PDF generation), `xlsx` (Excel spreadsheets), `jszip` (ZIP archiving).
-
----
-
-## 2. Codebase Map & Subsystem File Reference
-
-### Frontend Subsystem (`src/`)
-- **Contacts UI**: `src/components/Contacts.tsx` (Enrichment trigger, table display, contact detail drawer).
-- **Batch Enrichment Modal**: `src/components/BatchEnrichmentModal.tsx` (Enrichment selection and queueing).
-- **Global Export Modal**: `src/components/GlobalExportModal.tsx` (Multi-format export payload builder).
-- **Settings & Telemetry**: `src/components/SettingsTab.tsx` (API keys, provider health, circuit breaker statuses).
-- **Source Evidence Modal**: `src/components/SourceEvidenceModal.tsx` (Displays source URLs and field confidence).
-- **Application Store**: `src/store/appStore.ts` (Zustand-style React hook managing active file, contacts, reports).
-- **Export Validator**: `src/utils/exportValidator.ts` (Parses `Content-Disposition`, validates binary responses).
-- **API Client**: `src/utils/safeFetch.ts` (Safe fetch wrapper returning structured status/errors).
-- **Types**: `src/types/index.ts` (Shared TypeScript interfaces for contacts, files, reports).
-
-### Backend Server Subsystem (`server/`)
-- **Server Entrypoint**: `server.ts` (Express server setup, route endpoints, SSE logging stream, `/api/export`).
-- **Enrichment Engine**: `server/enrichment.ts` (Single/Batch enrichment flows, evidence saving).
-- **Research Director**: `server/research_director.ts` (Autonomous research state machine, query planning, SSRF protection).
-- **AI Providers**: `server/ai_providers.ts` (NVIDIA NIM primary, Groq fallback, circuit breakers, rate limits).
-- **Resource Governor**: `server/resource_governor.ts` (Rate limiting, API key rotation, concurrency control).
-- **Export Manager**: `server/export_manager.ts` (Multi-format payload processor for CSV, XLSX, PDF, DOCX, ZIP).
-- **Header Encoder Utility**: `server/utils/header_encoder.ts` (Canonical RFC 6266 / RFC 8187 header encoder).
-- **DOCX Report Generator**: `server/docx_report.ts` (Professional 4-column directory generator with single-cell title table).
-- **PDF Report Generator**: `server/pdf_report.ts` (PDF document generator using `pdfkit`).
-- **Database Engine**: `server/sqlite.ts` (SQL.js SQLite wrapper with non-destructive corrupt file backup), `server/sqlite_persistence.ts`, `server/db.ts`.
-
-### Tests (`server/tests/`)
-- `server/tests/header_encoder.test.ts` (Unit & SSRF security tests)
-- `server/tests/export_unicode_e2e.test.ts` (End-to-end HTTP header export tests)
-
----
-
-## 3. Fast Production Engineering Contract & Mandatory Rules
-
-Future agents working on EdgeView MUST strictly observe these 20 engineering rules:
-
-1. **Preserve existing functionality**: Never break working user flows, UI components, or working export routes.
-2. **Prefer modifying existing abstractions**: Never build duplicate database layers, duplicate provider wrappers, or duplicate UI components.
-3. **Do NOT introduce Hermes**: Hermes integration is strictly out of scope. Do not add Hermes dependencies, APIs, MCP servers, or agents.
-4. **Do NOT expose secrets**: Never leak API keys or backend credentials to frontend responses or client state.
-5. **Do NOT hardcode API keys**: All credentials must be read from environment variables or settings store (`getAppSettings()`).
-6. **Do NOT hallucinate contact data**: Never fabricate emails, phone numbers, addresses, or person names. Empty fields must report "Not found".
-7. **Preserve mandatory source evidence**: Every extracted contact attribute must maintain its provenance (`source_url`, `confidence`, `evidence_text`).
-8. **Validate AI structured data deterministically**: Validate emails, URLs, and phone numbers using deterministic application code before saving.
-9. **Cache-first policy**: Fetch Info must check cache before issuing external API requests. Complete cached records must return immediately.
-10. **Search & Scrape Efficiency**: Limit search planning to 3–5 targeted queries; rank search results and scrape only high-value pages.
-11. **Maintain non-blocking async behavior**: Long-running research tasks must use asynchronous background queues or SSE streams.
-12. **Preserve existing UI design**: Maintain Tailwind styling tokens, layout structure, and design conventions unless requested.
-13. **Avoid unnecessary refactors**: Keep changes focused on real bugs and production priorities (P0/P1).
-14. **Run appropriate tests after modifications**: Execute typechecks (`npx tsc --noEmit`), unit tests, and export tests before declaring work finished.
-15. **Never perform destructive database operations**: Do not wipe SQLite or JSON database files. Corrupted files must be backed up as `edgeview.db.corrupt.<timestamp>`.
-16. **Request Coalescing / Per-Company Locks**: Prevent duplicate enrichment requests for the same company running simultaneously.
-17. **Preserve Unicode data**: Do not strip non-ASCII characters from company names, addresses, or contact names (`José García`, `Company •`).
-18. **Treat HTTP headers as ASCII-safe boundaries**: Encode `Content-Disposition` using RFC 6266 / RFC 8187 (`filename*=UTF-8''...`) with percent-encoded `attr-char` specials (`'() *`).
-19. **Use canonical utilities**: All export endpoints must use `getSafeContentDisposition()` in `server/utils/header_encoder.ts`.
-20. **Keep frontend/backend responsibilities separated**: UI handles display and state; backend handles AI provider orchestration, scraping, and export generation.
-
----
-
-## 4. Intelligent Contact Enrichment Specification
-
-### Pipeline Architecture
-```
-USER (Fetch Info)
-  ↓
-Check Cache / DB (`server/db.ts`, `server/sqlite.ts`)
-  ↓ (If cached & complete: RETURN IMMEDIATELY)
-Determine Missing Fields (emails, phones, address, leadership)
-  ↓
-AI Query Planner (NVIDIA NIM primary, Groq fallback) -> 3 to 5 targeted queries
-  ↓
-Search Provider (Serper API / Google search)
-  ↓
-Search Result Metadata & AI Relevance Ranking
-  ↓
-Filter to High-Value Pages (Contact, About, Leadership, Export)
-  ↓
-Scraper (Firecrawl API / Apify)
-  ↓
-Internal Link Discovery (Follow /contact, /about links)
-  ↓
-Evidence Corpus Construction
-  ↓
-Structured Extraction (NVIDIA NIM / Groq with JSON Schema)
-  ↓
-Deterministic Validation (Regex email/phone check, deduplication, URL validation)
-  ↓
-Source Evidence & Provenance Binding
-  ↓
-Cache & Database Persistence
-  ↓
-Contacts UI Update (Real-time progress states: Planning -> Searching -> Extracting -> Complete)
+```text
+exact company + country
+→ constrained AI query generation
+→ deterministic provider retrieval
+→ immutable raw evidence capture
+→ deterministic identity resolution
+→ bounded official-site retrieval
+→ evidence extraction
+→ deterministic evidence verification
+→ trusted historical projection
+→ persisted contact/UI state
 ```
 
----
+Core rule:
 
-## 5. Export & Header Architecture Specification
+**AI may suggest or extract. Evidence and deterministic code decide what becomes trusted data.**
 
-### Server-Side Canonical Header Utility (`server/utils/header_encoder.ts`)
-ALL export endpoints must use a single canonical utility to set `Content-Disposition`:
-```typescript
-export function getSafeContentDisposition(filename: string, inline: boolean = false): string {
-  const sanitized = filename.replace(/[\r\n\0]/g, '').trim() || 'export';
-  const safeAscii = sanitized.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_').trim() || 'export';
-  const utf8Encoded = encodeURIComponent(sanitized).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
-  const dispositionType = inline ? 'inline' : 'attachment';
-  return `${dispositionType}; filename="${safeAscii}"; filename*=UTF-8''${utf8Encoded}`;
+Do not reintroduce autonomous planners, campaign engines, research directors, multi-agent orchestration, or another competing company-data store.
+
+## 2. Legacy source archive
+
+Historical pre-V1 architecture was deliberately removed from active source paths on 2026-10-19.
+
+- Git baseline before extraction: `fa7fcda`
+- Local historical ZIP: `.archive/edgeview-pre-v1-legacy-2026-10-19.zip`
+- Inventory and hashes: `docs/LEGACY_ARCHIVE_MANIFEST.md`
+
+The archive is for recovery/reference only.
+
+**Do not import from it. Do not bulk-restore it. Do not infer that archived subsystems are unfinished V1 features.**
+
+If an old endpoint must remain for stale callers, it must be an explicit `410 Gone` tombstone rather than a hidden fallback into archived code.
+
+## 3. Active stack
+
+- Frontend: React 19 + TypeScript + Vite + Tailwind
+- Backend: Node.js + Express + TypeScript
+- Operational database today: `sql.js` persisted to `edgeview.db`
+- Uploaded dataset persistence today: `edgeview_db.json`
+- Immutable V1 evidence: `data/v1-runs/`
+- Primary current AI providers: NVIDIA NIM and Groq
+- Current search/contact providers exposed by V1: Serper and Hunter
+- Exports: CSV/XLSX/PDF/DOCX/ZIP
+- Local deployment boundary: loopback (`127.0.0.1`) unless deliberately redesigned later
+
+`sql.js`, JSON-backed row storage, and in-memory row Maps are known future scaling limits. Do not mistake them for the intended Panjiva-scale final architecture.
+
+## 4. Active source map
+
+### Frontend
+
+- `src/App.tsx`: active application router/shell
+- `src/store/appStore.ts`: active UI/application state
+- `src/components/Contacts.tsx`: company/contact intelligence UI
+- `src/components/ResearchWorkspace.tsx`: read-only V1 run/evidence workspace
+- `src/components/SettingsTabV1.tsx`: current settings surface
+- `src/components/SystemHealthPanel.tsx`: current provider/runtime health
+- `src/components/SourceEvidenceModal.tsx`: source/evidence rendering
+- `src/components/FileViewer.tsx`: uploaded trade-data view
+- `src/components/GlobalExportModal.tsx`: export workflow
+- `src/types/index.ts`: current client contracts (being hardened toward canonical V1 contracts)
+
+### Backend
+
+- `server.ts`: Express entrypoint and API boundary
+- `server/v1_engine.ts`: bounded V1 research/enrichment engine and immutable run store
+- `server/v1_identity.ts`: identity/domain resolution
+- `server/job_manager.ts`: persistent batch jobs and trusted historical projection
+- `server/contact_projection.ts`: contact projection into active company records
+- `server/ai_providers.ts`: current AI provider transport
+- `server/settings.ts`: settings and credential handling
+- `server/url_safety.ts`: outbound/SSRF controls
+- `server/runtime_log.ts`: bounded redacted runtime logging
+- `server/sqlite.ts`: current sql.js operational DB wrapper
+- `server/sqlite_persistence.ts`: current uploaded-file/history persistence
+- `server/db.ts`: active in-memory projection/indexes
+- `server/routes/upload.ts`: file upload parsing path
+- `server/export_manager.ts`: export construction
+
+If a future agent sees a file named `research_director`, `research_runtime`, `resource_governor`, `orchestrator`, `campaign_workers`, or the old `SettingsTab.tsx`, it should not exist in active source. Consult the legacy manifest rather than recreating it.
+
+## 5. Non-negotiable V1 invariants
+
+1. Never fabricate company/contact facts.
+2. Preserve raw provider evidence or a structured failure record.
+3. A weak/new failed run must not erase stronger historically trusted evidence.
+4. Company identity is anchored by company + country, not name alone when ambiguous.
+5. AI confidence is not evidence.
+6. A model-produced claim must pass deterministic source/evidence checks before becoming trusted data.
+7. Unsupported claims may be rejected or left unknown. Abstention is valid behavior.
+8. Directory/trade-data/social platforms must not be silently promoted to official company domains.
+9. Do not bypass SSRF/outbound URL protections.
+10. Never expose provider credentials to the frontend, logs, Git, packages, or error responses.
+11. A persistence failure must not be reported to the user as a successful durable write.
+12. Tests must not mutate production databases, provider secrets, or V1 evidence.
+13. Do not create duplicate database/persistence authorities without an explicit migration plan.
+14. Do not add new agents/planners just because an AI model can implement them.
+15. Prefer small verified changes over broad aesthetic refactors.
+
+## 6. Release/development behavior
+
+Production/static mode is the default even when `NODE_ENV` is absent.
+
+Vite/HMR development middleware is enabled only by:
+
+```text
+EDGEVIEW_DEV_SERVER=1
+```
+
+The production release must not contain Vite HMR/React Refresh clients. Release tests enforce this.
+
+Launcher/build behavior includes recovery of the previous working `dist` if a rebuild fails. Do not weaken that behavior.
+
+## 7. Security boundary
+
+EdgeView V1 is currently a local application, not a multi-user Internet service.
+
+Keep:
+
+- Host/Origin loopback checks
+- strict production CSP
+- X-Frame-Options / nosniff / referrer / permissions headers
+- bounded JSON/upload sizes
+- mutation throttling
+- SSRF/private-network protections and redirect revalidation
+- bounded response bodies/timeouts
+- credential masking/redaction
+- bounded runtime logs
+- safe Content-Disposition/header encoding
+- database integrity checks and safe recovery behavior
+
+Do not claim local-first means safe against a compromised Windows user account.
+
+## 8. Failure UX contract
+
+Failures should remain visible and machine-readable.
+
+Prefer structured errors such as:
+
+```json
+{
+  "success": false,
+  "code": "STABLE_ERROR_CODE",
+  "message": "Short human-readable explanation",
+  "recoverable": true,
+  "remediation": "What the user can do next"
 }
 ```
 
-### Custom HTTP Header Rule
-- Custom headers like `X-Export-Failed-Formats` MUST NOT contain arbitrary Unicode text or bullet characters. They must be strictly ASCII-sanitized using `getSafeAsciiHeaderValue()`.
+If a feature cannot operate because a required capability is unavailable, the frontend should eventually disable the action and display the reason. Do not fake healthy provider state.
 
-### DOCX Contact Directory Export Standards (`server/docx_report.ts`)
-- **Margins**: 0.75 in (1080 dxa).
-- **Title Banner**: Single-cell bordered table, width 100%, background shading `#F0F9FF`, 12pt `#0284C7` borders, Arial 14pt Bold, centered, Sky Blue accent.
-- **Main Table Widths**:
-  - `S.No`: 0.5 in (600 dxa)
-  - `Company / Name`: 2.2 in (3200 dxa)
-  - `Designation`: 1.5 in (2200 dxa)
-  - `Contact Info`: 2.3 in (3360 dxa)
+## 9. Data-scale direction
 
-### Canonical Cache Identity Strategy
-- Contact cache entries use deterministic compound keys: `${normName}__${countrySlug}__${roleSlug}`.
-- Prevents collisions between corporate entities operating in different countries or under different trade roles (Importer vs Exporter).
-- When country/role are omitted, lookup falls back to normalized `${normName}`.
+The future target is much larger raw trade datasets, potentially millions+ rows and eventually Panjiva-scale warehouse behavior.
 
----
+Long-term design must separate:
 
-## 6. Multi-Agent Operational Rules & Coordination Layer
+- raw trade warehouse
+- operational/job/contact state
+- immutable evidence/provenance
 
-The multi-agent engineering workflow is governed by persistent files in `.agent/`:
-- `.agent/checkpoints/TEAM.md`: Role definitions and responsibilities for Antigravity (Lead Integrator), OpenCode + Nemotron (Advisor/Fixer), and Codex (Reviewer/Fixer).
-- `.agent/checkpoints/TASKS.md`: Active task board and subsystem work area tracking.
-- `.agent/checkpoints/DISCUSSION.md`: Discovered issues, proposed fixes, and architectural decisions.
-- `.agent/checkpoints/CHANGELOG.md`: Detailed engineering changelog.
-- `.agent/checkpoints/HANDOFF.md`: Catch-up guide for Codex when returning online.
+Do not solve large raw trade data by loading everything into browser memory, one JavaScript Map, one giant JSON object, or an ever-growing sql.js image.
 
-1. **Antigravity**: Primary implementation and integration agent.
-2. **OpenAI Codex & OpenCode / Nemotron**: Independent reviewer & engineering agents.
-3. **Defect Fixing**: When any agent identifies a verified defect (P0/P1), the agent is expected to fix it immediately, run regression tests, and verify resolution rather than leaving report-only debt.
-4. **Avoid Conflict**: Inspect existing code state and `.agent/checkpoints/ACTIVITY.md` before editing; preserve working changes and make focused, non-destructive updates.
+Candidate analytical approaches such as DuckDB + Parquet must be benchmarked on the actual Windows target before adoption.
 
----
+## 10. Evidence/hallucination architecture
 
-## 7. Testing & Quality Assurance Contract
+The V1 identity/evidence system is strategically important.
 
-Every major update must be verified using:
-1. `npx tsc --noEmit` (TypeScript typecheck across frontend and backend).
-2. `npx tsx server/tests/header_encoder.test.ts` (Unit & SSRF security tests).
-3. `npx tsx server/tests/export_unicode_e2e.test.ts` (End-to-end HTTP export tests).
-4. Verified HTTP responses for CSV, XLSX, PDF, DOCX, and ZIP endpoints without `ByteString` header exceptions.
+The intended reasoning model is:
+
+```text
+model proposes
+→ entity/source identity is resolved
+→ source authority/ownership is checked
+→ quoted evidence is verified
+→ contradictions are considered
+→ code accepts / rejects / abstains
+```
+
+Do not simplify this into “ask another LLM whether the answer is correct.”
+
+## 11. Required checks before declaring a V1 change complete
+
+At minimum, run the checks relevant to the change. For release-impacting work run:
+
+```text
+npm run lint
+npm run test:v1
+npm run build
+npm run test:release
+npm run package:windows
+npm run verify:package
+```
+
+Note: as of the 2026-10-19 baseline, the script named `lint` still performs TypeScript typechecking. A real ESLint/static-quality gate is a known hardening task. Do not claim otherwise until it is actually implemented.
+
+For dependency/security claims, state exactly which audit ran and what remained unresolved.
+
+## 12. Git and recovery discipline
+
+Current Git history begins at:
+
+```text
+fa7fcda baseline: verified EdgeView V1 release candidate
+```
+
+There is no earlier Git history in this working copy.
+
+Before broad edits:
+
+- inspect `git status`
+- keep secrets/runtime data ignored
+- make bounded commits after verified phases
+- use Git for rollback instead of restoring the legacy ZIP into active source
+
+## 13. Definition of done
+
+Do not write “fully production ready”, “Panjiva scale”, “100% secure”, or “everything fixed” without evidence.
+
+A completion report should distinguish:
+
+- verified
+- inferred
+- blocked/unverified
+- known limitations
+
+The objective is not to make EdgeView look sophisticated. The objective is to make its behavior reflect runtime truth.

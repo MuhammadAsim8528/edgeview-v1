@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ParsedFile, CompanyContact, HermesReport, ActiveTab } from '../types';
+import { ParsedFile, CompanyContact, EdgeViewReport, ActiveTab } from '../types';
 import { ToastMessage } from '../components/Toast';
 import { safeFetchJson } from '../utils/safeFetch';
 import { GlobalExportPayload } from '../components/GlobalExportModal';
@@ -33,7 +33,7 @@ export function useAppStore() {
   const [selectedFile, setSelectedFile] = useState<ParsedFile | null>(null);
   const [contacts, setContacts] = useState<CompanyContact[]>([]);
   const outreachSummary = null;
-  const [reports, setReports] = useState<HermesReport[]>([]);
+  const [reports, setReports] = useState<EdgeViewReport[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +122,7 @@ export function useAppStore() {
   // Fetch AI reports
   const fetchReports = useCallback(async () => {
     try {
-      const { ok, data } = await safeFetchJson<HermesReport[]>('/api/reports');
+      const { ok, data } = await safeFetchJson<EdgeViewReport[]>('/api/reports');
       if (ok && Array.isArray(data)) {
         setReports((prev) => {
           if (prev.length === data.length && JSON.stringify(prev) === JSON.stringify(data)) {
@@ -269,14 +269,6 @@ export function useAppStore() {
     }
   };
 
-  // Legacy callback retained for callers that have not yet switched to the real pipeline.
-  // Never manufacture contact data in the client.
-  const enrichContactWithHermes = async (contactId: string) => {
-    const target = contacts.find((c) => c.id === contactId);
-    if (!target) return;
-    return enrichCompanyAutomated(target.company_name, target.id);
-  };
-
   // Bounded V1 enrichment. It deliberately never changes the user's active tab.
   const enrichCompanyAutomated = async (companyName: string, contactId?: string, forceFetch: boolean = false) => {
     try {
@@ -376,7 +368,6 @@ export function useAppStore() {
     deleteFile,
     seedSampleData,
     toggleMessageSent,
-    enrichContactWithHermes,
     enrichCompanyAutomated,
     exportCurrentFileToCSV,
     exportModalOpen,

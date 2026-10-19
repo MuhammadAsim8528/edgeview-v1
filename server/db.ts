@@ -53,7 +53,7 @@ export interface CompanyContact {
   trade_feature_recurrence?: Record<string, number>;
 }
 
-export interface HermesReport {
+export interface EdgeViewReport {
   id: string;
   title: string;
   created_by: string;
@@ -69,7 +69,7 @@ export interface HermesReport {
 class PharmaDatabase {
   public files: Map<string, FileRecord> = new Map();
   public contacts: Map<string, CompanyContact> = new Map();
-  public reports: Map<string, HermesReport> = new Map();
+  public reports: Map<string, EdgeViewReport> = new Map();
 
   // Performance Indexes for instant query lookups
   public companyNameIndex: Map<string, CompanyContact> = new Map();

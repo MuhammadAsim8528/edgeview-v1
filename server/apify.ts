@@ -1,5 +1,4 @@
 import { getAppSettings } from './settings';
-import { ResourceGovernor } from './resource_governor';
 
 export interface ApifyResult {
   url: string;

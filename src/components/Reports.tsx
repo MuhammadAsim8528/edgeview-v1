@@ -12,11 +12,11 @@ import {
   ChevronRight,
   ExternalLink,
 } from 'lucide-react';
-import { HermesReport } from '../types';
+import { EdgeViewReport } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 
 interface ReportsProps {
-  reports: HermesReport[];
+  reports: EdgeViewReport[];
   onOpenExport?: (payload: GlobalExportPayload) => void;
 }
 

@@ -176,7 +176,7 @@ const upload = multer({
 });
 
 // ==========================================
-// REST API ROUTES (FOR FRONTEND & HERMES AI)
+// REST API ROUTES (EDGEVIEW V1)
 // ==========================================
 
 // Force JSON Content-Type on all API and Upload endpoints
@@ -531,28 +531,16 @@ app.get('/api/companies/:id/intelligence', async (req, res) => {
   });
 });
 
-// Hermes Contact Enrichment API (Currently Suspended)
-app.post('/api/companies/:id/enrich', (req, res) => {
-  const ENABLE_HERMES = false;
-  if (!ENABLE_HERMES) {
-    return res.status(403).json({ error: 'Hermes enrichment is currently suspended.' });
-  }
-  const contact = Array.from(db.contacts.values()).find((c) => c.id === req.params.id);
-  if (!contact) {
-    return res.status(404).json({ error: 'Company contact not found' });
-  }
-
-  const { ceo, email, phone, whatsapp, linkedin } = req.body;
-
-  if (ceo !== undefined) contact.ceo = ceo;
-  if (email !== undefined) contact.email = email;
-  if (phone !== undefined) contact.phone = phone;
-  if (whatsapp !== undefined) contact.whatsapp = whatsapp;
-  if (linkedin !== undefined) contact.linkedin = linkedin;
-
-  contact.last_updated = new Date().toISOString();
-
-  res.json({ success: true, contact });
+// Retired pre-V1 enrichment endpoint. Keep an explicit tombstone so stale
+// clients cannot accidentally discover or revive the old mutation path.
+app.post('/api/companies/:id/enrich', (_req, res) => {
+  return res.status(410).json({
+    success: false,
+    code: 'LEGACY_FEATURE_REMOVED',
+    message: 'This pre-V1 enrichment endpoint has been retired. Use POST /api/enrich/company.',
+    recoverable: true,
+    remediation: 'Refresh EdgeView and use Fetch Details from the Contacts view.',
+  });
 });
 
 // Settings API Endpoints
@@ -1489,8 +1477,8 @@ app.post('/api/reports/upload', (req, res) => {
 
   const newReport = {
     id: `rep-${Date.now()}`,
-    title: title || 'Hermes AI Generated Report',
-    created_by: created_by || 'Hermes AI Agent',
+    title: title || 'EdgeView Report',
+    created_by: created_by || 'EdgeView',
     created_at: new Date().toISOString(),
     report_type: report_type || 'text',
     content_text,

@@ -247,7 +247,7 @@ export interface UsageStats {
   cache_misses?: number;
 }
 
-export interface HermesReport {
+export interface EdgeViewReport {
   id: string;
   title: string;
   created_by: string;
