@@ -5,6 +5,7 @@ import { hasInstitutionalRole } from './corporate_validation';
 import { isCountryCompatiblePhone } from './phone_country';
 import { canonicalEntityIdentityKey } from './company_identity';
 import { normalizeV1ContactOverlay } from '../shared/v1_contact_contract';
+import { OrderedFailureStreak } from './ordered_failure_tracker';
 
 const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'] as const;
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
@@ -403,7 +404,7 @@ export function projectHistoricalContactFields(run: V1Run) {
   });
 }
 
-export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown) {
+export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown, durable = false) {
   const database = await getDb();
   const canonicalOverlay = normalizeV1ContactOverlay(overlay);
   await database.run(
@@ -412,6 +413,7 @@ export async function persistV1ContactOverlay(companyId: string, runId: string, 
      ON CONFLICT(company_id) DO UPDATE SET run_id = excluded.run_id, overlay_json = excluded.overlay_json, updated_at = excluded.updated_at`,
     [companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString()]
   );
+  if (durable) await database.flush();
 }
 
 export async function hydrateV1ContactEnrichment(): Promise<number> {
@@ -565,6 +567,7 @@ export async function createJob(companyIds: string[], mode: 'importer' | 'export
       job.pilot_authorized ? 1 : 0,
     ]
   );
+  await db.flush();
 
   return jobId;
 }
@@ -593,7 +596,7 @@ export async function getJob(jobId: string): Promise<ResearchJob | null> {
   };
 }
 
-export async function updateJob(jobId: string, updates: Partial<ResearchJob>): Promise<void> {
+export async function updateJob(jobId: string, updates: Partial<ResearchJob>, durable = false): Promise<void> {
   const db = await getDb();
   const current = await getJob(jobId);
   if (!current) return;
@@ -634,11 +637,12 @@ export async function updateJob(jobId: string, updates: Partial<ResearchJob>): P
       jobId,
     ]
   );
+  if (durable) await db.flush();
 }
 
 export async function stopJob(jobId: string): Promise<void> {
   activeJobs.delete(jobId);
-  await updateJob(jobId, { status: 'STOPPED' });
+  await updateJob(jobId, { status: 'STOPPED' }, true);
 }
 
 export function isJobActive(jobId: string): boolean {
@@ -654,7 +658,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
     return false;
   }
 
-  await updateJob(jobId, { status: 'PENDING' });
+  await updateJob(jobId, { status: 'PENDING' }, true);
 
   // Five bounded workers improve throughput while persisted checkpoints keep
   // the job resumable after a server or browser restart.
@@ -684,7 +688,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
       });
       const permittedIds = pendingIds;
       let cursor = 0;
-      let consecutiveTransportFailures = 0;
+      const transportFailures = new OrderedFailureStreak(9);
       let pausedForTransport = false;
       let persistChain: Promise<void> = Promise.resolve();
       const checkpoint = (stage: string) => {
@@ -708,12 +712,20 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           const contact = pharmaDb.getContactById(companyId) as any;
           const companyName = String(contact?.company_name || companyState?.name || '').trim();
           const country = String(contact?.country || contact?.normalized_country || '').trim();
-          if (!companyState) continue;
+          if (!companyState) {
+            const decision = transportFailures.record(position, false);
+            if (decision.newlyPaused) {
+              pausedForTransport = true;
+              activeJobs.delete(jobId);
+            }
+            continue;
+          }
           companyState.status = 'processing';
           companyState.stage = 'V1 query generation and deterministic retrieval';
           job.current_company = companyName;
           job.current_stage = companyState.stage;
           const startedAt = Date.now();
+          let transportOutcome = false;
           try {
             if (!companyName || isInternalId(companyName)) throw new Error('INVALID_INPUT / UNRESOLVED_COMPANY');
             if (!country) throw new Error('Exact country is required for identity-anchored V1 enrichment');
@@ -731,7 +743,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
             const runErrors = run.timeline.map(event => String(event.error || '')).filter(Boolean);
             const transportFailed = run.status === 'FAILED' && runErrors.length > 0
               && runErrors.every(message => /fetch failed|aborted|timeout|econn|enotfound|socket|network/i.test(message));
-            consecutiveTransportFailures = transportFailed ? consecutiveTransportFailures + 1 : 0;
+            transportOutcome = transportFailed;
             const providerCounts = run.raw_records.reduce<Record<string, number>>((acc, record) => {
               acc[record.provider] = (acc[record.provider] || 0) + 1;
               return acc;
@@ -786,16 +798,19 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
               });
             }
             for (const provider of RESEARCH_PROVIDERS) job.resource_usage[provider] += companyState.resourceUsage[provider] || 0;
-            if (consecutiveTransportFailures >= 9) {
-              pausedForTransport = true;
-              activeJobs.delete(jobId);
-            }
           } catch (error: any) {
+            transportOutcome = /fetch failed|aborted|timeout|econn|enotfound|socket|network/i.test(String(error?.message || error));
             companyState.status = 'failed';
             companyState.stage = 'V1 failure captured';
             companyState.error = String(error?.message || error);
             companyState.outcome = 'FAILED';
           } finally {
+            const decision = transportFailures.record(position, transportOutcome);
+            if (decision.newlyPaused) {
+              pausedForTransport = true;
+              activeJobs.delete(jobId);
+              companyState.stage = `${companyState.stage}; safety pause after ${decision.streak} ordered transport failures`;
+            }
             companyState.durationMs = Date.now() - startedAt;
             job.completed_companies++;
             if (job.completed_companies % 5 === 0 || cursor >= permittedIds.length) await checkpoint(companyState.stage);
@@ -814,13 +829,13 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           company_states: job.company_states,
           completed_companies: job.completed_companies,
           resource_usage: job.resource_usage,
-        });
+        }, true);
       } else {
-        await updateJob(jobId, { status: 'COMPLETED', current_company: '', current_stage: 'All requested companies processed', company_states: job.company_states, completed_companies: job.completed_companies, resource_usage: job.resource_usage });
+        await updateJob(jobId, { status: 'COMPLETED', current_company: '', current_stage: 'All requested companies processed', company_states: job.company_states, completed_companies: job.completed_companies, resource_usage: job.resource_usage }, true);
       }
     } catch (err: any) {
       console.error(`Fatal crash in V1 job loop for ${jobId}:`, err);
-      await updateJob(jobId, { status: 'FAILED', error_message: String(err?.message || err), company_states: job.company_states, completed_companies: job.completed_companies, resource_usage: job.resource_usage });
+      await updateJob(jobId, { status: 'FAILED', error_message: String(err?.message || err), company_states: job.company_states, completed_companies: job.completed_companies, resource_usage: job.resource_usage }, true);
     } finally {
       activeJobs.delete(jobId);
     }

@@ -432,25 +432,25 @@ app.delete('/api/files/:id', async (req, res) => {
 
     const file = db.files.get(id)!;
 
-    // 1. Persist the deletion to the disk database so the file does NOT
-    //    reappear after a server restart / app reload.
-    let diskDeleted = false;
-    try {
-      diskDeleted = await deleteFileFromHistory(id);
-    } catch (diskErr) {
-      console.warn('Delete persistence warning:', diskErr);
-    }
+    // 1. Persist the primary file deletion first so it cannot reappear after
+    // restart. JSON persistence throws on an undurable write.
+    const diskDeleted = await deleteFileFromHistory(id);
 
-    // 2. Also purge the uploaded file's history_data rows from SQLite.
+    // 2. Purge the derived shipment index and cross an explicit durability
+    // barrier before claiming all associated history was removed.
+    let historyCleanupError: string | null = null;
     try {
       const { getDb } = await import('./server/sqlite');
       const sqliteDb = await getDb();
       await sqliteDb.run('DELETE FROM history_data WHERE file_name = ?', [file.name]);
-    } catch (sqlErr) {
-      console.warn('Delete history_data warning:', sqlErr);
+      await sqliteDb.flush();
+    } catch (sqlErr: any) {
+      historyCleanupError = String(sqlErr?.message || sqlErr);
+      console.warn('Delete history_data durability warning:', sqlErr);
     }
 
-    // 3. Remove from in-memory store.
+    // 3. Memory follows the durable primary store even if derived-index cleanup
+    // needs repair, preventing runtime state from disagreeing with restart state.
     db.files.delete(id);
 
     // 4. Re-sync company contacts and prune contacts that no longer have a
@@ -462,9 +462,19 @@ app.delete('/api/files/:id', async (req, res) => {
       console.warn('Sync companies warning during delete:', syncErr);
     }
 
+    if (historyCleanupError) {
+      return res.status(207).json({
+        success: true,
+        partial: true,
+        message: 'File deletion was durably saved, but derived history cleanup needs retry.',
+        deleted_id: id,
+        persisted: diskDeleted,
+        warning: historyCleanupError,
+      });
+    }
     return res.json({
       success: true,
-      message: 'File deleted',
+      message: 'File and associated history records deleted durably',
       deleted_id: id,
       persisted: diskDeleted,
     });
@@ -743,8 +753,6 @@ app.post('/api/settings/test', async (req, res) => {
 // provider retrieval, immutable raw capture, normalization and display.
 app.post('/api/enrich/company', async (req, res) => {
   try {
-    const capability = buildV1Capabilities().company_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const { company_name, id, forceFetch, country, entity_key } = req.body;
     let cleanCompany: string;
     let cleanCountry: string | undefined;
@@ -768,6 +776,8 @@ app.post('/api/enrich/company', async (req, res) => {
     }
     if (!resolvedCountry && ctxContact) resolvedCountry = String(ctxContact.country || ctxContact.normalized_country || '').trim();
     if (!resolvedCountry) return res.status(400).json({ success: false, error: 'Country is required for identity-anchored V1 enrichment.' });
+    const capability = buildV1Capabilities().company_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const run = await runV1Enrichment(cleanCompany, resolvedCountry);
     if (ctxContact) {
       const projected = projectHistoricalContactFields(run);
@@ -775,7 +785,7 @@ app.post('/api/enrich/company', async (req, res) => {
         edgeview_v1_run_id: run.id,
         last_updated: new Date().toISOString(),
       });
-      await persistV1ContactOverlay(ctxContact.id, run.id, projected);
+      await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);
       db.rebuildIndexes();
     }
     // A provider-level FAILED run is still a successfully captured V1 record.
@@ -942,12 +952,12 @@ app.post('/api/enrich/batch', async (req, res) => {
 
 app.post('/api/enrich/jobs', async (req, res) => {
   try {
-    const capability = buildV1Capabilities().batch_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const { company_ids, mode } = req.body;
     if (!Array.isArray(company_ids) || company_ids.length === 0) {
       return res.status(400).json({ success: false, error: 'Please select at least one company.' });
     }
+    const capability = buildV1Capabilities().batch_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     
     const { getDb } = await import('./server/sqlite');
     const db = await getDb();
@@ -1129,8 +1139,6 @@ app.get('/api/enrich/job/:id/progress', async (req, res) => {
 
 app.post('/api/enrich/job/:id/start', async (req, res) => {
   try {
-    const capability = buildV1Capabilities().batch_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     const jobId = req.params.id;
     const { forceFetch } = req.body;
     const { getJob, runJobLoop } = await import('./server/job_manager');
@@ -1138,6 +1146,8 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
     if (!job) {
       return res.status(404).json({ success: false, error: 'Job not found' });
     }
+    const capability = buildV1Capabilities().batch_enrichment;
+    if (!capability.available) return unavailableCapabilityResponse(res, capability);
     
     // Background execution
     const started = await runJobLoop(jobId, Boolean(forceFetch));
@@ -1253,7 +1263,7 @@ function buildV1Capabilities(providerReport: Record<string, any> = buildV1Provid
     || serper.routingState === 'cooldown'
     || serper.status === 'auth_failed'
     || serper.status === 'rate_limited';
-  const searchDegraded = !searchBlocked && ['timeout', 'degraded'].includes(String(serper.status || ''));
+  const searchDegraded = !searchBlocked && ['unknown', 'timeout', 'degraded'].includes(String(serper.status || ''));
   const searchReason = !serper.configured
     ? 'Serper search is not configured.'
     : !serper.enabled

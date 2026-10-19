@@ -1,11 +1,33 @@
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const port = 3912;
 const base = `http://127.0.0.1:${port}`;
+const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-release-smoke-'));
+const isolatedEnv = {
+  ...process.env,
+  PORT: String(port),
+  NODE_ENV: 'test',
+  EDGEVIEW_TEST_MODE: '1',
+  EDGEVIEW_TEST_DB_DIR: testRoot,
+  EDGEVIEW_CONFIG: path.join(testRoot, 'config.json'),
+  SERPER_API_KEY: '',
+  HUNTER_API_KEY: '',
+  NVIDIA_API_KEY: '',
+  GROQ_API_KEY: '',
+  FIRECRAWL_API_KEY: '',
+  TAVILY_API_KEY: '',
+  EXA_API_KEY: '',
+  LINKUP_API_KEY: '',
+  APIFY_API_KEY: '',
+  GEMINI_API_KEY: '',
+};
 const child = spawn(process.execPath, ['dist/server.cjs'], {
   cwd: process.cwd(),
-  env: { ...process.env, PORT: String(port), NODE_ENV: 'test', EDGEVIEW_TEST_MODE: '1' },
+  env: isolatedEnv,
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 
@@ -52,6 +74,22 @@ try {
   assert.equal(malformedBody.code, 'FILE_PARSE_FAILED');
   assert.equal(Object.hasOwn(malformedBody, 'details'), false, 'parse failure must not disclose local internals');
 
+  const validUpload = new FormData();
+  const validName = `release-smoke-${Date.now()}.csv`;
+  validUpload.append('file', new Blob(['Importer,Exporter,Country,Item,TOT_FC\nSmoke Importer,Smoke Exporter,Kenya,Test Product,100\n']), validName);
+  const validUploadResponse = await fetch(`${base}/api/files/upload`, { method: 'POST', body: validUpload });
+  const validUploadBody = await validUploadResponse.json();
+  assert.equal(validUploadResponse.status, 201, JSON.stringify(validUploadBody));
+  assert.equal(validUploadBody.success, true);
+  const uploadedId = validUploadBody.data?.id || validUploadBody.id;
+  assert.ok(uploadedId, 'successful upload must return its persisted file id');
+
+  const deleteResponse = await fetch(`${base}/api/files/${encodeURIComponent(uploadedId)}`, { method: 'DELETE' });
+  const deleteBody = await deleteResponse.json();
+  assert.ok([200, 207].includes(deleteResponse.status), JSON.stringify(deleteBody));
+  assert.equal(deleteBody.success, true);
+  assert.equal(deleteBody.persisted, true, 'release delete must confirm the primary durable record was removed');
+
   const legacyProvider = await fetch(`${base}/api/settings/test`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ service: 'firecrawl' }),
   });
@@ -94,9 +132,19 @@ try {
 
   const runtimeState = await (await fetch(`${base}/api/runtime/state`)).json();
   assert.deepEqual(Object.keys(runtimeState.providers).sort(), ['groq', 'hunter', 'nvidia', 'serper']);
+  assert.equal(runtimeState.capabilities?.company_enrichment?.available, false, 'research must be unavailable without Serper in isolated release smoke');
+  assert.equal(runtimeState.capabilities?.company_enrichment?.dependencies?.includes('serper'), true);
   for (const legacy of ['firecrawl', 'tavily', 'exa', 'linkup', 'apify', 'gemini']) {
     assert.equal(Object.hasOwn(runtimeState.resources, legacy), false, `legacy resource appeared in V1 runtime state: ${legacy}`);
   }
+
+  const unavailableResearch = await fetch(`${base}/api/enrich/company`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ company_name: 'Release Smoke Company', country: 'Kenya' }),
+  });
+  const unavailableResearchBody = await unavailableResearch.json();
+  assert.equal(unavailableResearch.status, 503);
+  assert.equal(unavailableResearchBody.code, 'CAPABILITY_UNAVAILABLE');
+  assert.match(unavailableResearchBody.remediation || '', /Serper/i);
 
   const logs = await (await fetch(`${base}/api/logs/system?tail=50000`)).json();
   assert.ok(Array.isArray(logs));
@@ -105,4 +153,5 @@ try {
 } finally {
   child.kill('SIGTERM');
   await new Promise(resolve => child.once('exit', resolve));
+  try { fs.rmSync(testRoot, { recursive: true, force: true }); } catch {}
 }

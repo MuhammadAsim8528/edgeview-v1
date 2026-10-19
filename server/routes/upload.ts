@@ -7,6 +7,7 @@ import {
   saveFileToDb,
   computeFileHash,
   findFileByHash,
+  deleteFileFromHistory,
 } from '../sqlite_persistence';
 
 export const uploadRouter = express.Router();
@@ -157,15 +158,21 @@ async function handleUpload(req: express.Request, res: express.Response) {
       doc_tables: parsed.doc_tables,
     };
 
-    db.files.set(fileRecord.id, fileRecord);
-
-    // 7. SQLite Persistence
+    // 7. Durable persistence must succeed before the in-memory dataset is
+    // published or a 201 response is returned. Otherwise a disk-full/permission
+    // failure could look successful until the next restart.
+    let jsonPersisted = false;
+    let sqlDb: any = null;
     try {
       await saveFileToDb(fileRecord, fileHash, 'real');
-      
-      // Insert rows into history_data table
+      jsonPersisted = true;
+
+      // Insert rows into history_data table. Clear the same filename first so a
+      // retry after an interrupted/failed upload is idempotent rather than
+      // duplicating trade rows.
       const { getDb } = await import('../sqlite');
-      const sqlDb = await getDb();
+      sqlDb = await getDb();
+      await sqlDb.run('DELETE FROM history_data WHERE file_name = ?', [originalName]);
       if (parsed.rows && parsed.rows.length > 0) {
         const stmt = await sqlDb.prepare(`
           INSERT INTO history_data (
@@ -191,9 +198,35 @@ async function handleUpload(req: express.Request, res: express.Response) {
         await stmt.finalize();
       }
 
-    } catch (dbErr) {
-      console.error('SQLite save error during upload:', dbErr);
+    } catch (dbErr: any) {
+      console.error('Durable save error during upload:', dbErr);
+      // Prevent a half-saved JSON record from turning the next retry into a
+      // false duplicate success when history_data was not durably completed.
+      if (jsonPersisted) {
+        try { await deleteFileFromHistory(fileRecord.id); }
+        catch (rollbackErr) { console.error('Failed to roll back primary upload record:', rollbackErr); }
+      }
+      if (sqlDb) {
+        try {
+          await sqlDb.run('DELETE FROM history_data WHERE file_name = ?', [originalName]);
+          await sqlDb.flush();
+        } catch (cleanupErr) {
+          console.error('Failed to clean partial history_data upload state:', cleanupErr);
+        }
+      }
+      const code = dbErr?.code === 'DISK_FULL' ? 'DISK_FULL' : 'PERSISTENCE_WRITE_FAILED';
+      return res.status(507).json({
+        success: false,
+        code,
+        error: code === 'DISK_FULL'
+          ? 'EdgeView could not save the uploaded dataset because storage is full.'
+          : 'EdgeView could not durably save the uploaded dataset.',
+        recoverable: true,
+        remediation: code === 'DISK_FULL' ? 'Free disk space and retry the upload.' : 'Check file permissions/storage health and retry.',
+      });
     }
+
+    db.files.set(fileRecord.id, fileRecord);
 
     // 8. Sync Contacts
     try {

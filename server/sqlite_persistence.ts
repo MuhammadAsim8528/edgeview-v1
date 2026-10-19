@@ -145,18 +145,39 @@ function readRecordsFromDisk(): UploadedFileRecord[] {
   }
 }
 
+export class PersistenceWriteError extends Error {
+  code: 'DISK_FULL' | 'PERSISTENCE_WRITE_FAILED';
+  cause?: unknown;
+  constructor(message: string, cause?: unknown) {
+    const rawCode = String((cause as any)?.code || '').toUpperCase();
+    const code = rawCode === 'ENOSPC' || rawCode === 'EDQUOT' ? 'DISK_FULL' : 'PERSISTENCE_WRITE_FAILED';
+    super(message);
+    this.name = 'PersistenceWriteError';
+    this.code = code;
+    this.cause = cause;
+  }
+}
+
 function writeRecordsToDisk(records: UploadedFileRecord[]): void {
+  const main = getJsonPersistencePath();
+  const dir = path.dirname(main);
+  if (dir && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tempPath = `${main}.${process.pid}.${Date.now()}.tmp`;
+  let handle: number | undefined;
   try {
-    const main = getJsonPersistencePath();
-    const dir = path.dirname(main);
-    if (dir && !fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const tempPath = `${main}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(records, null, 2), 'utf-8');
+    handle = fs.openSync(tempPath, 'wx');
+    fs.writeFileSync(handle, JSON.stringify(records, null, 2), { encoding: 'utf8' });
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = undefined;
     fs.renameSync(tempPath, main);
   } catch (err) {
+    if (handle !== undefined) {
+      try { fs.closeSync(handle); } catch { /* best-effort cleanup */ }
+    }
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
     console.error('Failed to write persistence DB to disk:', err);
+    throw new PersistenceWriteError('EdgeView could not durably save the dataset database.', err);
   }
 }
 

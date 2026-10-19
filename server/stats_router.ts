@@ -512,32 +512,46 @@ statsRouter.delete('/history-files/:id', async (req: Request, res: Response) => 
     // Delete from SQLite disk storage
     const deletedFromDisk = await deleteFileFromHistory(fileId);
 
-    // Delete from memory store
     const fileInMem = db.files.get(fileId);
-    let fileName = fileInMem ? fileInMem.name : 'Uploaded file';
-    db.files.delete(fileId);
+    const fileName = fileInMem ? fileInMem.name : 'Uploaded file';
+    let historyCleanupError: string | null = null;
 
-    // Purge the file's shipment rows from history_data so the trade index does
-    // not keep counting them (orphaned rows otherwise survive the delete).
+    // Purge the file's shipment rows and flush the derived index before making
+    // a full-cleanup claim. The primary JSON deletion above is already durable.
     try {
       const { getDb } = await import('./sqlite');
       const sqliteDb = await getDb();
       if (fileName && fileName !== 'Uploaded file') {
         await sqliteDb.run('DELETE FROM history_data WHERE file_name = ?', [fileName]);
+        await sqliteDb.flush();
       }
-    } catch (sqlErr) {
-      console.warn('Failed to purge history_data rows during delete:', sqlErr);
+    } catch (sqlErr: any) {
+      historyCleanupError = String(sqlErr?.message || sqlErr);
+      console.warn('Failed to durably purge history_data rows during delete:', sqlErr);
     }
+
+    db.files.delete(fileId);
 
     // Re-sync company contacts and prune contacts that no longer have a
     // source file so stale companies do not persist until restart.
     db.syncCompaniesFromFiles();
     db.pruneOrphanedContacts();
 
+    if (historyCleanupError) {
+      return res.status(207).json({
+        success: true,
+        partial: true,
+        message: `File "${fileName}" was deleted durably, but derived history cleanup needs retry.`,
+        deleted_id: fileId,
+        persisted: deletedFromDisk,
+        warning: historyCleanupError,
+      });
+    }
     return res.json({
       success: true,
       message: `File "${fileName}" and all associated history records were permanently deleted.`,
       deleted_id: fileId,
+      persisted: deletedFromDisk,
     });
   } catch (err: any) {
     console.error('Failed to delete history file:', err);

@@ -8,6 +8,7 @@ export interface DatabaseWrapper {
   get(sql: string, params?: any[]): Promise<any>;
   all(sql: string, params?: any[]): Promise<any[]>;
   run(sql: string, params?: any[]): Promise<{ lastID?: number; changes?: number }>;
+  flush(): Promise<void>;
   prepare(sql: string): Promise<{
     run: (...params: any[]) => Promise<void>;
     finalize: () => Promise<void>;
@@ -60,23 +61,59 @@ export async function getDb(): Promise<DatabaseWrapper> {
     }
 
     let saveTimer: NodeJS.Timeout | null = null;
+    let pendingPersistenceError: Error | null = null;
+    const persistenceError = (err: unknown) => {
+      const rawCode = String((err as any)?.code || '').toUpperCase();
+      const error = new Error(rawCode === 'ENOSPC' || rawCode === 'EDQUOT'
+        ? 'DISK_FULL: EdgeView could not persist the operational database because storage is full.'
+        : 'PERSISTENCE_WRITE_FAILED: EdgeView could not persist the operational database.');
+      (error as any).code = rawCode === 'ENOSPC' || rawCode === 'EDQUOT' ? 'DISK_FULL' : 'PERSISTENCE_WRITE_FAILED';
+      (error as any).cause = err;
+      return error;
+    };
     const saveToDisk = () => {
+      const tempPath = `${DB_PATH}.${process.pid}.${Date.now()}.tmp`;
+      let handle: number | undefined;
       try {
         const data = db.export();
         const buffer = Buffer.from(data);
-        const tempPath = `${DB_PATH}.tmp`;
-        fs.writeFileSync(tempPath, buffer);
+        handle = fs.openSync(tempPath, 'wx');
+        fs.writeFileSync(handle, buffer);
+        fs.fsyncSync(handle);
+        fs.closeSync(handle);
+        handle = undefined;
         fs.renameSync(tempPath, DB_PATH);
+        pendingPersistenceError = null;
       } catch (err) {
+        if (handle !== undefined) {
+          try { fs.closeSync(handle); } catch { /* best-effort cleanup */ }
+        }
+        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
+        pendingPersistenceError = persistenceError(err);
         console.error('Failed to persist SQLite db to disk:', err);
+        throw pendingPersistenceError;
       }
     };
 
+    // Prepared bulk inserts coalesce intermediate writes, but finalize() is a
+    // mandatory durable barrier. Errors are retained so finalize cannot report
+    // success after a background persistence failure.
     const debouncedSaveToDisk = () => {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
-        saveToDisk();
+        saveTimer = null;
+        try { saveToDisk(); } catch { /* surfaced by finalize or next mutation */ }
       }, 300);
+    };
+    const flushPendingSave = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      // Retry a previously failed persistence attempt here. If storage was
+      // repaired (for example, disk space was freed), the same process can
+      // recover without a restart; otherwise saveToDisk throws again.
+      saveToDisk();
     };
 
     const wrapper: DatabaseWrapper = {
@@ -113,9 +150,14 @@ export async function getDb(): Promise<DatabaseWrapper> {
       },
 
       async run(sql: string, params: any[] = []) {
+        if (pendingPersistenceError) saveToDisk();
         db.run(sql, params);
         debouncedSaveToDisk();
         return { changes: db.getRowsModified() };
+      },
+
+      async flush() {
+        flushPendingSave();
       },
 
       async prepare(sql: string) {
@@ -132,7 +174,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
             } catch (e) {
               // ignore if already freed
             }
-            saveToDisk();
+            flushPendingSave();
           },
           free() {
             try {
@@ -140,7 +182,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
             } catch (e) {
               // ignore if already freed
             }
-            saveToDisk();
+            flushPendingSave();
           }
         };
       }
