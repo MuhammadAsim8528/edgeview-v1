@@ -34,4 +34,4 @@ const after = await (await fetch(`${base}/api/health`)).json();
 assert.equal(failures, 0, `${failures} load-smoke requests failed`);
 assert.ok(percentile(0.95) < 5000, `p95 latency was ${Math.round(percentile(0.95))}ms`);
 assert.ok(after.memory.rss_mb < before.memory.rss_mb + 300, `RSS grew from ${before.memory.rss_mb}MB to ${after.memory.rss_mb}MB`);
-console.log(JSON.stringify({ requests: total, concurrency, failures, p50_ms: Math.round(percentile(0.5)), p95_ms: Math.round(percentile(0.95)), max_ms: Math.round(timings.at(-1)), rss_before_mb: before.memory.rss_mb, rss_after_mb: after.memory.rss_mb }));
+console.log(JSON.stringify({ target: base, app_pid: before.app?.pid ?? null, project_root: before.app?.project_root ?? null, requests: total, concurrency, failures, p50_ms: Math.round(percentile(0.5)), p95_ms: Math.round(percentile(0.95)), max_ms: Math.round(timings.at(-1)), rss_before_mb: before.memory.rss_mb, rss_after_mb: after.memory.rss_mb }));

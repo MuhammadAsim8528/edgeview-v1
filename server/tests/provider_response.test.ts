@@ -14,4 +14,11 @@ let cancelled = false;
 const stalled = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
 await assert.rejects(readProviderResponse(new Response(stalled), 100, 20), { name: 'ProviderBodyTimeout' });
 assert.equal(cancelled, true);
+let sent = 0;
+const tinyChunks = new ReadableStream<Uint8Array>({ pull(controller) {
+  if (sent++ < 10_000) controller.enqueue(new Uint8Array([32]));
+  else { controller.enqueue(new TextEncoder().encode('{}')); controller.close(); }
+} });
+assert.deepEqual((await readProviderResponse(new Response(tinyChunks), 10_002)).body, {});
+await assert.rejects(readProviderResponse(Response.json({}), -1), /Invalid provider response bounds/);
 console.log('PASS bounded provider bodies retain malformed evidence and reject timeouts/oversize');

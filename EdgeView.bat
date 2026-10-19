@@ -11,11 +11,8 @@ if not errorlevel 1 (
   start "" "http://127.0.0.1:3901"
   exit /b 0
 )
-if not exist "node_modules\" (
-  echo EdgeView dependencies are missing. Installing them now...
-  call npm ci --omit=dev --ignore-scripts --cache .npm-cache
-  if errorlevel 1 goto :error
-)
+node scripts\ensure-dependencies.mjs
+if errorlevel 1 goto :error
 node scripts\build-if-needed.mjs
 if errorlevel 1 goto :error
 echo Starting EdgeView at http://127.0.0.1:3901

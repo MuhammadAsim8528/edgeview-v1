@@ -4,10 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
+import crypto from 'node:crypto';
 import { verifyPackage } from './verify-package.mjs';
+import { ensureDependencies } from './ensure-dependencies.mjs';
 
 const source = process.cwd();
 const zip = path.resolve('../../outputs/EdgeView-V1-Windows.zip');
+const testedZipSha256 = crypto.createHash('sha256').update(fs.readFileSync(zip)).digest('hex');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-package-cold-runtime-'));
 const disk = fs.statfsSync(root);
 if (Number(disk.bavail) * Number(disk.bsize) < 1.5 * 1024 ** 3) {
@@ -18,9 +21,10 @@ async function runNode(args, cwd, timeoutMs) {
   let output = '';
   child.stdout.on('data', chunk => { output = (output + chunk).slice(-16000); });
   child.stderr.on('data', chunk => { output = (output + chunk).slice(-16000); });
-  console.log(JSON.stringify({ phase: args.includes('ci') ? 'locked dependency installation' : 'isolated package smoke', pid: child.pid }));
+  const phase = args.includes('ci') ? 'locked dependency installation' : args.includes('build') ? 'production rebuild' : 'isolated package smoke';
+  console.log(JSON.stringify({ phase, pid: child.pid }));
   const began = performance.now();
-  const heartbeat = setInterval(() => console.log(JSON.stringify({ phase: args.includes('ci') ? 'installing' : 'verifying', pid: child.pid, elapsedSeconds: Math.round((performance.now() - began) / 1000) })), 30000);
+  const heartbeat = setInterval(() => console.log(JSON.stringify({ phase, pid: child.pid, elapsedSeconds: Math.round((performance.now() - began) / 1000) })), 30000);
   let timedOut = false;
   const timeout = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, timeoutMs);
   try {
@@ -43,7 +47,10 @@ try {
   ].find(candidate => candidate && fs.existsSync(candidate));
   assert.ok(npm, 'Node/npm must be installed to verify the Windows source distribution.');
   const installStart = performance.now();
-  await runNode([npm,'ci','--omit=dev','--ignore-scripts','--cache','.npm-cache'], installed, 600000);
+  await runNode([npm,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund','--cache','.npm-cache'], installed, 600000);
+  // npm above must genuinely succeed before the launcher completion check runs.
+  ensureDependencies(installed, () => ({ status: 0 }));
+  ensureDependencies(installed, () => { throw new Error('Unchanged install unexpectedly reran npm'); });
   const installMs = performance.now() - installStart;
   const unchanged = spawnSync(process.execPath, ['scripts/build-if-needed.mjs'], { cwd: installed, encoding: 'utf8' });
   assert.equal(unchanged.status, 0, unchanged.stderr);
@@ -58,7 +65,7 @@ try {
   const rebuildMs = performance.now() - rebuildStart;
   const rebuiltSmokeStart = performance.now();
   assert.match(await runNode([path.join(source,'scripts/release-smoke.mjs')], installed, 90000), /PASS EdgeView production release smoke/);
-  console.log(JSON.stringify({ passed: true, node: process.version, platform: process.platform,
+  console.log(JSON.stringify({ passed: true, testedZipSha256, node: process.version, platform: process.platform,
     dependencyInstallMs: Math.round(installMs), isolatedSmokeMs: Math.round(smokeMs), productionRebuildMs: Math.round(rebuildMs), rebuiltSmokeMs: Math.round(performance.now() - rebuiltSmokeStart),
     manifestVerifiedAfterRun: true, caveat: 'Fresh extracted package + locked install + API workflow; no browser interaction or fixed-port .bat cold start.' }));
 } finally { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }

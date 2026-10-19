@@ -1,7 +1,10 @@
 /** Bounded body consumption: a headers-only fetch timeout is not sufficient. */
 export async function readProviderResponse(response: Response, maxBytes = 8 * 1024 * 1024, timeoutMs = 20_000): Promise<{ body: unknown; failure?: { name: string; message: string; status: number } }> {
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid provider response bounds');
   const reader = response.body?.getReader();
-  const chunks: Uint8Array[] = [];
+  // One bounded allocation avoids millions of tiny chunks and race callbacks
+  // retaining far more memory than the configured body limit.
+  const buffer = Buffer.allocUnsafe(maxBytes);
   let size = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const fail = (name: string, message: string) => Object.assign(new Error(message), { name, status: response.status });
@@ -9,14 +12,16 @@ export async function readProviderResponse(response: Response, maxBytes = 8 * 10
     timer = setTimeout(() => reject(fail('ProviderBodyTimeout', 'Provider response body timeout')), timeoutMs);
   });
   try {
-    if (reader) while (true) {
-      const next = await Promise.race([reader.read(), deadline]);
-      if (next.done) break;
-      size += next.value.byteLength;
-      if (size > maxBytes) throw fail('ProviderBodyLimit', `Provider response exceeds ${maxBytes} byte capture limit`);
-      chunks.push(next.value);
-    }
-    const bytes = Buffer.concat(chunks, size);
+    await Promise.race([(async () => {
+      if (reader) while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        if (size + next.value.byteLength > maxBytes) throw fail('ProviderBodyLimit', `Provider response exceeds ${maxBytes} byte capture limit`);
+        buffer.set(next.value, size);
+        size += next.value.byteLength;
+      }
+    })(), deadline]);
+    const bytes = buffer.subarray(0, size);
     let text: string;
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
     catch {

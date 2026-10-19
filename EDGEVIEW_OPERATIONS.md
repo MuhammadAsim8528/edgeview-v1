@@ -9,6 +9,15 @@
 
 The first launch may install Node dependencies. Normal launches are fast: the launcher skips the build when sources have not changed. If application source changed, it rebuilds before starting so the desktop shortcut always serves the current local code.
 
+Dependency installation is considered complete only after npm succeeds and the
+required package versions match the lockfile. A completion marker is tied to the
+package/lock contents, operating system, CPU architecture and Node major version.
+Interrupted installs, changed dependencies and missing packages trigger a retry;
+the mere existence of `node_modules` is not sufficient. First launch still needs
+Internet access and Node/npm; this is not an offline executable. Dependency
+installation does not run lifecycle scripts. Security auditing runs separately,
+not as a hidden extra step on every launch.
+
 If EdgeView is already healthy on port 3901, a second shortcut click opens the existing instance and exits immediately instead of attempting a conflicting second server.
 
 ## Normal workflow
@@ -33,6 +42,11 @@ If EdgeView is already healthy on port 3901, a second shortcut click opens the e
 The production V1 allowlist is Serper, Hunter, Groq, and NVIDIA NIM. All other configured providers are disabled. Keep secrets in the local `config.json`; the Windows source package intentionally excludes it, the database, uploaded files, logs, and raw run data.
 
 Never paste API keys into documentation, screenshots, bug reports, or source control.
+
+Settings, databases and the health endpoint share the executable-first EdgeView
+application root. An unrelated launch working directory cannot supply its own
+`config.json` or `.env`. `EDGEVIEW_CONFIG` remains an explicit operator override;
+when that override is missing, it does not silently fall back to another file.
 
 ## Monitoring
 

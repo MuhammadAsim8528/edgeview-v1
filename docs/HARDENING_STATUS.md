@@ -182,3 +182,43 @@ No claim of release completion or broad production readiness is made.
   closure/archive validation (37 backend / 30 frontend inputs), 106-file Windows
   manifest verification, and staged/ZIP-extracted unchanged-build launch checks.
   Live `/api/health` remained `ok`; the live backend was not restarted.
+
+### Follow-up: installation recovery and canonical settings ownership
+
+- Launcher now checks an installation completion fingerprint rather than merely
+  checking for `node_modules`. npm must succeed and direct dependency versions
+  must match the lockfile before a marker is written. The marker includes
+  package/lock content and runtime platform/architecture/Node major. Tests cover
+  partial failure, failed update, normal reuse, missing package and wrong version.
+  This is not a comprehensive post-install tamper/integrity scanner.
+- Settings now reuse the existing executable-first validated application root
+  used by databases and health. Removed arbitrary-cwd and missing-override fallback
+  reads. A fresh production-mode subprocess with a synthetic unrelated cwd config
+  and `.env` proves those credentials are ignored and saves go to the correct root.
+  Existing config persistence/reset and test dotenv isolation suites also pass.
+- Response-body collection now uses one bounded buffer and one timeout race, not
+  an unbounded number of tiny buffers/deadline callbacks. Tests include 10,000
+  one-byte chunks and invalid configured limits. No live-app memory improvement
+  is inferred from this structural bound alone.
+- A fresh production dependency audit succeeded after registry connectivity
+  recovered: five moderate findings, zero high/critical (mammoth/argparse/sprintf-js
+  and exceljs/uuid). Source inspection finds argparse in mammoth's CLI and ExcelJS
+  using UUID v4; that narrows known paths but does not erase the advisories or prove
+  absence of all exploitability. Suggested older major versions were not installed.
+- The retry of the full extracted-ZIP cold test succeeded on Windows / Node
+  v24.19.0: install 185,717 ms, isolated release smoke 7,112 ms, production-only
+  rebuild 45,410 ms, rebuilt smoke 8,008 ms. The tested ZIP SHA-256 was
+  `f7b4be64a1787a3a15318840a9dfa09a9bbe2ea69ff432e0b84912ba2191461c`.
+  That snapshot preceded the canonical-settings-root change; the updated source
+  was independently rebuilt and passed release smoke and telemetry API tests.
+  Subsequent package verification is not a second cold install. Temp install
+  cleanup completed and free disk returned to approximately 3.3 GB.
+- Read-only load smoke against the existing live port 3901 process: 100 requests,
+  concurrency 12, zero failures, p50 392 ms, p95 2,363 ms, max 5,190 ms, RSS
+  107.5 -> 125.8 MB. This is not a load test of a restarted/new backend version,
+  not a long-duration leak test and not browser-rendering memory measurement.
+- Further successful regression checks: configuration root ownership, persistence
+  and dotenv isolation; provider settings runtime synchronization; log redaction;
+  credential origin binding; completed-call metric ordering; runtime offline and
+  recovery; dependency/archive closure and known-pattern history audit (13 commits,
+  325 historical paths, zero matches; still not an entropy scan).

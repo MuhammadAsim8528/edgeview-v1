@@ -1,28 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { config as loadDotEnv } from 'dotenv';
-import { isTestProcess } from './db_paths';
+import { getProjectRoot, isTestProcess } from './db_paths';
 import { assertSafeHeaderValue } from './utils/header_encoder';
 
-// Project root resolved from this module's own location so the canonical
-// config.json is found even when the server/UI is launched from a different
-// working directory (previously keys appeared "lost" because the path was
-// derived from process.cwd() only).
-function findRepoRoot(): string {
-  const starts = [process.cwd(), process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : ''].filter(Boolean);
-  for (const start of starts) {
-    let current = path.resolve(start);
-    while (true) {
-      if (fs.existsSync(path.join(current, 'package.json'))) return current;
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-  return process.cwd();
-}
-
-const REPO_ROOT = findRepoRoot();
+// Use the same validated, executable-first root as databases and health identity.
+// An unrelated working directory must not supply credentials or receive saves.
+const REPO_ROOT = getProjectRoot();
 
 // Optionally load a local .env (AI Studio secrets / local dev). Never overrides
 // already-exported environment variables and never breaks startup if absent.
@@ -35,8 +19,7 @@ try {
 // Canonical write target for API-key config. Precedence:
 //   1. EDGEVIEW_CONFIG env override (any mode; tests use this for isolation)
 //   2. test processes -> .test-cache/config.json (NEVER the production file)
-//   3. repo-root config.json (stable across cwd), falling back to cwd for
-//      existing deployments, then repo-root as the create target.
+//   3. validated application-root config.json (stable across cwd).
 export function getConfigPath(): string {
   const override = process.env.EDGEVIEW_CONFIG;
   if (override && override.trim()) {
@@ -46,29 +29,13 @@ export function getConfigPath(): string {
     const dir = process.env.EDGEVIEW_TEST_DB_DIR || path.join(process.cwd(), '.test-cache');
     return path.join(dir, 'config.json');
   }
-  const rootConfig = path.join(REPO_ROOT, 'config.json');
-  if (fs.existsSync(rootConfig)) return rootConfig;
-  const cwdConfig = path.join(process.cwd(), 'config.json');
-  if (fs.existsSync(cwdConfig)) return cwdConfig;
-  return rootConfig;
+  return path.join(REPO_ROOT, 'config.json');
 }
 
-// Read target: prefer the resolved config; if it does not exist yet, fall back
-// to an existing production config so existing behavior (and existing test
-// suites that rely on configured provider keys) keeps working. Writes ALWAYS
-// go through getConfigPath(), so a test process can never write production.
+// Reads and writes share one canonical target. Missing files never fall through
+// to an unrelated cwd or another installation's credentials.
 function configReadPath(): string {
-  const primary = getConfigPath();
-  if (fs.existsSync(primary)) return primary;
-  // Test processes must never fall through to a production config merely
-  // because their isolated config has not been created yet. Environment-only
-  // test configuration remains available through getAppSettings().
-  if (isTestProcess()) return primary;
-  const rootConfig = path.join(REPO_ROOT, 'config.json');
-  if (rootConfig !== primary && fs.existsSync(rootConfig)) return rootConfig;
-  const cwdConfig = path.join(process.cwd(), 'config.json');
-  if (cwdConfig !== primary && fs.existsSync(cwdConfig)) return cwdConfig;
-  return primary;
+  return getConfigPath();
 }
 
 export interface AppSettings {

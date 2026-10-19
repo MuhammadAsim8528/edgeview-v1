@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-config-root-'));
+try {
+  const app = path.join(root, 'application');
+  const unrelated = path.join(root, 'unrelated');
+  fs.mkdirSync(app); fs.mkdirSync(unrelated);
+  fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify({ name: 'edgeview', type: 'module' }));
+  fs.writeFileSync(path.join(unrelated, 'package.json'), JSON.stringify({ name: 'other-app' }));
+  const unrelatedConfig = path.join(unrelated, 'config.json');
+  fs.writeFileSync(unrelatedConfig, JSON.stringify({ serper_api_key: 'synthetic-wrong-root' }));
+  fs.writeFileSync(path.join(unrelated, '.env'), 'SERPER_API_KEY=synthetic-wrong-dotenv\n');
+  const fixture = path.join(app, 'verify.mjs');
+  const settingsUrl = new URL('../settings.ts', import.meta.url).href;
+  fs.writeFileSync(fixture, `import assert from 'node:assert/strict';
+    import fs from 'node:fs';
+    const { getConfigPath, getAppSettings, saveAppSettings } = await import(${JSON.stringify(settingsUrl)});
+    assert.equal(getConfigPath(), ${JSON.stringify(path.join(app, 'config.json'))});
+    assert.equal(getAppSettings().serper_api_key, '');
+    saveAppSettings({ serper_api_key: 'synthetic-canonical-root' });
+    assert.equal(getAppSettings().serper_api_key, 'synthetic-canonical-root');
+    assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(unrelatedConfig)}, 'utf8')).serper_api_key, 'synthetic-wrong-root');
+    console.log('canonical-root');`);
+  const env = { ...process.env, NODE_ENV: 'production' };
+  for (const key of ['EDGEVIEW_TEST_MODE', 'EDGEVIEW_CONFIG', 'SERPER_API_KEY']) delete env[key];
+  const result = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fixture], { cwd: unrelated, env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'canonical-root');
+  console.log('PASS configuration ignores unrelated cwd credentials and writes only to application root');
+} finally { fs.rmSync(root, { recursive: true, force: true }); }

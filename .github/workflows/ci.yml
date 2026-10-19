@@ -22,11 +22,13 @@ jobs:
       - run: npm run lint
       - run: node scripts/audit-git-secrets.mjs
       - run: node scripts/build-recovery.test.mjs
+      - run: node scripts/ensure-dependencies.test.mjs
       - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
+      - run: node --import tsx server/tests/config_root_ownership.test.ts
       - run: node --import tsx server/tests/runtime_log_security.test.ts
       - run: node --import tsx server/tests/telemetry_presentation.test.ts
       - run: node --import tsx server/tests/provider_metrics_order.test.ts
