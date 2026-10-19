@@ -47,6 +47,32 @@ try {
   const indexLines = fs.readFileSync(identityIndex, 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line));
   assert.equal(indexLines.some(item => item.id === run.id), true, 'identity index must contain the persisted run');
 
+  assert.throws(() => persistV1Run(run), /Immutable run already exists/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(finalPath, 'utf8')), run, 'duplicate identity cannot displace the original');
+  const originalWrite = fs.writeFileSync;
+  try {
+    fs.writeFileSync = ((file: any, ...args: any[]) => {
+      if (typeof file === 'number') {
+        fs.writeSync(file, '{"interrupted":');
+        const error = new Error('Controlled disk-full failure');
+        (error as any).code = 'ENOSPC';
+        throw error;
+      }
+      return (originalWrite as any)(file, ...args);
+    }) as typeof fs.writeFileSync;
+    assert.throws(() => persistV1Run({ ...run, id: 'run-interrupted-write' }), /disk-full/);
+  } finally { fs.writeFileSync = originalWrite; }
+  assert.equal(fs.existsSync(path.join(tempRoot, 'run-interrupted-write.json')), false);
+  assert.equal(fs.readFileSync(identityIndex, 'utf8').includes('run-interrupted-write'), false);
+  const originalRename = fs.renameSync;
+  try {
+    fs.renameSync = (() => { throw new Error('Controlled promotion failure'); }) as typeof fs.renameSync;
+    assert.throws(() => persistV1Run({ ...run, id: 'run-interrupted-promotion' }), /promotion failure/);
+  } finally { fs.renameSync = originalRename; }
+  assert.equal(fs.existsSync(path.join(tempRoot, 'run-interrupted-promotion.json')), false);
+  assert.equal(fs.readFileSync(identityIndex, 'utf8').includes('run-interrupted-promotion'), false);
+  assert.deepEqual(fs.readdirSync(tempRoot).filter(name => name.endsWith('.tmp')), []);
+
   console.log('PASS V1 atomic immutable run persistence');
 } finally {
   delete process.env.EDGEVIEW_V1_DATA_DIR;

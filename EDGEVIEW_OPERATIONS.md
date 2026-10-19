@@ -86,6 +86,20 @@ The distributable ZIP is not a data backup because sensitive configuration and r
 
 Run `npm run backup` from the installed source folder for a non-overwriting snapshot with a SHA-256 manifest. Large evidence histories can make this operation take several minutes; it streams hashes and does not load entire evidence files into memory. A folder prefixed `INCOMPLETE-` is not a valid backup and must not be used for restore.
 
+### Evidence audit and quarantine
+
+From the source checkout, `node --max-old-space-size=384 --import tsx scripts/maintain-v1-evidence.ts`
+performs a read-only JSON/identity audit, one run file at a time. It does not verify
+every referenced compressed blob and does not move or rewrite evidence.
+
+After stopping EdgeView, append `--quarantine` to move zero-byte, invalid-JSON or
+invalid-identity runs into a unique `data/v1-runs/quarantine/` folder. A manifest
+records each source filename, byte size, SHA-256, reason and move state; damaged
+files remain recoverable there. The operation rebuilds the derived identity index
+only from readable runs. It refuses apply mode while the backend lock exists.
+If interrupted, inspect the planned manifest mappings and source/destination
+files before recovery. Never delete quarantine material as part of routine cleanup.
+
 ## Diagnostics and logs
 
 The Settings diagnostics panel is intentionally passive until the user selects the provider test action. Merely opening Settings does not spend search credits. `UNKNOWN` means a provider is configured but has not been verified in this process; it is not an error and is not reported as healthy. `RATE_LIMITED` is distinct from `AUTH_FAILED`.

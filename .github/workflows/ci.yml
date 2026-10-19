@@ -11,6 +11,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -18,9 +20,15 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
+      - run: node scripts/audit-git-secrets.mjs
       - run: node scripts/build-recovery.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
+      - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
+      - run: node --import tsx server/tests/config_persistence_safety.test.ts
+      - run: node --import tsx server/tests/runtime_log_security.test.ts
+      - run: node --import tsx server/tests/dotenv_test_isolation.test.ts
+      - run: node --import tsx server/tests/v1_evidence_maintenance.test.ts
       - run: node --import tsx server/tests/raw_trade_warehouse.test.ts
       - run: node --import tsx server/tests/historical_evidence_preservation.test.ts
       - run: node scripts/verify-release-graph.mjs

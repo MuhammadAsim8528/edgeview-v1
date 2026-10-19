@@ -65,4 +65,46 @@ Their existence does not by itself prove every attached requirement complete.
 - Rebuilt production and reran the isolated release smoke after these changes:
   PASS. Live restart and rendered browser QA remain blocked as described above.
 
+## Credential and provider cleanup continuation
+
+- Removed save/reset synchronization into `process.env`. Both settings readers
+  now honor explicit empty credential values. Tests prove immediate reload,
+  startup-environment fallback for absent keys, no saved-key child inheritance,
+  and no reset resurrection.
+- Redaction now covers runtime files, console sinks and log API, including Groq
+  underscore prefixes, Bearer/Basic authorization and cookies. Synthetic-marker
+  regression passes; no live credentials were used by these tests.
+- Archived source context and the unused Apify adapter in the separate local
+  `.archive/edgeview-retired-provider-source-2026-10-19.zip`; hashes and reasons are
+  recorded in `RETIRED_PROVIDER_SOURCE.json`. Removed the unpacked adapter and five
+  unused provider-test functions. Settings credential fields remain recoverable.
+- Dependency verification now checks this supplemental archive, forbids those
+  retired exports, and rejects retired-provider transport hosts in both bundles.
+  Current closure is 35 backend inputs and 29 frontend inputs.
+- Expanded the deferred licensing design with issuer rotation, offline revocation
+  limits, clock recovery, minimal device inputs and pre-activation acceptance tests.
+- Test-mode settings no longer load a local `.env`; an isolated subprocess fixture
+  verifies this boundary without reading the production dotenv file.
+- A bounded Git history pattern gate scanned 10 available commits and 303 historical
+  paths with zero prohibited state paths and zero known credential/private-key
+  pattern file matches. It does not cover unavailable pre-baseline history or
+  replace an entropy-based scanner. CI fetches full history before running it.
+- Expanded immutable persistence tests with partial-write ENOSPC and promotion
+  failure injection. They prove no incomplete final file/index entry is published.
+  Duplicate run IDs now raise a conflict without moving the prior immutable file.
+- Added read-only evidence maintenance and explicit offline quarantine/index
+  rebuild. Tests simulate successful and interrupted quarantine and prove each
+  artifact remains recoverable and valid bytes remain unchanged.
+- The actual read-only maintenance pass examined all 5,810 final run JSON files,
+  totaling 2,402,248,597 bytes, with zero invalid syntax/identity records. It moved
+  nothing and did not rebuild the index. Peak audit-process RSS was 407.922 MiB.
+  This pass does not verify every blob hash; do not interpret it as full evidence
+  or contact correctness verification.
+- Current public `/api/settings/test` checks on 2026-10-19: Serper success
+  (2,347 ms), NVIDIA success (363 ms), Groq success (718 ms). Hunter was configured
+  but disabled and was not called. Timings are local API round trips, not isolated
+  upstream timings. NVIDIA/Groq checks validate model-list/auth access, not a fresh
+  inference/enrichment run. The live process is still the existing installation;
+  these checks do not prove the newly built backend has been deployed.
+
 No claim of release completion or broad production readiness is made.

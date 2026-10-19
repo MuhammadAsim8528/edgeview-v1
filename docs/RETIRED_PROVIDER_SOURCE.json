@@ -1,0 +1,28 @@
+{
+  "archive": ".archive/edgeview-retired-provider-source-2026-10-19.zip",
+  "archive_sha256": "11b79fae8889940893c1fc2d04923056045c5672a70cd8b4696977cf090e8925",
+  "files": [
+    {
+      "path": "server/settings.ts",
+      "bytes": 20924,
+      "sha256": "fd7785f0dbece5b23565ca521ab8a1db1747d158812e48b94f6d20a62188e29b",
+      "description": "Complete source context before retiring five unused provider test functions; active settings code remains.",
+      "reason": "Public V1 routes allow only Serper, Hunter, NVIDIA and Groq; these retired implementations have no supported caller."
+    },
+    {
+      "path": "server/apify.ts",
+      "bytes": 5618,
+      "sha256": "140ddb9fc420ada8887e7b4728fefd1b16f317c9cae1bce06be64cf949cafab0",
+      "description": "Unused Apify adapter retained through the settings import.",
+      "reason": "Public V1 routes allow only Serper, Hunter, NVIDIA and Groq; these retired implementations have no supported caller."
+    }
+  ],
+  "retired_symbols": [
+    "testTavilyKey",
+    "testExaKey",
+    "testLinkupKey",
+    "testFirecrawlKey",
+    "testApifyKey"
+  ],
+  "note": "Supplement to the separately verified 148-file pre-V1 archive. settings.ts is context, not a file to remove."
+}

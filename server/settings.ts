@@ -27,7 +27,7 @@ const REPO_ROOT = findRepoRoot();
 // Optionally load a local .env (AI Studio secrets / local dev). Never overrides
 // already-exported environment variables and never breaks startup if absent.
 try {
-  loadDotEnv({ path: path.join(REPO_ROOT, '.env'), quiet: true, override: false });
+  if (!isTestProcess()) loadDotEnv({ path: path.join(REPO_ROOT, '.env'), quiet: true, override: false });
 } catch {
   // .env is optional.
 }
@@ -174,16 +174,16 @@ export function getAppSettings(): AppSettings {
         return migrateDeprecatedNvidiaModels({
           ...DEFAULT_SETTINGS,
           ...parsed,
-          serper_api_key: parsed.serper_api_key || process.env.SERPER_API_KEY || '',
-          firecrawl_api_key: parsed.firecrawl_api_key || process.env.FIRECRAWL_API_KEY || '',
-          nvidia_api_key: parsed.nvidia_api_key || process.env.NVIDIA_API_KEY || '',
-          groq_api_key: parsed.groq_api_key || process.env.GROQ_API_KEY || '',
-          hunter_api_key: parsed.hunter_api_key || process.env.HUNTER_API_KEY || '',
-          tavily_api_key: parsed.tavily_api_key || process.env.TAVILY_API_KEY || '',
-          exa_api_key: parsed.exa_api_key || process.env.EXA_API_KEY || '',
-          linkup_api_key: parsed.linkup_api_key || process.env.LINKUP_API_KEY || '',
-          apify_api_key: parsed.apify_api_key || process.env.APIFY_API_KEY || '',
-          gemini_api_key: parsed.gemini_api_key || process.env.GEMINI_API_KEY || '',
+          serper_api_key: parsed.serper_api_key ?? process.env.SERPER_API_KEY ?? '',
+          firecrawl_api_key: parsed.firecrawl_api_key ?? process.env.FIRECRAWL_API_KEY ?? '',
+          nvidia_api_key: parsed.nvidia_api_key ?? process.env.NVIDIA_API_KEY ?? '',
+          groq_api_key: parsed.groq_api_key ?? process.env.GROQ_API_KEY ?? '',
+          hunter_api_key: parsed.hunter_api_key ?? process.env.HUNTER_API_KEY ?? '',
+          tavily_api_key: parsed.tavily_api_key ?? process.env.TAVILY_API_KEY ?? '',
+          exa_api_key: parsed.exa_api_key ?? process.env.EXA_API_KEY ?? '',
+          linkup_api_key: parsed.linkup_api_key ?? process.env.LINKUP_API_KEY ?? '',
+          apify_api_key: parsed.apify_api_key ?? process.env.APIFY_API_KEY ?? '',
+          gemini_api_key: parsed.gemini_api_key ?? process.env.GEMINI_API_KEY ?? '',
         });
       }
     }
@@ -214,16 +214,16 @@ export function getAppSettingsFromPath(filePath: string): AppSettings {
   return migrateDeprecatedNvidiaModels({
     ...DEFAULT_SETTINGS,
     ...parsed,
-    serper_api_key: parsed.serper_api_key || process.env.SERPER_API_KEY || '',
-    firecrawl_api_key: parsed.firecrawl_api_key || process.env.FIRECRAWL_API_KEY || '',
-    nvidia_api_key: parsed.nvidia_api_key || process.env.NVIDIA_API_KEY || '',
-    groq_api_key: parsed.groq_api_key || process.env.GROQ_API_KEY || '',
-    hunter_api_key: parsed.hunter_api_key || process.env.HUNTER_API_KEY || '',
-    tavily_api_key: parsed.tavily_api_key || process.env.TAVILY_API_KEY || '',
-    exa_api_key: parsed.exa_api_key || process.env.EXA_API_KEY || '',
-    linkup_api_key: parsed.linkup_api_key || process.env.LINKUP_API_KEY || '',
-    apify_api_key: parsed.apify_api_key || process.env.APIFY_API_KEY || '',
-    gemini_api_key: parsed.gemini_api_key || process.env.GEMINI_API_KEY || '',
+    serper_api_key: parsed.serper_api_key ?? process.env.SERPER_API_KEY ?? '',
+    firecrawl_api_key: parsed.firecrawl_api_key ?? process.env.FIRECRAWL_API_KEY ?? '',
+    nvidia_api_key: parsed.nvidia_api_key ?? process.env.NVIDIA_API_KEY ?? '',
+    groq_api_key: parsed.groq_api_key ?? process.env.GROQ_API_KEY ?? '',
+    hunter_api_key: parsed.hunter_api_key ?? process.env.HUNTER_API_KEY ?? '',
+    tavily_api_key: parsed.tavily_api_key ?? process.env.TAVILY_API_KEY ?? '',
+    exa_api_key: parsed.exa_api_key ?? process.env.EXA_API_KEY ?? '',
+    linkup_api_key: parsed.linkup_api_key ?? process.env.LINKUP_API_KEY ?? '',
+    apify_api_key: parsed.apify_api_key ?? process.env.APIFY_API_KEY ?? '',
+    gemini_api_key: parsed.gemini_api_key ?? process.env.GEMINI_API_KEY ?? '',
   });
 }
 
@@ -315,17 +315,8 @@ export function saveAppSettings(settings: Partial<AppSettings>): AppSettings {
 
   try {
     atomicWriteJson(getConfigPath(), updated);
-    // Sync with environment variables
-    process.env.SERPER_API_KEY = updated.serper_api_key;
-    process.env.FIRECRAWL_API_KEY = updated.firecrawl_api_key;
-    process.env.NVIDIA_API_KEY = updated.nvidia_api_key;
-    process.env.GROQ_API_KEY = updated.groq_api_key;
-    process.env.HUNTER_API_KEY = updated.hunter_api_key;
-    process.env.TAVILY_API_KEY = updated.tavily_api_key;
-    process.env.EXA_API_KEY = updated.exa_api_key;
-    process.env.LINKUP_API_KEY = updated.linkup_api_key;
-    process.env.APIFY_API_KEY = updated.apify_api_key;
-    process.env.GEMINI_API_KEY = updated.gemini_api_key;
+    // Runtime consumers reload the canonical settings; saved secrets must not
+    // be copied into process.env and inherited by unrelated child processes.
   } catch (err) {
     console.error('Error saving config.json:', err);
     throw err;
@@ -338,16 +329,6 @@ export function resetAppSettings(): AppSettings {
   try {
     backupConfigForReset();
     atomicWriteJson(getConfigPath(), DEFAULT_SETTINGS);
-    process.env.SERPER_API_KEY = DEFAULT_SETTINGS.serper_api_key;
-    process.env.FIRECRAWL_API_KEY = DEFAULT_SETTINGS.firecrawl_api_key;
-    process.env.NVIDIA_API_KEY = DEFAULT_SETTINGS.nvidia_api_key;
-    process.env.GROQ_API_KEY = DEFAULT_SETTINGS.groq_api_key;
-    process.env.HUNTER_API_KEY = DEFAULT_SETTINGS.hunter_api_key;
-    process.env.TAVILY_API_KEY = DEFAULT_SETTINGS.tavily_api_key;
-    process.env.EXA_API_KEY = DEFAULT_SETTINGS.exa_api_key;
-    process.env.LINKUP_API_KEY = DEFAULT_SETTINGS.linkup_api_key;
-    process.env.APIFY_API_KEY = DEFAULT_SETTINGS.apify_api_key;
-    process.env.GEMINI_API_KEY = DEFAULT_SETTINGS.gemini_api_key;
   } catch (err) {
     console.error('Error resetting config.json:', err);
     throw err;
@@ -373,75 +354,6 @@ export async function testHunterKey(key: string): Promise<{ success: boolean; me
     }
   } catch (err: any) {
     return { success: false, message: err?.message || 'Failed to connect to Hunter API' };
-  }
-}
-
-export async function testTavilyKey(key: string): Promise<{ success: boolean; message: string }> {
-  if (!key || !key.trim()) return { success: false, message: 'Tavily API Key is empty' };
-  try {
-    const res = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: key.trim(), query: 'test', max_results: 1 })
-    });
-    if (res.status === 200) {
-      return { success: true, message: 'Tavily API key connection verified!' };
-    } else if (res.status === 401 || res.status === 403) {
-      return { success: false, message: 'Invalid Tavily API Key (Unauthorized)' };
-    } else {
-      const data = await res.json().catch(() => ({}));
-      return { success: false, message: data.detail || `Tavily API returned status ${res.status}` };
-    }
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Tavily API' };
-  }
-}
-
-export async function testExaKey(key: string): Promise<{ success: boolean; message: string }> {
-  if (!key || !key.trim()) return { success: false, message: 'Exa API Key is empty' };
-  try {
-    const res = await fetch('https://api.exa.ai/search', {
-      method: 'POST',
-      headers: {
-        'x-api-key': assertSafeHeaderValue(key.trim(), 'Exa API key'),
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query: 'test', numResults: 1 })
-    });
-    if (res.status === 200) {
-      return { success: true, message: 'Exa API key connection verified!' };
-    } else if (res.status === 401 || res.status === 403) {
-      return { success: false, message: 'Invalid Exa API Key (Unauthorized)' };
-    } else {
-      const data = await res.json().catch(() => ({}));
-      return { success: false, message: data.error || `Exa API returned status ${res.status}` };
-    }
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Exa API' };
-  }
-}
-
-export async function testLinkupKey(key: string): Promise<{ success: boolean; message: string }> {
-  if (!key || !key.trim()) return { success: false, message: 'Linkup API Key is empty' };
-  try {
-    const res = await fetch('https://api.linkup.so/v1/search', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${assertSafeHeaderValue(key.trim(), 'Linkup API key')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ q: 'test', depth: 'fast', outputType: 'searchResults' })
-    });
-    if (res.status === 200) {
-      return { success: true, message: 'Linkup API key connection verified!' };
-    } else if (res.status === 401 || res.status === 403) {
-      return { success: false, message: 'Invalid Linkup API Key (Unauthorized)' };
-    } else {
-      const data = await res.json().catch(() => ({}));
-      return { success: false, message: data.message || `Linkup API returned status ${res.status}` };
-    }
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Linkup API' };
   }
 }
 
@@ -476,40 +388,6 @@ export async function testSerperKey(key: string): Promise<{ success: boolean; me
   }
 }
 
-export async function testFirecrawlKey(key: string): Promise<{ success: boolean; message: string }> {
-  if (!key || !key.trim()) {
-    return { success: false, message: 'Firecrawl API Key is empty' };
-  }
-
-  try {
-    const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${assertSafeHeaderValue(key.trim(), 'Firecrawl API key')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ url: 'https://example.com' }),
-    });
-
-    if (res.status === 200) {
-      return { success: true, message: 'Firecrawl API key connection verified!' };
-    } else if (res.status === 401 || res.status === 403) {
-      return { success: false, message: 'Invalid Firecrawl API Key (Unauthorized)' };
-    } else {
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 402) {
-        return { success: true, message: 'Firecrawl API key valid (out of credits or tier limit)' };
-      }
-      return {
-        success: false,
-        message: data.error || `Firecrawl API returned status ${res.status}`,
-      };
-    }
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Firecrawl API' };
-  }
-}
-
 import { NvidiaProvider, GroqProvider } from './ai_providers';
 
 export async function testNvidiaKey(key: string, model: string, baseUrl?: string): Promise<{ success: boolean; message: string }> {
@@ -521,13 +399,5 @@ export async function testNvidiaKey(key: string, model: string, baseUrl?: string
 export async function testGroqKey(key: string, model: string): Promise<{ success: boolean; message: string }> {
   if (!key || !key.trim()) return { success: false, message: 'Groq API Key is empty' };
   const res = await GroqProvider.testConnection(key, model);
-  return { success: res.success, message: res.message };
-}
-
-import { ApifyProvider } from './apify';
-
-export async function testApifyKey(key: string): Promise<{ success: boolean; message: string }> {
-  if (!key || !key.trim()) return { success: false, message: 'Apify API token is empty' };
-  const res = await ApifyProvider.testConnection(key);
   return { success: res.success, message: res.message };
 }

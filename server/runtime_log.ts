@@ -9,10 +9,11 @@ let installed = false;
 
 function redact(value: string): string {
   return value
-    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,"'}]+/gi, '$1[REDACTED]')
+    .replace(/((?:proxy-)?authorization["']?\s*[:=]\s*["']?)(?:[A-Za-z]+\s+)?[^\s,"'}]+/gi, '$1[REDACTED]')
+    .replace(/((?:set-cookie|cookie)["']?\s*[:=]\s*)[^\r\n]+/gi, '$1[REDACTED_COOKIE]')
     .replace(/((?:api[_-]?key|access[_-]?token|password|secret|token)\s*["']?\s*[:=]\s*["']?)[^\s,"'}&]+/gi, '$1[REDACTED]')
     .replace(/([?&](?:api_key|key|token|access_token)=)[^&\s]+/gi, '$1[REDACTED]')
-    .replace(/\b(?:sk|gsk|nvapi)-[A-Za-z0-9_.-]{12,}\b/g, '[REDACTED_KEY]');
+    .replace(/\b(?:sk-|gsk[-_]|nvapi[-_]|tvly[-_]|apify_api_|fc-)[A-Za-z0-9_.-]{12,}\b/g, '[REDACTED_KEY]');
 }
 
 function rotateIfNeeded(extraBytes: number): void {
@@ -47,9 +48,12 @@ export function installRuntimeLogging(projectRoot: string): string {
   runtimeLogPath = path.join(projectRoot, 'logs', 'edgeview_runtime.log');
   fs.mkdirSync(path.dirname(runtimeLogPath), { recursive: true });
   const original = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
-  console.log = (...args: unknown[]) => { append('INFO', args); original.log(...args); };
-  console.warn = (...args: unknown[]) => { append('WARNING', args); original.warn(...args); };
-  console.error = (...args: unknown[]) => { append('ERROR', args); original.error(...args); };
+  // The launcher may capture stdout/stderr in separate files. Those sinks need
+  // the same redaction as the structured runtime file.
+  const printable = (args: unknown[]) => redact(args.map(serializeArg).join(' ')).slice(0, 16_000);
+  console.log = (...args: unknown[]) => { append('INFO', args); original.log(printable(args)); };
+  console.warn = (...args: unknown[]) => { append('WARNING', args); original.warn(printable(args)); };
+  console.error = (...args: unknown[]) => { append('ERROR', args); original.error(printable(args)); };
   installed = true;
   append('INFO', [{ event: 'runtime_logging_started', max_bytes: MAX_LOG_BYTES, archives: MAX_ARCHIVES }]);
   return runtimeLogPath;
@@ -69,7 +73,9 @@ export function readRuntimeLogs(limit = 500): Array<{ id: string; timestamp: str
   return lines.map((line, index) => {
     try {
       const entry = JSON.parse(line);
-      let message = String(entry.message || 'Runtime event');
+      // Older files may predate the current redaction rules. Enforce the
+      // boundary again when returning historical entries to the frontend.
+      let message = redact(String(entry.message || 'Runtime event'));
       let subsystem = 'API';
       let details: string | undefined;
       try {

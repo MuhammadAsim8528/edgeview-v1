@@ -36,8 +36,13 @@ registered CVE identifiers or verified severity.
   isolation boundary and encryption alone would not isolate that account.
 - Dynamic imports of local bundled code do not require browser subresource
   integrity. A compromised application file requires a broader integrity model.
-- Process environment synchronization and launcher/path trust still require
+- Process-environment synchronization has now been removed. Isolated tests prove
+  immediate settings reload, no saved-key inheritance by a child, and no reset
+  resurrection from a startup environment value. Launcher/path trust still needs
   separate evaluation; this document does not mark the whole report resolved.
+- Console sinks now use the same redaction as the runtime file. Tests cover key
+  prefixes, credential fields, Bearer/Basic authorization, cookies and query keys
+  across the runtime file, captured console outputs and log API.
 
 ## Verification
 

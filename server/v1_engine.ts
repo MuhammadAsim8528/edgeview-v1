@@ -198,6 +198,12 @@ function summarize(run: V1Run): V1RunSummary {
 export function persistV1Run(run: V1Run) {
   fs.mkdirSync(dataDir, { recursive: true });
   const target = runPath(run.id);
+  if (!/^run-[a-z0-9-]+$/i.test(run.id)) throw new Error('Invalid immutable run identity.');
+  if (fs.existsSync(target)) {
+    const error = new Error('Immutable run already exists; a refresh requires a new run identity.');
+    (error as Error & { code: string }).code = 'RUN_IMMUTABLE_CONFLICT';
+    throw error;
+  }
   const temp = path.join(dataDir, `.${run.id}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   const persistedRun = externalizeV1RunForStorage(run as any, dataDir);
   const payload = JSON.stringify(persistedRun, null, 2);
@@ -212,9 +218,8 @@ export function persistV1Run(run: V1Run) {
     fs.closeSync(handle);
     handle = undefined;
 
-    // Run IDs are expected to be unique. Preserve any unexpected prior file as
-    // immutable forensic evidence before promoting the complete temp payload.
-    if (fs.existsSync(target)) fs.renameSync(target, `${target}.immutable.${Date.now()}`);
+    // The single backend writer and unique run IDs protect promotion. Never
+    // move an existing immutable final file aside to replace it.
     fs.renameSync(temp, target);
 
     // Derived metrics/caches/indexes are updated only after the final run file

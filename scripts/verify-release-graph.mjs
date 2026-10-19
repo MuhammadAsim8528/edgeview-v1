@@ -14,6 +14,9 @@ const graphs = {};
 for (const [name, entry, platform] of [['backend','server.ts','node'], ['frontend','src/main.tsx','browser']]) {
   const result = await build({ entryPoints: [entry], bundle: true, platform, packages: 'external',
     write: false, metafile: true, logLevel: 'silent', format: 'esm', loader: { '.css': 'empty' } });
+  for (const host of ['api.apify.com','api.firecrawl.dev','api.tavily.com','api.exa.ai','api.linkup.so']) {
+    if (result.outputFiles.some(file => file.text.includes(host))) throw new Error(`Retired provider transport remains in ${name}: ${host}`);
+  }
   const inputs = Object.keys(result.metafile.inputs).map(file => file.replace(/\\/g, '/')).sort();
   for (const file of inputs.filter(file => /\.[cm]?[jt]sx?$/.test(file))) {
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -51,7 +54,24 @@ if (fs.existsSync(archivePath)) {
   }
   archive = { verified: true, files: retired.length, sha256: digest };
 }
-const report = { generated_at: new Date().toISOString(), ...graphs, retired_inputs: 0, archive,
+const supplement = JSON.parse(fs.readFileSync('docs/RETIRED_PROVIDER_SOURCE.json', 'utf8'));
+if (fs.existsSync('server/apify.ts')) throw new Error('Retired Apify source was restored.');
+const settingsSource = fs.readFileSync('server/settings.ts', 'utf8');
+for (const symbol of supplement.retired_symbols) {
+  if (settingsSource.includes(`function ${symbol}(`)) throw new Error(`Retired provider test restored: ${symbol}`);
+}
+let supplementalArchiveVerified = false;
+if (fs.existsSync(supplement.archive)) {
+  const bytes = fs.readFileSync(supplement.archive);
+  if (crypto.createHash('sha256').update(bytes).digest('hex') !== supplement.archive_sha256) throw new Error('Supplemental archive digest mismatch.');
+  const zip = await JSZip.loadAsync(bytes, { checkCRC32: true });
+  for (const entry of supplement.files) {
+    const content = await zip.file(entry.path)?.async('nodebuffer');
+    if (!content || content.length !== entry.bytes || crypto.createHash('sha256').update(content).digest('hex') !== entry.sha256) throw new Error('Supplemental archived source integrity mismatch.');
+  }
+  supplementalArchiveVerified = true;
+}
+const report = { generated_at: new Date().toISOString(), ...graphs, retired_inputs: 0, archive, supplemental_archive_verified: supplementalArchiveVerified,
   note: 'esbuild dependency closure including literal dynamic imports; CSS excluded from source line count. No runtime data read.' };
 fs.writeFileSync('docs/ACTIVE_DEPENDENCY_GRAPH.json', JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({ backend: graphs.backend.count, frontend: graphs.frontend.count, retired_inputs: 0, archive }));
