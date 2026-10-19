@@ -1,0 +1,46 @@
+node_modules/
+build/
+dist/
+coverage/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.log
+.env*
+!.env.example
+config.json
+*.db
+*.db-journal
+*.db.tmp
+*.db.corrupt*
+edgeview_db.json
+.test-cache/
+
+# Local AI-agent laboratory/state is not product source and may contain private history.
+.agent/
+.antigravity/
+
+# Agent artifacts: scratch (temporary diagnostics) and traces (logs) are transient
+.agent/scratch/
+.agent/traces/
+
+# Config backups contain API keys and must never be committed
+.agent/backups/
+.agent/packages/
+*.bak
+*.backup
+*.backup.*
+*.lock
+!package-lock.json
+!bun.lock
+*.pid
+*.err
+data/
+uploads/
+backups/
+snapshots/
+logs/
+.npm-cache/
+v1-coverage-audit.json
+.edgeview-build-backup-*/

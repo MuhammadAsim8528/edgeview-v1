@@ -1,0 +1,894 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { CompanyContact } from '../types';
+import { 
+  Bot, Sparkles, Building2, CheckSquare, Square, X, RefreshCw, 
+  Play, Pause, Sliders, AlertTriangle, Activity, CheckCircle2, 
+  Clock, ChevronDown, ChevronUp, Check, ShieldAlert
+} from 'lucide-react';
+
+interface BatchEnrichmentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  contacts: CompanyContact[];
+  refreshData?: () => void;
+}
+
+interface GovernorLimits {
+  serperMax: number;
+  firecrawlMax: number;
+  nvidiaMax: number;
+  groqMax: number;
+}
+
+interface GovernorUsage {
+  serper: number;
+  firecrawl: number;
+  nvidia: number;
+  groq: number;
+}
+
+interface CompanyResearchState {
+  id: string;
+  name: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  stage: string;
+  error?: string;
+  durationMs?: number;
+  resourceUsage: {
+    serper: number;
+    firecrawl: number;
+    nvidia: number;
+    groq: number;
+  };
+  metrics?: {
+    emailsFound: number;
+    phonesFound: number;
+    socialsFound: number;
+    leadershipFound: boolean;
+    websiteFound: boolean;
+  };
+}
+
+interface ResearchJob {
+  id: string;
+  status: 'PENDING' | 'DISCOVERING' | 'CRAWLING' | 'EXTRACTING' | 'VERIFYING' | 'COMPLETED' | 'FAILED' | 'PAUSED' | 'RESOURCE_LIMITED' | 'STOPPED';
+  importer_exporter_mode: 'importer' | 'exporter';
+  total_companies: number;
+  completed_companies: number;
+  current_company: string;
+  current_stage: string;
+  company_ids: string[];
+  company_states: Record<string, CompanyResearchState>;
+  resource_usage: {
+    serper: number;
+    firecrawl: number;
+    nvidia: number;
+    groq: number;
+  };
+  error_message?: string;
+}
+
+export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
+  isOpen,
+  onClose,
+  contacts,
+  refreshData,
+}) => {
+  const [filterType, setFilterType] = useState<'all' | 'importers' | 'exporters'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reportMode, setReportMode] = useState<'importer' | 'exporter'>('importer');
+  
+  // Job Tracking
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobData, setJobData] = useState<ResearchJob | null>(null);
+  const [historicalJobs, setHistoricalJobs] = useState<any[]>([]);
+  
+  // Governor
+  const [govStats, setGovStats] = useState<GovernorUsage>({ serper: 0, firecrawl: 0, nvidia: 0, groq: 0 });
+  const [govLimits, setGovLimits] = useState<GovernorLimits>({ serperMax: 500, firecrawlMax: 200, nvidiaMax: 1000, groqMax: 1000 });
+  
+  // View states
+  const [showGovPanel, setShowGovPanel] = useState(true);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Filter contacts
+  const filteredContacts = contacts.filter((c) => {
+    const type = (c.type || '').toLowerCase();
+    if (filterType === 'importers') return type.includes('importer') || type === 'both';
+    if (filterType === 'exporters') return type.includes('exporter') || type === 'both';
+    return true;
+  });
+
+  // Load Governor Info
+  const fetchGovernorInfo = async () => {
+    try {
+      const res = await fetch('/api/governor/stats');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setGovStats(data.stats);
+          setGovLimits(data.limits);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch governor stats', err);
+    }
+  };
+
+  // Load History of Jobs
+  const fetchHistoricalJobs = async () => {
+    try {
+      const res = await fetch('/api/enrich/jobs');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setHistoricalJobs(data.jobs);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch jobs history', err);
+    }
+  };
+
+  const reattachActiveJob = async () => {
+    try {
+      const res = await fetch('/api/enrich/job/active');
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.success || !data.job?.id) return false;
+      setJobData(data.job);
+      setReportMode(data.job.importer_exporter_mode === 'exporter' ? 'exporter' : 'importer');
+      startPolling(data.job.id);
+      return true;
+    } catch (err) {
+      console.error('Failed to restore active research job', err);
+      return false;
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    if (isOpen) {
+      fetchGovernorInfo();
+      fetchHistoricalJobs();
+      void reattachActiveJob().then((restored) => {
+        if (!restored) setSelectedIds(new Set());
+      });
+    } else {
+      stopPolling();
+    }
+    return () => stopPolling();
+  }, [isOpen]);
+
+  // Toggle selection
+  const toggleAll = () => {
+    if (selectedIds.size === filteredContacts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredContacts.map(c => c.id)));
+    }
+  };
+
+  const toggleContact = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const selectSingleCompany = () => {
+    const first = filteredContacts[0];
+    if (first) {
+      setSelectedIds(new Set([first.id]));
+    }
+  };
+
+  const selectAllImporters = () => {
+    setFilterType('importers');
+    const importers = contacts.filter(c => {
+      const type = (c.type || '').toLowerCase();
+      return type.includes('importer') || type === 'both';
+    });
+    setSelectedIds(new Set(importers.map(c => c.id)));
+  };
+
+  const selectAllExporters = () => {
+    setFilterType('exporters');
+    const exporters = contacts.filter(c => {
+      const type = (c.type || '').toLowerCase();
+      return type.includes('exporter') || type === 'both';
+    });
+    setSelectedIds(new Set(exporters.map(c => c.id)));
+  };
+
+  const selectFullEnrichment = () => {
+    setFilterType('all');
+    setSelectedIds(new Set(contacts.map(c => c.id)));
+  };
+
+  const selectSelectedImporters = () => {
+    setFilterType('importers');
+    const currentImporters = Array.from(selectedIds).filter(id => {
+      const c = contacts.find(co => co.id === id);
+      const type = (c?.type || '').toLowerCase();
+      return Boolean(c) && (type.includes('importer') || type === 'both');
+    });
+    if (currentImporters.length === 0) {
+      const importers = contacts.filter(c => {
+        const type = (c.type || '').toLowerCase();
+        return type.includes('importer') || type === 'both';
+      });
+      setSelectedIds(new Set(importers.map(c => c.id)));
+    } else {
+      setSelectedIds(new Set(currentImporters));
+    }
+  };
+
+  const selectSelectedExporters = () => {
+    setFilterType('exporters');
+    const currentExporters = Array.from(selectedIds).filter(id => {
+      const c = contacts.find(co => co.id === id);
+      const type = (c?.type || '').toLowerCase();
+      return Boolean(c) && (type.includes('exporter') || type === 'both');
+    });
+    if (currentExporters.length === 0) {
+      const exporters = contacts.filter(c => {
+        const type = (c.type || '').toLowerCase();
+        return type.includes('exporter') || type === 'both';
+      });
+      setSelectedIds(new Set(exporters.map(c => c.id)));
+    } else {
+      setSelectedIds(new Set(currentExporters));
+    }
+  };
+
+  // Start polling
+  const startPolling = (jobId: string) => {
+    stopPolling();
+    setActiveJobId(jobId);
+    
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/enrich/job/${jobId}/progress`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            const progress = data.progress;
+            const recentStates = Object.fromEntries((progress.recent_results || []).map((item: any, index: number) => [
+              `${item.name}-${index}`,
+              {
+                id: `${item.name}-${index}`,
+                name: item.name,
+                status: item.status,
+                stage: item.stage,
+                error: item.error,
+                durationMs: item.durationMs,
+                resourceUsage: { serper: 0, firecrawl: 0, nvidia: 0, groq: 0 },
+                metrics: item.metrics,
+              },
+            ]));
+            setJobData(previous => ({
+              ...(previous || {} as ResearchJob),
+              ...progress,
+              company_ids: previous?.company_ids || [],
+              company_states: recentStates,
+            }));
+            
+            // Check if job finished or hit limit
+            const status = progress.status;
+            if (['COMPLETED', 'FAILED', 'STOPPED', 'RESOURCE_LIMITED'].includes(status)) {
+              stopPolling();
+              // Trigger a background refetch on the parent to load newly enriched contacts on list
+              if (refreshData) refreshData();
+            }
+          }
+        }
+        // Also refresh governor metrics
+        fetchGovernorInfo();
+      } catch (err) {
+        console.error('Polling error', err);
+      }
+    }, 3000);
+  };
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  // Actions
+  const handleCreateAndStartJob = async (ids: string[]) => {
+    try {
+      // 1. Create Job in backend
+      const resCreate = await fetch('/api/enrich/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_ids: ids, mode: reportMode }),
+      });
+      if (!resCreate.ok) throw new Error('Failed to create research job');
+      const createData = await resCreate.json();
+      if (!createData.success) throw new Error(createData.error || 'Failed to create job');
+
+      const jobId = createData.jobId;
+      setActiveJobId(jobId);
+
+      // 2. Start Job execution
+      const resStart = await fetch(`/api/enrich/job/${jobId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceFetch: false }),
+      });
+      if (!resStart.ok) throw new Error('Failed to start research job');
+
+      // 3. Start Polling
+      startPolling(jobId);
+    } catch (err: any) {
+      alert(err.message || 'Error occurred starting job');
+    }
+  };
+
+  const handlePauseJob = async () => {
+    if (!activeJobId) return;
+    try {
+      const res = await fetch(`/api/enrich/job/${activeJobId}/stop`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        // Stop polling locally, retrieve final status
+        stopPolling();
+        // Refresh one last time to capture exact checkpoint
+        const resJob = await fetch(`/api/enrich/job/${activeJobId}`);
+        if (resJob.ok) {
+          const data = await resJob.json();
+          if (data.success) {
+            setJobData(data.job);
+          }
+        }
+        if (refreshData) refreshData();
+      }
+    } catch (err) {
+      console.error('Failed to stop/pause job', err);
+    }
+  };
+
+  const handleResumeJob = async () => {
+    if (!activeJobId) return;
+    try {
+      const res = await fetch(`/api/enrich/job/${activeJobId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceFetch: false }),
+      });
+      if (res.ok) {
+        startPolling(activeJobId);
+      }
+    } catch (err) {
+      console.error('Failed to resume job', err);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  // Compute percentages for Governor progress bars
+  const percentSerper = Math.min(100, Math.round((govStats.serper / govLimits.serperMax) * 100));
+  const percentFirecrawl = Math.min(100, Math.round((govStats.firecrawl / govLimits.firecrawlMax) * 100));
+  const percentNvidia = Math.min(100, Math.round((govStats.nvidia / govLimits.nvidiaMax) * 100));
+  const percentGroq = Math.min(100, Math.round((govStats.groq / govLimits.groqMax) * 100));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
+      <div className="bg-[#121212] rounded-xl shadow-2xl w-full max-w-4xl border border-[#2d2d2d] flex flex-col max-h-[90vh]">
+        
+        {/* Header Title Bar */}
+        <div className="px-6 py-4 border-b border-[#2d2d2d] flex items-center justify-between bg-[#181818] rounded-t-xl">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-lg bg-sky-950/80 flex items-center justify-center border border-sky-800">
+              <Bot className="w-5 h-5 text-sky-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-wide">EdgeView V1 Batch Enrichment</h3>
+              <p className="text-[11px] text-[#9ca3af]">Exact identity queries, deterministic retrieval, immutable evidence, resumable progress</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose} 
+            disabled={jobData?.status === 'PENDING' || jobData?.status === 'DISCOVERING'} 
+            className="text-[#9ca3af] hover:text-white p-1 rounded-md hover:bg-[#2a2a2a] transition-colors disabled:opacity-30"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Dynamic Dual-Layout Panels (Interactive Dashboard) */}
+        <div className="flex-1 flex overflow-hidden">
+          
+          {/* LEFT AREA: Work Queue, Selection or Active Run */}
+          <div className="flex-1 flex flex-col overflow-y-auto p-5 border-r border-[#2d2d2d]">
+            
+            {activeJobId && jobData ? (
+              // ACTIVE RUN OVERVIEW
+              <div className="space-y-5">
+                <div className="flex items-center justify-between p-3 bg-[#181818] rounded-lg border border-[#2d2d2d]">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider block font-bold">ACTIVE JOB ID</span>
+                    <span className="text-xs font-mono text-white">{jobData.id}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
+                      jobData.status === 'COMPLETED' ? 'bg-[#064e3b] text-[#34d399] border-[#065f46]' :
+                      jobData.status === 'RESOURCE_LIMITED' ? 'bg-[#78350f] text-amber-400 border-[#92400e]' :
+                      ['PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING'].includes(jobData.status) ? 'bg-[#0369a1] text-sky-200 border-[#075985] animate-pulse' :
+                      'bg-[#2d2d2d] text-gray-300 border-[#404040]'
+                    }`}>
+                      {jobData.status}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Indicators */}
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1.5 text-gray-300">
+                    <span className="font-semibold flex items-center space-x-2">
+                      <Activity className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+                      <span>Processed {jobData.completed_companies} / {jobData.total_companies} Companies</span>
+                    </span>
+                    <span className="text-gray-400 font-mono text-[11px]">
+                      {Math.round((jobData.completed_companies / jobData.total_companies) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#262626] h-2.5 rounded-full overflow-hidden border border-[#3c3c3c]">
+                    <div 
+                      className="bg-sky-500 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${(jobData.completed_companies / jobData.total_companies) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Active Stage & Company Card */}
+                {['PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING'].includes(jobData.status) && (
+                  <div className="p-3 bg-sky-950/20 border border-sky-900/60 rounded-lg flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-sky-400 font-bold uppercase tracking-widest block">CURRENT EXTRACTION STEP</span>
+                      <span className="text-xs text-white font-semibold mt-0.5 block">{jobData.current_company || 'Initializing...'}</span>
+                    </div>
+                    <div className="flex items-center space-x-1.5 text-xs text-sky-300">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Stage: <span className="font-bold text-white">{jobData.current_stage || 'Planner'}</span></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Checkpoint / Resource Limit message */}
+                {jobData.status === 'RESOURCE_LIMITED' && (
+                  <div className="p-3 bg-amber-950/20 border border-amber-900/60 rounded-lg space-y-1">
+                    <div className="flex items-center space-x-1.5 text-amber-400 font-semibold text-xs">
+                      <ShieldAlert className="w-4 h-4" />
+                      <span>Checkpoint Safe Halt — Limit Reached</span>
+                    </div>
+                    <p className="text-[10px] text-amber-200/80 leading-relaxed">
+                      {jobData.error_message || 'A resource limit threshold was hit. Queue traversal has been paused and checkpointed. Please raise limits on the right side to resume safely.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Real-time individual worker table logs */}
+                <div className="space-y-2">
+                  <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Company Traversal State Registry</span>
+                  <div className="border border-[#2d2d2d] rounded-lg overflow-hidden max-h-[220px] overflow-y-auto bg-[#0c0c0c] custom-scrollbar">
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-[#181818] text-gray-400 uppercase text-[9px] tracking-wider border-b border-[#2d2d2d] sticky top-0">
+                        <tr>
+                          <th className="p-2">Company</th>
+                          <th className="p-2 text-center">Status</th>
+                          <th className="p-2 text-right">Metrics Found</th>
+                          <th className="p-2 text-right">Resources Used</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1e1e1e]">
+                        {(Object.values(jobData.company_states) as CompanyResearchState[]).map((st) => (
+                          <tr key={st.id} className="hover:bg-[#151515] transition-colors">
+                            <td className="p-2 text-white font-medium max-w-[150px] truncate">{st.name}</td>
+                            <td className="p-2 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                st.status === 'completed' ? 'bg-[#064e3b] text-emerald-300' :
+                                st.status === 'processing' ? 'bg-sky-950 text-sky-300 animate-pulse' :
+                                st.status === 'failed' ? 'bg-rose-950 text-rose-300' :
+                                'bg-[#181818] text-gray-400'
+                              }`}>
+                                {st.status === 'processing' ? st.stage : st.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-gray-300">
+                              {st.metrics ? (
+                                <div className="space-x-1.5 font-mono text-[9px]">
+                                  {st.metrics.emailsFound > 0 && <span title="Emails" className="text-emerald-400">📧 {st.metrics.emailsFound}</span>}
+                                  {st.metrics.phonesFound > 0 && <span title="Phones" className="text-sky-400">📞 {st.metrics.phonesFound}</span>}
+                                  {st.metrics.websiteFound && <span title="Website Verified" className="text-[#a855f7]">🌐 Verified</span>}
+                                </div>
+                              ) : (
+                                <span className="text-gray-600">-</span>
+                              )}
+                            </td>
+                            <td className="p-2 text-right font-mono text-[10px] text-gray-400">
+                              🔍{st.resourceUsage.serper} | 🕷️{st.resourceUsage.firecrawl} | 🤖{st.resourceUsage.nvidia + st.resourceUsage.groq}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Queue Actions (Pause/Resume/Checkpoint reset) */}
+                <div className="flex items-center space-x-3 pt-1">
+                  {['PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING'].includes(jobData.status) ? (
+                    <button
+                      onClick={handlePauseJob}
+                      className="flex-1 py-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] rounded-lg text-xs font-semibold text-white flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                    >
+                      <Pause className="w-4 h-4" />
+                      <span>Pause / Halt Traversal</span>
+                    </button>
+                  ) : (
+                    jobData.status !== 'COMPLETED' && (
+                      <button
+                        onClick={handleResumeJob}
+                        className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-xs font-semibold text-white flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                      >
+                        <Play className="w-4 h-4" />
+                        <span>Resume from Checkpoint</span>
+                      </button>
+                    )
+                  )}
+                  
+                  <button
+                    onClick={() => {
+                      stopPolling();
+                      setActiveJobId(null);
+                      setJobData(null);
+                    }}
+                    className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-xs font-medium text-white transition-colors cursor-pointer"
+                  >
+                    Back to Config
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // INITIAL QUEUE CONFIGURATION & STARTUP
+              <div className="flex flex-col h-full space-y-4">
+                
+                {/* Mode Selectors */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block mb-1">Enrichment Scope Mode</label>
+                    <select
+                      value={reportMode}
+                      onChange={(e) => setReportMode(e.target.value as any)}
+                      className="w-full bg-[#181818] border border-[#2d2d2d] rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                      <option value="importer">Importer Report Focus</option>
+                      <option value="exporter">Exporter Report Focus</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block mb-1 font-bold">List Filter</label>
+                    <div className="flex bg-[#181818] p-0.5 rounded-lg border border-[#2d2d2d]">
+                      {(['all', 'importers', 'exporters'] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setFilterType(t)}
+                          className={`flex-1 py-1 text-[10px] font-semibold rounded capitalize transition-all ${
+                            filterType === t ? 'bg-[#2d2d2d] text-white' : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6 Research Scopes & Live Estimates */}
+                <div className="bg-[#181818] border border-[#2d2d2d] rounded-lg p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className="w-4 h-4 text-sky-400" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">Configure Research Scope Presets</span>
+                    </div>
+                    {selectedIds.size > 0 && (
+                      <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/30">
+                        Est: ~{(selectedIds.size * 12 / 60).toFixed(1)}m duration
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={selectSingleCompany}
+                      className="p-2 bg-neutral-900 hover:bg-neutral-800 border border-[#2d2d2d] hover:border-sky-500 rounded text-left transition-all group cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-sky-400 group-hover:text-sky-300">Single Company</div>
+                      <div className="text-[9px] text-[#9ca3af] mt-0.5 truncate">Enrich 1 company</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectSelectedImporters}
+                      className="p-2 bg-neutral-900 hover:bg-neutral-800 border border-[#2d2d2d] hover:border-emerald-500 rounded text-left transition-all group cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-emerald-400 group-hover:text-emerald-300">Selected Importers</div>
+                      <div className="text-[9px] text-[#9ca3af] mt-0.5 truncate">Checked importers</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectSelectedExporters}
+                      className="p-2 bg-neutral-900 hover:bg-neutral-800 border border-[#2d2d2d] hover:border-amber-500 rounded text-left transition-all group cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-amber-400 group-hover:text-amber-300">Selected Exporters</div>
+                      <div className="text-[9px] text-[#9ca3af] mt-0.5 truncate">Checked exporters</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectAllImporters}
+                      className="p-2 bg-neutral-900 hover:bg-neutral-800 border border-[#2d2d2d] hover:border-purple-500 rounded text-left transition-all group cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-purple-400 group-hover:text-purple-300">All Importers</div>
+                      <div className="text-[9px] text-[#9ca3af] mt-0.5 truncate">All importers ({contacts.filter(c => {
+                        const type = (c.type || '').toLowerCase();
+                        return type.includes('importer') || type === 'both';
+                      }).length})</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectAllExporters}
+                      className="p-2 bg-neutral-900 hover:bg-neutral-800 border border-[#2d2d2d] hover:border-pink-500 rounded text-left transition-all group cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-[#ec4899] group-hover:text-pink-300">All Exporters</div>
+                      <div className="text-[9px] text-[#9ca3af] mt-0.5 truncate">All exporters ({contacts.filter(c => (c.type || '').toLowerCase().includes('exporter')).length})</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectFullEnrichment}
+                      className="p-2 bg-neutral-900 hover:bg-neutral-800 border border-[#2d2d2d] hover:border-rose-500 rounded text-left transition-all group cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-rose-400 group-hover:text-rose-300">Full Enrichment</div>
+                      <div className="text-[9px] text-[#9ca3af] mt-0.5 truncate">All contacts ({contacts.length})</div>
+                    </button>
+                  </div>
+
+                  {selectedIds.size > 0 && (
+                    <div className="pt-1.5 border-t border-[#2d2d2d] grid grid-cols-4 gap-2 text-[9px] font-mono text-gray-400">
+                      <div>🔍 Serper: <span className="text-white font-bold">~{Math.ceil(selectedIds.size * 1.5)} calls</span></div>
+                      <div>🕷️ Firecrawl: <span className="text-white font-bold">~{Math.ceil(selectedIds.size * 2.0)} pages</span></div>
+                      <div>🤖 NVIDIA/Groq: <span className="text-white font-bold">~{Math.ceil(selectedIds.size * 2.5)} calls</span></div>
+                      <div>⏱️ ETA: <span className="text-[#34d399] font-bold">~{Math.ceil((selectedIds.size * 12) / 60) || 1} min</span></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Company checklist box */}
+                <div className="flex-1 flex flex-col space-y-2 min-h-0">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={toggleAll} 
+                      className="text-sky-400 hover:text-sky-300 flex items-center space-x-1.5 focus:outline-none"
+                    >
+                      {selectedIds.size === filteredContacts.length && filteredContacts.length > 0 ? (
+                        <CheckSquare className="w-4 h-4" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                      <span className="text-xs font-medium">Toggle All Selection ({filteredContacts.length})</span>
+                    </button>
+                    <span className="text-[10px] text-gray-400 font-mono">Selected: {selectedIds.size}</span>
+                  </div>
+
+                  <div className="flex-1 border border-[#2d2d2d] rounded-lg overflow-y-auto p-2 bg-[#0c0c0c] space-y-1.5 custom-scrollbar max-h-[300px]">
+                    {filteredContacts.length === 0 ? (
+                      <p className="text-xs text-[#9ca3af] italic p-3 text-center">No companies match this filter.</p>
+                    ) : (
+                      filteredContacts.map(c => (
+                        <div 
+                          key={c.id} 
+                          onClick={() => toggleContact(c.id)}
+                          className="flex items-center space-x-3 p-2 rounded-lg border border-[#2d2d2d] hover:bg-[#1a1a1a] transition-colors bg-[#181818]/60 cursor-pointer"
+                        >
+                          <div className={selectedIds.has(c.id) ? 'text-sky-500' : 'text-[#6b7280]'}>
+                            {selectedIds.has(c.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-white truncate">{c.company_name}</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#333333] text-[#9ca3af] capitalize bg-[#121212]">
+                                {c.type}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Start buttons */}
+                <div className="pt-2 flex space-x-3">
+                  <button
+                    disabled={selectedIds.size === 0}
+                    onClick={() => handleCreateAndStartJob(Array.from(selectedIds))}
+                    className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white rounded-lg flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                  >
+                    <Play className="w-4 h-4" />
+                    <span>Enrich Selection ({selectedIds.size})</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT AREA: Governor Stats, Limits Adjustment & Job History */}
+          <div className="w-[320px] bg-[#181818] p-5 flex flex-col space-y-4 overflow-y-auto">
+            
+            {/* GOVERNOR COLLAPSIBLE PANEL */}
+            <div className="border border-[#2d2d2d] rounded-lg overflow-hidden bg-[#121212]">
+              <button 
+                onClick={() => setShowGovPanel(!showGovPanel)}
+                className="w-full p-3 bg-[#1e1e1e] flex items-center justify-between text-xs font-bold text-white tracking-wide border-b border-[#2d2d2d]"
+              >
+                <span className="flex items-center space-x-1.5">
+                  <Sliders className="w-4 h-4 text-amber-500" />
+                  <span>V1 LIVE PROVIDER USAGE</span>
+                </span>
+                {showGovPanel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showGovPanel && (
+                <div className="p-3.5 space-y-4">
+                  {/* Progress bars of current consumption against hard limit budgets */}
+                  <div className="space-y-3 text-xs">
+                    
+                    {/* Serper */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-300 font-medium">🔍 Google Search (Serper)</span>
+                        <span className="font-mono text-gray-400">{govStats.serper} / {govLimits.serperMax}</span>
+                      </div>
+                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-1.5 rounded-full transition-all duration-300 ${percentSerper >= 90 ? 'bg-rose-500' : percentSerper >= 75 ? 'bg-amber-500' : 'bg-amber-400'}`}
+                          style={{ width: `${percentSerper}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Firecrawl */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-300 font-medium">🕷️ Web Scraping (Firecrawl)</span>
+                        <span className="font-mono text-gray-400">{govStats.firecrawl} / {govLimits.firecrawlMax}</span>
+                      </div>
+                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-1.5 rounded-full transition-all duration-300 ${percentFirecrawl >= 90 ? 'bg-rose-500' : percentFirecrawl >= 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${percentFirecrawl}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* NVIDIA */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-300 font-medium">🤖 NVIDIA LLM (Nemotron)</span>
+                        <span className="font-mono text-gray-400">{govStats.nvidia} / {govLimits.nvidiaMax}</span>
+                      </div>
+                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-1.5 rounded-full transition-all duration-300 ${percentNvidia >= 90 ? 'bg-rose-500' : percentNvidia >= 75 ? 'bg-amber-500' : 'bg-sky-500'}`}
+                          style={{ width: `${percentNvidia}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* GROQ */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-300 font-medium">🤖 Groq LLM (Llama 3.3)</span>
+                        <span className="font-mono text-gray-400">{govStats.groq} / {govLimits.groqMax}</span>
+                      </div>
+                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-1.5 rounded-full transition-all duration-300 ${percentGroq >= 90 ? 'bg-rose-500' : percentGroq >= 75 ? 'bg-amber-500' : 'bg-sky-500'}`}
+                          style={{ width: `${percentGroq}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+            </div>
+
+            {/* HISTORICAL JOBS LIST PANEL */}
+            <div className="border border-[#2d2d2d] rounded-lg overflow-hidden bg-[#121212]">
+              <button 
+                onClick={() => {
+                  setShowHistoryPanel(!showHistoryPanel);
+                  if (!showHistoryPanel) fetchHistoricalJobs();
+                }}
+                className="w-full p-3 bg-[#1e1e1e] flex items-center justify-between text-xs font-bold text-white tracking-wide border-b border-[#2d2d2d]"
+              >
+                <span className="flex items-center space-x-1.5">
+                  <Activity className="w-4 h-4 text-sky-400" />
+                  <span>RESEARCH JOB HISTORIES</span>
+                </span>
+                {showHistoryPanel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showHistoryPanel && (
+                <div className="p-2.5 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                  {historicalJobs.length === 0 ? (
+                    <p className="text-[10px] text-gray-500 italic text-center py-2">No historical jobs found.</p>
+                  ) : (
+                    historicalJobs.map((hj) => (
+                      <div 
+                        key={hj.id}
+                        onClick={() => startPolling(hj.id)}
+                        className={`p-2 bg-[#1c1c1c] border rounded-md hover:bg-[#262626] cursor-pointer transition-colors ${
+                          activeJobId === hj.id ? 'border-sky-500' : 'border-[#2d2d2d]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-white truncate max-w-[120px]">{hj.id}</span>
+                          <span className={`text-[8px] font-bold px-1.5 rounded ${
+                            hj.status === 'COMPLETED' ? 'bg-[#064e3b] text-emerald-300' :
+                            hj.status === 'RESOURCE_LIMITED' ? 'bg-amber-950 text-amber-300' :
+                            'bg-[#2d2d2d] text-gray-400'
+                          }`}>
+                            {hj.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1 text-[9px] text-gray-400">
+                          <span>{hj.completed_companies}/{hj.total_companies} Companies</span>
+                          <span className="capitalize">{hj.importer_exporter_mode}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* PIPELINE ARCHITECTURAL SCHEMATIC */}
+            <div className="p-3 bg-[#121212] border border-[#2d2d2d] rounded-lg">
+              <span className="text-[10px] text-[#9ca3af] uppercase font-bold tracking-widest block mb-1">Frozen V1 Pipeline</span>
+              <div className="space-y-1.5 text-[10px] text-[#9ca3af]">
+                <div className="flex items-center space-x-2"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div><span>1. Exact company name + country</span></div>
+                <div className="flex items-center space-x-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500"></div><span>2. AI generates identity-anchored queries only</span></div>
+                <div className="flex items-center space-x-2"><div className="w-1.5 h-1.5 rounded-full bg-teal-500"></div><span>3. Deterministic provider retrieval and capture</span></div>
+                <div className="flex items-center space-x-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div><span>4. Immutable raw evidence + normalized display</span></div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* Footer Actions */}
+        <div className="px-6 py-4 border-t border-[#2d2d2d] bg-[#181818] rounded-b-xl flex justify-end">
+          <button
+            onClick={onClose}
+            disabled={jobData?.status === 'PENDING' || jobData?.status === 'DISCOVERING'}
+            className="px-5 py-2 rounded-lg text-xs font-semibold text-white bg-[#2d2d2d] hover:bg-[#3d3d3d] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Close Pipeline Dashboard
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};

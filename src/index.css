@@ -1,0 +1,29 @@
+/* Restrict Tailwind discovery to the UI source tree. The repository also
+   contains gigabytes of immutable provider JSON that must never be scanned as
+   class-name source during a production build. */
+@import "tailwindcss" source(".");
+
+@layer base {
+  body {
+    background-color: #0a0a0a !important;
+    color: #ffffff !important;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #0a0a0a;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #333333;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #444444;
+  }
+}
