@@ -436,3 +436,27 @@ No claim of release completion or broad production readiness is made.
   passed locked install 66,740ms, smoke 6,608ms, rebuild 11,472ms, rebuilt smoke
   4,856ms. These results precede the backup changes and do not verify them in
   hosted CI or satisfy the no-Node clean-machine/visual gates.
+
+### Content-based build and running-process identity
+
+- Replaced timestamp-only launcher freshness with shared source/artifact SHA256
+  checks. npm build now writes version/time/checkout HEAD and build ID after both
+  bundles exist, using bounded metadata output and an atomic replacement. The
+  generator/helper ship in the Windows package; no dependency/provider added.
+- Health captures metadata once at startup, so later builds cannot relabel an
+  old process. Doctor distinguishes source/build mismatch, running-build mismatch
+  and unknown identity. Settings health adds an escaped, validated Build identity
+  disclosure. Commit is explicitly not a clean-checkout guarantee or signature.
+- Source/hash/timestamp/symlink/metadata/temp-collision tests, launcher recovery,
+  doctor mismatch fixtures, static React presentation and isolated compiled
+  startup/rebuild/restart tests pass. Existing typecheck, lint, V1, telemetry,
+  release smoke and staged/extracted launch checks passed during this increment.
+- Guarded live restart (same root/PID, no active jobs) was rejected by execution
+  policy before execution. No alternate process-control workaround attempted;
+  owner normal backend close is requested. Visual QA still receives the saved
+  origin denial. Built/packaged and actually deployed remain separate gates.
+- Extracted 126-file ZIP passed locked install (90,540ms), isolated smoke
+  (7,503ms), production rebuild (14,016ms), identity reuse and rebuilt smoke
+  (5,083ms). Original manifest verification precedes rebuild; no claim that
+  rebuilt artifacts match the original distribution manifest. Node preexists;
+  clean-Windows/no-runtime and actual rendered workflow remain unverified.

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runDoctor } from './doctor.mjs';
+import { writeBuildMetadata } from './build-metadata.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-doctor-'));
 try {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'edgeview', version: '1.0.0', dependencies: {} }));
@@ -27,6 +28,16 @@ try {
   const oversized = await runDoctor({ root, request: async () => new Response('x'.repeat(300000)) }); assert.equal(oversized.exitCode, 1);
   const thrown = await runDoctor({ root, request, full: true, execute: () => { throw new Error('private-error'); } });
   assert.equal(thrown.exitCode, 1); assert.ok(!JSON.stringify(thrown).includes('private-error'));
+  const identity = writeBuildMetadata(root);
+  const identified = buildId => async () => Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root, build: { available: true, buildId } }, database: { status: 'ok' } });
+  const same = await runDoctor({ root, request: identified(identity.buildId) });
+  assert.equal(same.checks.find(check => check.id === 'build_freshness').status, 'PASS');
+  assert.equal(same.checks.find(check => check.id === 'running_build').status, 'PASS');
+  const old = await runDoctor({ root, request: identified('f'.repeat(64)) });
+  assert.equal(old.exitCode, 1); assert.equal(old.checks.find(check => check.id === 'running_build').status, 'FAIL');
+  fs.writeFileSync(path.join(root, 'server.ts'), 'changed after build');
+  const changed = await runDoctor({ root, request: identified(identity.buildId) });
+  assert.equal(changed.checks.find(check => check.id === 'build_freshness').status, 'FAIL');
   fs.writeFileSync(path.join(root, 'package-lock.json'), '{}');
   const badLock = await runDoctor({ root, request }); assert.equal(badLock.exitCode, 1);
   console.log('PASS doctor states, locked dependencies, offline failure, safe output and full-check orchestration');

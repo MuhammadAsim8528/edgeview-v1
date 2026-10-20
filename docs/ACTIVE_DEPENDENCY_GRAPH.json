@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-20T17:24:48.039Z",
+  "generated_at": "2026-10-20T17:52:14.450Z",
   "backend": {
     "files": [
       "server.ts",
@@ -40,12 +40,13 @@
       "server/v1_blob_store.ts",
       "server/v1_engine.ts",
       "server/v1_identity.ts",
+      "shared/build_identity.mjs",
       "shared/provider_telemetry.ts",
       "shared/v1_contact_contract.ts",
       "src/utils/countryNormalizer.ts"
     ],
-    "count": 41,
-    "lines": 15027
+    "count": 42,
+    "lines": 15079
   },
   "frontend": {
     "files": [
@@ -82,7 +83,7 @@
       "src/utils/telemetryFormat.ts"
     ],
     "count": 31,
-    "lines": 10520
+    "lines": 10544
   },
   "retired_inputs": 0,
   "archive": {

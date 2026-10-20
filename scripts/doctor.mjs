@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { readBuildIdentity, sourceDigest, artifactDigest } from '../shared/build_identity.mjs';
 
 const installation = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export async function runDoctor({ root = installation, full = false, request = fetch, execute } = {}) {
@@ -30,7 +31,14 @@ export async function runDoctor({ root = installation, full = false, request = f
   } catch { add('dependency_lock', 'FAIL', 'Missing, invalid or inconsistent npm lock.'); }
   const built = ['dist/server.cjs', 'dist/index.html'].every(file => fs.existsSync(path.join(root, file)));
   add('build_presence', built ? 'PASS' : 'FAIL', built ? 'Frontend and backend artifacts exist; freshness is not inferred.' : 'Production build artifacts are missing.');
-  add('build_freshness', 'SKIPPED', 'Presence alone does not prove source/build identity.');
+  const localBuild = readBuildIdentity(root);
+  if (!localBuild.available) add('build_freshness', 'WARN', 'Build identity is unavailable; rebuild with the current tooling.');
+  else {
+    try {
+      const matches = localBuild.version === manifest.version && localBuild.sourceHash === sourceDigest(root) && localBuild.artifactHash === artifactDigest(root);
+      add('build_freshness', matches ? 'PASS' : 'FAIL', matches ? 'Recorded source and artifact digests match this installation.' : 'Source or artifacts differ from recorded build; rebuild before release.');
+    } catch { add('build_freshness', 'FAIL', 'Source/artifact identity could not be verified.'); }
+  }
   add('secret_store', 'SKIPPED', 'No credential file values are read or exported by doctor.');
   add('python_webview', 'SKIPPED', 'Current release is Node/React in a browser, not a Python/WebView host.');
   add('device_identity', 'SKIPPED', 'Cryptographic installation identity is not yet implemented.');
@@ -53,6 +61,9 @@ export async function runDoctor({ root = installation, full = false, request = f
     const sameRoot = typeof health.app?.project_root === 'string' && normalize(health.app.project_root) === normalize(root);
     if (health.app?.name !== 'edgeview' || !sameRoot) throw new Error();
     add('local_backend', health.status === 'ok' ? 'PASS' : 'FAIL', 'Responding EdgeView backend belongs to this installation.');
+    const liveBuild = health.app?.build;
+    add('running_build', !localBuild.available || !liveBuild?.available ? 'WARN' : localBuild.buildId === liveBuild.buildId ? 'PASS' : 'FAIL',
+      !localBuild.available || !liveBuild?.available ? 'Live or local build identity is unavailable; deployment NOT VERIFIED.' : localBuild.buildId === liveBuild.buildId ? 'Running backend captured the current build identity at startup.' : 'Running backend belongs to a different build; normal restart required.');
     add('database', health.database?.status === 'ok' ? 'PASS' : 'FAIL', health.database?.status === 'ok' ? 'Backend reports database checks healthy.' : 'Backend database status is degraded or unknown.');
     const resources = health.resources;
     const observedResources = resources?.status === 'PASS' && ['rssBytes', 'cpuPercent', 'systemTotalBytes', 'diskAvailableBytes'].every(key => typeof resources[key] === 'number' && Number.isFinite(resources[key]) && resources[key] >= 0);

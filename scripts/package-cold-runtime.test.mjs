@@ -63,9 +63,12 @@ try {
   const rebuildStart = performance.now();
   await runNode([npm,'run','build'], installed, 90000);
   const rebuildMs = performance.now() - rebuildStart;
+  const rebuiltCurrent = spawnSync(process.execPath, ['scripts/build-if-needed.mjs'], { cwd: installed, encoding: 'utf8', timeout: 15000 });
+  assert.equal(rebuiltCurrent.status, 0, rebuiltCurrent.stderr);
+  assert.match(rebuiltCurrent.stdout, /up to date/, 'rebuilt source/artifacts must match their generated identity');
   const rebuiltSmokeStart = performance.now();
   assert.match(await runNode([path.join(source,'scripts/release-smoke.mjs')], installed, 90000), /PASS EdgeView production release smoke/);
   console.log(JSON.stringify({ passed: true, testedZipSha256, node: process.version, platform: process.platform,
     dependencyInstallMs: Math.round(installMs), isolatedSmokeMs: Math.round(smokeMs), productionRebuildMs: Math.round(rebuildMs), rebuiltSmokeMs: Math.round(performance.now() - rebuiltSmokeStart),
-    manifestVerifiedAfterRun: true, caveat: 'Fresh extracted package + locked install + API workflow; no browser interaction or fixed-port .bat cold start.' }));
+    manifestVerifiedBeforeRebuild: true, rebuiltIdentityVerified: true, caveat: 'Fresh extracted package + locked install + API workflow; no browser interaction or fixed-port .bat cold start. Original distribution manifest is not reverified after rebuild changes generated files.' }));
 } finally { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }

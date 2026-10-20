@@ -42,6 +42,22 @@ includes the backup command; staged-script regression is a release gate. This is
 not a VSS snapshot, concurrent-writer guarantee, production-data restore, portable
 credential recovery or completed full crash-recovery audit.
 
+Build-identity increment: source/artifact content digests, version/time/checkout
+HEAD and build ID now flow through the build generator, startup-captured backend
+health, doctor and Settings' Build identity disclosure. Launcher reuse/rebuild
+uses those same digests, including old-timestamp source changes; failed builds
+restore previous artifacts. Unit/static-presentation and compiled isolated
+restart tests pass. A real deployment restart was rejected by execution policy;
+do not relabel the old live process as deployed. Normal owner close/relaunch and
+rendered verification remain required. See docs/BUILD_IDENTITY.md.
+
+The extracted build-identity package passed locked installation, API smoke,
+production rebuild, rebuilt identity reuse and second smoke on 2026-10-20.
+Distribution integrity was checked before the rebuild, not against changed
+generated files afterward. Node was preinstalled; clean-machine and visual gates
+remain open. Retrying the existing Chrome EdgeView tab again returned saved-origin
+denial without an approval dialog; no workaround attempted.
+
 This ledger reconciles the requested work. Source/tests, deployed behavior, and
 visual verification are separate gates. Earlier progress reports are not proof.
 

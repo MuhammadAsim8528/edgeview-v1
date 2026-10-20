@@ -30,6 +30,8 @@ jobs:
       - run: node scripts/audit-git-secrets.mjs
       - run: npm audit --omit=dev --audit-level=high
       - run: node scripts/build-recovery.test.mjs
+      - run: node scripts/build-metadata.test.mjs
+      - run: node --import tsx server/tests/build_identity_presentation.test.tsx
       - run: node scripts/ensure-dependencies.test.mjs
       - run: node scripts/npm-policy-isolation.test.mjs
       - run: node scripts/backup-runtime.test.mjs
@@ -69,6 +71,7 @@ jobs:
       - run: node scripts/verify-release-graph.mjs
       - run: npm run test:v1
       - run: npm run build
+      - run: node scripts/build-identity-runtime.test.mjs
       - run: node scripts/telemetry-runtime.test.mjs
       - run: node scripts/history-production-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs

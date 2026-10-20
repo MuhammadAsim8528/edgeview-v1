@@ -21,13 +21,18 @@ developer dependencies/tests; the end-user ZIP provides default doctor, not a fu
 developer test checkout. A running local backend is required for the live-health
 portion; no process is silently started to make that check pass.
 
-Still explicit SKIPPED: build freshness/commit identity, independent secret-store
+Still explicit SKIPPED: independent secret-store
 probe, cryptographic device identity, rendered UI tests and full security audits.
-Python/WebView checks are inapplicable to this browser/Node release. Resource,
-permissions, Git-state, build metadata and broader diagnostics integration remain
+Python/WebView checks are inapplicable to this browser/Node release. Native counters,
+permissions, Git-state and broader diagnostics integration remain
 backlog work. No new health authority or telemetry vendor was introduced.
 
 Resources now reuse the existing backend health response: bounded Node process/
 system/disk sampling, no subprocesses or polling in doctor. Partial/absent or
 initial CPU measurements yield WARN. The same source feeds Settings' runtime
 resources panel. Browser memory and unsupported native counters are not inferred.
+
+Build freshness now compares content digests with dist/build-info.json, not file
+timestamps. Running build compares the backend's startup-captured identity with
+the local build ID. Known mismatches fail; unavailable identity warns. See
+docs/BUILD_IDENTITY.md for scope and the distinction from signatures/secure updates.

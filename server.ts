@@ -44,9 +44,12 @@ import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
 import { hasRecentProviderObservation } from './shared/provider_telemetry';
 import { createResourceSampler } from './server/resource_snapshot';
+import { readBuildIdentity } from './shared/build_identity.mjs';
 
 const app = express();
 const sampleResources = createResourceSampler(getProjectRoot());
+// Capture identity once: rebuilding files must not relabel an older live process.
+const runningBuild = readBuildIdentity(getProjectRoot());
 const PORT = Number(process.env.PORT) || 3000;
 // Production/static mode is the safe default. Vite middleware must be opted
 // into explicitly so a launcher or service missing NODE_ENV cannot serve an
@@ -241,11 +244,13 @@ app.get('/api/health', (req, res) => {
     app: {
       status: 'ok',
       name: 'edgeview',
+      build: runningBuild,
       pid: process.pid,
       project_root: getProjectRoot(),
       node: process.version,
       port: PORT,
       env: process.env.NODE_ENV || 'development',
+      runtime_mode: useViteDevServer ? 'development' : 'production',
     },
     database,
     providers: {

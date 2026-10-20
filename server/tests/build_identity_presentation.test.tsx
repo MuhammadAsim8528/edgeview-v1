@@ -1,0 +1,15 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import assert from 'node:assert/strict';
+import { BuildIdentityDetails, parseBuildSummary } from '../../src/components/RuntimeResourcesPanel';
+assert.equal(parseBuildSummary({ available: false }), null);
+assert.equal(parseBuildSummary({ available: true, version: '1', buildId: 'not-an-id' }), null);
+const value = parseBuildSummary({ available: true, version: '<not markup>', buildId: 'a'.repeat(64), builtAt: '2026-10-20T00:00:00.000Z', gitCommit: null, secret: 'never-show-this' });
+assert.ok(value);
+const html = renderToStaticMarkup(<BuildIdentityDetails build={value} />);
+assert.ok(html.includes('a'.repeat(64)));
+assert.ok(html.includes('&lt;not markup&gt;'));
+assert.ok(html.includes('Git unavailable'));
+assert.ok(!html.includes('never-show-this'));
+assert.ok(renderToStaticMarkup(<BuildIdentityDetails build={null} />).includes('Unknown'));
+console.log('PASS build summary validation, safe projection and static component rendering; not interactive visual QA');
