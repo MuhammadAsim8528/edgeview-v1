@@ -68,6 +68,12 @@ tests pass. Windows console delivery, forced termination, active provider drain
 and full crash/upgrade lifecycle remain separate unverified gates; see
 docs/SHUTDOWN_RECOVERY.md. No live-process control workaround used.
 
+One live diagnostic round verified NVIDIA/Groq model-list connectivity and Serper
+search-envelope connectivity; disabled Hunter was skipped. Actual HTTP status
+propagation was missing on successes and is now tested in source/API fixtures.
+See docs/PROVIDER_VERIFICATION.md; this does not close live deployment, visual
+display, generation entitlement, company accuracy or full importer workflow gates.
+
 | Requirement | Current evidence and remaining gate |
 |---|---|
 | Preserve V1 and remove competing old engine | Active dependency/archive graph checked; retired source archived, not restored. |

@@ -18,11 +18,12 @@ export interface ProviderTestResult {
   modelsCount?: number;
   modelAvailable?: boolean;
   lastUpdated?: string;
+  httpStatus?: number | null;
 }
 
 export interface AIProvider {
   name: 'NVIDIA' | 'GROQ';
-  listModels(apiKey: string, baseUrl?: string): Promise<AIModelInfo[]>;
+  listModels(apiKey: string, baseUrl?: string, observeStatus?: (status: number) => void): Promise<AIModelInfo[]>;
   testConnection(apiKey: string, selectedModel?: string, baseUrl?: string): Promise<ProviderTestResult>;
 }
 
@@ -57,7 +58,7 @@ function assertSavedCredentialOrigin(key: string, baseUrl?: string): void {
 
 export const NvidiaProvider: AIProvider = {
   name: 'NVIDIA',
-  async listModels(apiKey: string, baseUrl?: string): Promise<AIModelInfo[]> {
+  async listModels(apiKey: string, baseUrl?: string, observeStatus?: (status: number) => void): Promise<AIModelInfo[]> {
     if (!apiKey || !apiKey.trim()) {
       throw new Error('NVIDIA API Key is missing or empty');
     }
@@ -81,6 +82,7 @@ export const NvidiaProvider: AIProvider = {
       },
     });
 
+    observeStatus?.(res.status);
     if (res.status === 401 || res.status === 403) {
       throw new Error('Invalid NVIDIA API Key (Unauthorized)');
     }
@@ -88,7 +90,8 @@ export const NvidiaProvider: AIProvider = {
       throw new Error('NVIDIA API rate limit exceeded');
     }
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
+      const captured = await readProviderResponse(res, 256 * 1024);
+      const errJson = (captured.body && typeof captured.body === 'object' ? captured.body : {}) as any;
       const msg = errJson.message || errJson.error?.message || `NVIDIA API error (Status ${res.status})`;
       throw new Error(msg);
     }
@@ -120,8 +123,9 @@ export const NvidiaProvider: AIProvider = {
     if (!apiKey || !apiKey.trim()) {
       return { success: false, message: 'NVIDIA API Key not configured' };
     }
+    let httpStatus: number | null = null;
     try {
-      const models = await this.listModels(apiKey, baseUrl);
+      const models = await this.listModels(apiKey, baseUrl, status => { httpStatus = status; });
       let modelMsg = '';
       let modelAvailable = true;
 
@@ -142,12 +146,14 @@ export const NvidiaProvider: AIProvider = {
         modelsCount: models.length,
         modelAvailable,
         lastUpdated: new Date().toISOString(),
+        httpStatus,
       };
     } catch (err: any) {
       return {
         success: false,
         message: err?.message || 'Failed to connect to NVIDIA NIM endpoint',
         modelAvailable: false,
+        httpStatus,
       };
     }
   },
@@ -155,7 +161,7 @@ export const NvidiaProvider: AIProvider = {
 
 export const GroqProvider: AIProvider = {
   name: 'GROQ',
-  async listModels(apiKey: string): Promise<AIModelInfo[]> {
+  async listModels(apiKey: string, _baseUrl?: string, observeStatus?: (status: number) => void): Promise<AIModelInfo[]> {
     if (!apiKey || !apiKey.trim()) {
       throw new Error('Groq API Key is missing or empty');
     }
@@ -173,6 +179,7 @@ export const GroqProvider: AIProvider = {
       },
     });
 
+    observeStatus?.(res.status);
     if (res.status === 401 || res.status === 403) {
       throw new Error('Invalid Groq API Key (Unauthorized)');
     }
@@ -180,7 +187,8 @@ export const GroqProvider: AIProvider = {
       throw new Error('Groq API rate limit exceeded');
     }
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
+      const captured = await readProviderResponse(res, 256 * 1024);
+      const errJson = (captured.body && typeof captured.body === 'object' ? captured.body : {}) as any;
       const msg = errJson.error?.message || errJson.message || `Groq API error (Status ${res.status})`;
       throw new Error(msg);
     }
@@ -213,8 +221,9 @@ export const GroqProvider: AIProvider = {
     if (!apiKey || !apiKey.trim()) {
       return { success: false, message: 'Groq API Key not configured' };
     }
+    let httpStatus: number | null = null;
     try {
-      const models = await this.listModels(apiKey);
+      const models = await this.listModels(apiKey, undefined, status => { httpStatus = status; });
       let modelMsg = '';
       let modelAvailable = true;
 
@@ -235,12 +244,14 @@ export const GroqProvider: AIProvider = {
         modelsCount: models.length,
         modelAvailable,
         lastUpdated: new Date().toISOString(),
+        httpStatus,
       };
     } catch (err: any) {
       return {
         success: false,
         message: err?.message || 'Failed to connect to Groq endpoint',
         modelAvailable: false,
+        httpStatus,
       };
     }
   },

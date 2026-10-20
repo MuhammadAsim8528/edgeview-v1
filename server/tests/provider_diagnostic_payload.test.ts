@@ -27,3 +27,16 @@ for (const payload of [{ data: [{ id: 'synthetic-model' }] }, ['synthetic-model'
   assert.equal((await GroqProvider.testConnection('synthetic-diagnostic-key', 'synthetic-model')).success, true);
 }
 console.log('PASS diagnostic health requires valid provider payloads, not only HTTP success');
+for (const test of [testHunterKey, testSerperKey, (key: string) => GroqProvider.testConnection(key)]) {
+  for (const status of [401, 403, 429, 503]) {
+    global.fetch = (async () => Response.json({ message: 'controlled upstream failure' }, { status })) as typeof fetch;
+    const result = await test('synthetic-diagnostic-key');
+    assert.equal(result.success, false);
+    assert.equal(result.httpStatus, status, 'HTTP status is transport data, not parsed prose');
+  }
+  global.fetch = (async () => { throw new Error('controlled network failure'); }) as typeof fetch;
+  assert.equal((await test('synthetic-diagnostic-key')).httpStatus, null);
+}
+global.fetch = (async () => Response.json({ data: [{ id: 'synthetic-model' }] }, { status: 201 })) as typeof fetch;
+assert.equal((await GroqProvider.testConnection('synthetic-diagnostic-key')).httpStatus, 201, 'do not invent 200 after any successful request');
+console.log('PASS diagnostic transport status survives errors and non-200 success; network failures stay unknown');

@@ -58,6 +58,8 @@ try {
   assert.equal(body.providers.hunter.successRate, null);
   assert.equal(body.providers.serper.status, 'healthy');
   assert.equal(body.providers.hunter.status, 'healthy');
+  assert.equal(body.providers.serper.lastHttpStatus, 200);
+  assert.equal(body.providers.hunter.lastHttpStatus, 200);
   const saveSettings = async patch => {
     const result = await fetch(`${base}/api/settings`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(patch) });
     assert.equal(result.status, 200);
@@ -67,6 +69,14 @@ try {
   assert.equal((await health()).serper.status, 'disabled', 'disabled settings must override prior successful tests');
   await saveSettings({ serper_enabled: true, serper_api_key: 'synthetic-auth-failed-key' });
   assert.equal((await health()).serper.status, 'unknown', 'new credential must not inherit old healthy status');
+  await fetch(`${base}/api/system/health/test`, { method: 'POST' });
+  assert.equal((await health()).serper.lastHttpStatus, 401);
+  assert.equal((await health()).serper.status, 'auth_failed');
+  const blocked = await fetch(`${base}/api/enrich/company`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ company_name: 'Synthetic Blocked Diagnostic Company', country: 'Kenya' }) });
+  assert.equal(blocked.status, 503, 'known authentication failure must block paid routing');
+  // A distinct synthetic credential invalidates the diagnostic observation so
+  // the existing real-operation failure/recovery assertions can run afterward.
+  await saveSettings({ serper_api_key: 'synthetic-auth-failed-after-diagnostic-key' });
   const enrich = async company => {
     const response = await fetch(`${base}/api/enrich/company`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ company_name: company, country: 'Kenya' }) });
     assert.equal(response.status, 200);

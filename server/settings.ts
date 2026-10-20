@@ -323,37 +323,41 @@ export function protectStoredCredentialsAtStartup(): void {
   }
 }
 
-export async function testHunterKey(key: string): Promise<{ success: boolean; message: string }> {
-  if (!key || !key.trim()) return { success: false, message: 'Hunter API Key is empty' };
+export async function testHunterKey(key: string): Promise<{ success: boolean; message: string; httpStatus?: number | null }> {
+  if (!key || !key.trim()) return { success: false, message: 'Hunter API Key is empty', httpStatus: null };
+  let httpStatus: number | null = null;
   try {
     const res = await fetch(`https://api.hunter.io/v2/domain-search?domain=example.com&api_key=${encodeURIComponent(key.trim())}`, {
       redirect: 'error', signal: AbortSignal.timeout(20_000),
     });
+    httpStatus = res.status;
     if (res.status === 200) {
       const captured = await readProviderResponse(res, 256 * 1024);
-      if (captured.failure) return { success: false, message: captured.failure.message };
+      if (captured.failure) return { success: false, message: captured.failure.message, httpStatus };
       validateProviderEnvelope(captured.body, 'hunter');
-      return { success: true, message: 'Hunter API key connection verified!' };
+      return { success: true, message: 'Hunter API key connection verified!', httpStatus: res.status };
     } else if (res.status === 401 || res.status === 403) {
-      return { success: false, message: 'Invalid Hunter API Key (Unauthorized)' };
+      return { success: false, message: 'Invalid Hunter API Key (Unauthorized)', httpStatus };
     } else {
-      const data = await res.json().catch(() => ({}));
+      const captured = await readProviderResponse(res, 256 * 1024);
+      const data = (captured.body && typeof captured.body === 'object' ? captured.body : {}) as any;
       const detail = data.errors?.[0]?.details || `Hunter API returned status ${res.status}`;
       const message = res.status === 429 || /limit|quota|billing period/i.test(String(detail))
         ? `Hunter quota is exhausted. Disable Hunter until the billing quota resets; Serper enrichment remains available. (${detail})`
         : detail;
-      return { success: false, message };
+      return { success: false, message, httpStatus };
     }
   } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Hunter API' };
+    return { success: false, message: err?.message || 'Failed to connect to Hunter API', httpStatus };
   }
 }
 
-export async function testSerperKey(key: string): Promise<{ success: boolean; message: string }> {
+export async function testSerperKey(key: string): Promise<{ success: boolean; message: string; httpStatus?: number | null }> {
   if (!key || !key.trim()) {
-    return { success: false, message: 'Serper API Key is empty' };
+    return { success: false, message: 'Serper API Key is empty', httpStatus: null };
   }
 
+  let httpStatus: number | null = null;
   try {
     const res = await fetch('https://google.serper.dev/search', {
       method: 'POST',
@@ -365,36 +369,39 @@ export async function testSerperKey(key: string): Promise<{ success: boolean; me
       },
       body: JSON.stringify({ q: 'test' }),
     });
+    httpStatus = res.status;
 
     if (res.status === 200) {
       const captured = await readProviderResponse(res, 256 * 1024);
-      if (captured.failure) return { success: false, message: captured.failure.message };
+      if (captured.failure) return { success: false, message: captured.failure.message, httpStatus };
       validateProviderEnvelope(captured.body, 'serper');
-      return { success: true, message: 'Serper API key connection verified!' };
+      return { success: true, message: 'Serper API key connection verified!', httpStatus: res.status };
     } else if (res.status === 403 || res.status === 401) {
-      return { success: false, message: 'Invalid Serper API Key (Unauthorized)' };
+      return { success: false, message: 'Invalid Serper API Key (Unauthorized)', httpStatus };
     } else {
-      const data = await res.json().catch(() => ({}));
+      const captured = await readProviderResponse(res, 256 * 1024);
+      const data = (captured.body && typeof captured.body === 'object' ? captured.body : {}) as any;
       return {
         success: false,
         message: data.message || `Serper API returned status ${res.status}`,
+        httpStatus,
       };
     }
   } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Serper API' };
+    return { success: false, message: err?.message || 'Failed to connect to Serper API', httpStatus };
   }
 }
 
 import { NvidiaProvider, GroqProvider } from './ai_providers';
 
-export async function testNvidiaKey(key: string, model: string, baseUrl?: string): Promise<{ success: boolean; message: string }> {
+export async function testNvidiaKey(key: string, model: string, baseUrl?: string): Promise<{ success: boolean; message: string; httpStatus?: number | null }> {
   if (!key || !key.trim()) return { success: false, message: 'NVIDIA API Key is empty' };
   const res = await NvidiaProvider.testConnection(key, model, baseUrl);
-  return { success: res.success, message: res.message };
+  return { success: res.success, message: res.message, httpStatus: res.httpStatus ?? null };
 }
 
-export async function testGroqKey(key: string, model: string): Promise<{ success: boolean; message: string }> {
+export async function testGroqKey(key: string, model: string): Promise<{ success: boolean; message: string; httpStatus?: number | null }> {
   if (!key || !key.trim()) return { success: false, message: 'Groq API Key is empty' };
   const res = await GroqProvider.testConnection(key, model);
-  return { success: res.success, message: res.message };
+  return { success: res.success, message: res.message, httpStatus: res.httpStatus ?? null };
 }

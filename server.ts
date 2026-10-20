@@ -1436,7 +1436,7 @@ app.get('/api/system/health', async (_req, res) => {
 app.post('/api/system/health/test', async (req, res) => {
   try {
     const settings = getAppSettings();
-    const tests: Array<[string, () => Promise<{ success: boolean; message: string }>]> = [];
+    const tests: Array<[string, () => Promise<{ success: boolean; message: string; httpStatus?: number | null }>]> = [];
     if (settings.serper_enabled && settings.serper_api_key?.trim()) tests.push(['serper', () => testSerperKey(settings.serper_api_key)]);
     if (settings.hunter_enabled && settings.hunter_api_key?.trim()) tests.push(['hunter', () => testHunterKey(settings.hunter_api_key)]);
     if (settings.nvidia_enabled && settings.nvidia_api_key?.trim()) tests.push(['nvidia', () => testNvidiaKey(settings.nvidia_api_key, settings.nvidia_model, settings.nvidia_base_url)]);
@@ -1446,7 +1446,7 @@ app.post('/api/system/health/test', async (req, res) => {
       try {
         const result = await perform();
         const statusMatch = result.message.match(/(?:status|HTTP)\s+(\d{3})/i);
-        v1ProviderTests.set(provider, { ...result, testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: statusMatch ? Number(statusMatch[1]) : null });
+        v1ProviderTests.set(provider, { ...result, testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: result.httpStatus ?? (statusMatch ? Number(statusMatch[1]) : null) });
       }
       catch (error: any) { v1ProviderTests.set(provider, { success: false, message: error?.message || 'Connection test failed', testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: null }); }
     }));
