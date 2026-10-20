@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { runDoctor } from './doctor.mjs';
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-doctor-'));
+try {
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'edgeview', version: '1.0.0', dependencies: {} }));
+  fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ name: 'edgeview', version: '1.0.0', packages: { '': { dependencies: {} } } }));
+  fs.mkdirSync(path.join(root, 'dist')); fs.writeFileSync(path.join(root, 'dist/server.cjs'), ''); fs.writeFileSync(path.join(root, 'dist/index.html'), '');
+  let calls = 0;
+  const request = async url => { calls++; assert.equal(url, 'http://127.0.0.1:3901/api/health'); return Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'ok' }, providers: { serper: { enabled: true, configured: true } }, secret: 'must-not-leak' }); };
+  const healthy = await runDoctor({ root, request });
+  assert.equal(healthy.exitCode, 0); assert.equal(calls, 1);
+  assert.ok(!JSON.stringify(healthy).includes('must-not-leak'));
+  assert.equal(healthy.checks.find(check => check.id === 'provider_serper').status, 'WARN');
+  const commands = [];
+  const full = await runDoctor({ root, request, full: true, execute: command => { commands.push(command); return { status: command === 'build' ? 1 : 0 }; } });
+  assert.equal(full.exitCode, 1); assert.deepEqual(commands, ['check', 'build']);
+  const offline = await runDoctor({ root, request: async () => { throw new Error('secret-api-key'); } });
+  assert.equal(offline.exitCode, 1); assert.ok(!JSON.stringify(offline).includes('secret-api-key'));
+  const wrongRoot = await runDoctor({ root, request: async () => Response.json({ status: 'ok', app: { name: 'edgeview', project_root: `${root}-other` } }) });
+  assert.equal(wrongRoot.exitCode, 1);
+  const oversized = await runDoctor({ root, request: async () => new Response('x'.repeat(300000)) }); assert.equal(oversized.exitCode, 1);
+  const thrown = await runDoctor({ root, request, full: true, execute: () => { throw new Error('private-error'); } });
+  assert.equal(thrown.exitCode, 1); assert.ok(!JSON.stringify(thrown).includes('private-error'));
+  fs.writeFileSync(path.join(root, 'package-lock.json'), '{}');
+  const badLock = await runDoctor({ root, request }); assert.equal(badLock.exitCode, 1);
+  console.log('PASS doctor states, locked dependencies, offline failure, safe output and full-check orchestration');
+} finally { fs.rmSync(root, { recursive: true, force: true }); }

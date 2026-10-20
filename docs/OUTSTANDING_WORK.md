@@ -17,7 +17,7 @@ visual verification are separate gates. Earlier progress reports are not proof.
 | Exposed credentials | Owner must rotate exposed provider keys and replace them locally. Encryption/redaction is not revocation; do not print keys or revoke working credentials without a safe replacement plan. |
 | Dependency advisories | Five moderate rollups previously remain; no claim every dependency is patched. UUID affected-buffer API not reached by application ExcelJS call sites; published sprintf-js fix unavailable at last check. Recheck when dependencies change. |
 | Windows launcher/logo/shortcut/package | Existing launcher/package retained. Package checks pass. Verify user's actual desktop shortcut/icon/launch target visually; do not create a second installation authority. |
-| GitHub and CI/CD | Private MuhammadAsim8528/edgeview-v1 created, main pushed. Windows + Docker QA and gated version-tag Windows releases configured. First hosted run failed; investigate actual logs before shipping/tagging. |
+| GitHub and CI/CD | Private MuhammadAsim8528/edgeview-v1 created, main pushed. Hosted run 39433269772 for 6f24778 passed Windows + Docker QA and uploaded EdgeView-V1-Windows (2.86 MB). Tag-gated release publishing is configured but not exercised. Newer changes require their own green run; no production-readiness claim. |
 | Docker | Non-root isolated QA image built; offline release smoke passes. Not a supported Linux production replacement for Windows DPAPI. |
 | Local live deployment | Restarted same-root production build on port 3901 after confirming no active jobs; health PID 31216 verified. expconfig.nvl still listed; config protected without printing secrets. Future source changes need build/restart; not every UI behavior verified. |
 | Performance | Prior bounded load checks are documented; repeated large-dataset/browser memory and full enrichment measurements remain. No modest-hardware or million-row readiness claim. |
@@ -66,6 +66,12 @@ or runtime, not an invented Python/WebView/cloud stack. One active source writer
 - [ ] M0: Finish current hosted CI credential-transport investigation; retain local
   working app and test gates. Complete new directive's audit/gap report.
 - [ ] M1: Doctor command, version/build diagnostics and OSS/SBOM records.
+  Baseline doctor implemented and tested: `npm run doctor`, JSON and developer
+  `--full` orchestration. Read-only live check and full check/build/release mode
+  passed; provider reachability, visual QA, build freshness, independent secret
+  probing, resources/Git-state and device identity explicitly remain WARN/SKIPPED.
+  Full developer mode is not available in an end-user ZIP lacking test/dev tools.
+  See docs/DOCTOR.md; M1 remains open for these gaps and SBOM/version work.
 - [ ] M2: Close security/database/contract/recovery gaps with regression tests.
 - [ ] M3: Independent company truthsets and normal-user rendered enrichment QA;
   reconcile all importer scope, weak records and resource measurements.

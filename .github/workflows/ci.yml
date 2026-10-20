@@ -30,6 +30,7 @@ jobs:
       - run: node scripts/audit-git-secrets.mjs
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/ensure-dependencies.test.mjs
+      - run: node scripts/doctor.test.mjs
       - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts

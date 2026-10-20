@@ -76,6 +76,13 @@ after direct framework loading. Its artifact upload rejected a parent-relative
 glob; an absolute resolved path exposed via a step output replaces that glob.
 Complete hosted delivery remains pending a new run, not assumed from local tests.
 
+Subsequent verification: hosted run 39433269772 (commit 6f24778) completed Windows
+and Docker jobs successfully, with a 2.86 MB EdgeView-V1-Windows artifact uploaded.
+This closes the observed uploader-path regression for that commit, not UI/full
+product acceptance or later changes. Baseline doctor now reuses existing health
+and check/build/release tooling; its live read-only and full modes passed locally.
+Its SKIPPED checks remain explicit in docs/DOCTOR.md and the completion ledger.
+
 P1: safe diagnostics export, boot/recovery/cancellation gaps, database restore and
 foreign-key/index/transaction review, package build metadata, dependency licenses/
 SBOM, supported interface E2E and repeatable performance thresholds.
