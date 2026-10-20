@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
-import { formatObservedRate, formatObservedLatency } from '../../src/utils/telemetryFormat';
-import { hasRecentProviderObservation } from '../../shared/provider_telemetry';
+import { formatObservedRate, formatObservedLatency, formatObservedCount } from '../../src/utils/telemetryFormat';
+import { hasRecentProviderObservation, isRecentProviderOperation } from '../../shared/provider_telemetry';
 
 assert.equal(formatObservedRate(0,0), 'Unknown');
+assert.equal(formatObservedRate(null, 10), 'Unknown');
+assert.equal(formatObservedRate(0, null), 'Unknown');
+assert.equal(formatObservedCount(null), 'Unknown');
+assert.equal(formatObservedCount(undefined), 'Unknown');
+assert.equal(formatObservedCount(NaN), 'Unknown');
+assert.equal(formatObservedCount(0), '0');
+assert.equal(formatObservedCount(12), '12');
 assert.equal(formatObservedRate(0,10), '0%');
 assert.equal(formatObservedRate(9,10), '90%');
 assert.equal(formatObservedRate(11,10), 'Unknown');
@@ -18,4 +25,9 @@ assert.equal(hasRecentProviderObservation('2026-10-19T11:57:59.000Z', now), fals
 assert.equal(hasRecentProviderObservation('2026-10-19T12:01:00.000Z', now), false);
 assert.equal(hasRecentProviderObservation(undefined, now), false);
 assert.equal(hasRecentProviderObservation('not-a-date', now), false);
+const boundary = now - 60000;
+assert.equal(isRecentProviderOperation('2026-10-19T11:59:30.000Z', '2026-10-19T11:59:40.000Z', boundary, now), true);
+assert.equal(isRecentProviderOperation('2026-10-19T11:58:30.000Z', '2026-10-19T11:59:40.000Z', boundary, now), false, 'old request finishing after key replacement cannot certify the replacement');
+assert.equal(isRecentProviderOperation(null, '2026-10-19T11:59:40.000Z', boundary, now), false);
+assert.equal(isRecentProviderOperation('2026-10-19T12:00:30.000Z', '2026-10-19T11:59:40.000Z', boundary, now), false);
 console.log('PASS observed telemetry distinguishes missing samples, measured zero and valid rates.');

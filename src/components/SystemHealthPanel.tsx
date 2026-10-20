@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { safeFetchJson } from '../utils/safeFetch';
-import { formatObservedLatency, formatObservedRate } from '../utils/telemetryFormat';
+import { formatObservedLatency, formatObservedRate, formatObservedCount } from '../utils/telemetryFormat';
 import { RuntimeResourcesPanel } from './RuntimeResourcesPanel';
 
 export interface ProviderHealth {
@@ -25,9 +25,9 @@ export interface ProviderHealth {
   failureCount: number;
   timeoutCount: number;
   rateLimitCount: number;
-  retryCount: number;
-  cacheHits: number;
-  cacheMisses: number;
+  retryCount: number | null;
+  cacheHits: number | null;
+  cacheMisses: number | null;
   averageLatencyMs: number | null;
   lastDiagnosticLatencyMs?: number | null;
   lastError: string;
@@ -196,14 +196,15 @@ export const SystemHealthPanel: React.FC = () => {
 
         <div className="pt-2 border-t border-[#262626] flex items-center justify-between text-[10px] text-gray-500 font-mono">
           <span>Key: {isConfigured ? 'Loaded' : 'None'}</span>
-          <span>Hits: {providerData.cacheHits || 0}</span>
+          <span>Hits: {formatObservedCount(providerData.cacheHits)}</span>
         </div>
       </div>
     );
   };
 
-  const totalQueries = (runtimeState.resources.cacheHits || 0) + (runtimeState.resources.cacheMisses || 0);
-  const cacheHitRate = formatObservedRate(runtimeState.resources.cacheHits || 0, totalQueries);
+  const { cacheHits, cacheMisses } = runtimeState.resources;
+  const totalQueries = typeof cacheHits === 'number' && typeof cacheMisses === 'number' ? cacheHits + cacheMisses : null;
+  const cacheHitRate = formatObservedRate(cacheHits, totalQueries);
 
   return (
     <div className="bg-[#262626] rounded-xl border border-[#333333] p-5 space-y-5">
@@ -281,12 +282,12 @@ export const SystemHealthPanel: React.FC = () => {
 
           <div className="p-3 bg-[#1a1a1a] border border-emerald-500/20 rounded-lg">
             <span className="text-[10px] text-emerald-400 block uppercase font-mono">Cache Hits</span>
-            <span className="text-sm font-bold text-emerald-400 font-mono mt-0.5 block">{runtimeState.resources.cacheHits || 0}</span>
+            <span className="text-sm font-bold text-emerald-400 font-mono mt-0.5 block">{formatObservedCount(cacheHits)}</span>
           </div>
 
           <div className="p-3 bg-[#1a1a1a] border border-rose-500/20 rounded-lg">
             <span className="text-[10px] text-rose-400 block uppercase font-mono">Cache Misses</span>
-            <span className="text-sm font-bold text-rose-400 font-mono mt-0.5 block">{runtimeState.resources.cacheMisses || 0}</span>
+            <span className="text-sm font-bold text-rose-400 font-mono mt-0.5 block">{formatObservedCount(cacheMisses)}</span>
           </div>
         </div>
       </div>

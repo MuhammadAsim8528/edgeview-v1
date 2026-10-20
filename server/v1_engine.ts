@@ -118,6 +118,7 @@ type ProviderMetricAggregate = {
   request_count: number; success_count: number; failure_count: number;
   timeout_count: number; rate_limit_count: number; total_latency_ms: number;
   last_error: string | null; last_http_status: number | null; last_completed_at: string | null;
+  last_requested_at?: string | null;
 };
 type ProviderMetricStore = { format: 1; processed_run_ids: string[]; providers: Record<string, ProviderMetricAggregate> };
 let providerMetricStore: ProviderMetricStore | null = null;
@@ -165,6 +166,7 @@ function recordProviderMetrics(run: V1Run): void {
     const failureMessage = record.failure ? cleanText(record.failure.message).slice(0, 500) || 'Provider request failed' : null;
     if (completedAt && (!metric.last_completed_at || completedAt >= metric.last_completed_at)) {
       metric.last_completed_at = completedAt;
+      metric.last_requested_at = record.requested_at || null;
       metric.last_error = failureMessage;
       metric.last_http_status = Number(record.http_status) || (record.failure ? Number(record.failure.status) || null : null);
     }
@@ -906,5 +908,6 @@ export function getV1ProviderMetrics() {
     lastError: metric.last_error,
     lastHttpStatus: metric.last_http_status,
     lastCompletedAt: metric.last_completed_at,
+    lastRequestedAt: metric.last_requested_at ?? null,
   }]));
 }

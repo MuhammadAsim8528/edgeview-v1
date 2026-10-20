@@ -42,7 +42,7 @@ import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummar
 import { persistV1ContactOverlay, projectHistoricalContactFields, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
-import { hasRecentProviderObservation } from './shared/provider_telemetry';
+import { hasRecentProviderObservation, isRecentProviderOperation } from './shared/provider_telemetry';
 import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
 import { createShutdownController } from './server/shutdown';
@@ -60,6 +60,10 @@ const PORT = Number(process.env.PORT) || 3000;
 const useViteDevServer = process.env.EDGEVIEW_DEV_SERVER === '1';
 const API_VERSION = '1.0';
 const V1_PROVIDER_IDS = new Set(['serper', 'hunter', 'nvidia', 'groq']);
+// Persisted aggregates remain history, not proof that this process's current
+// credentials work. Requests begun before startup/config replacement cannot
+// certify a later configuration, even if they finish afterward.
+const providerObservationSince = new Map([...V1_PROVIDER_IDS].map(provider => [provider, Date.now()]));
 const V1_SETTING_FIELDS = new Set([
   'serper_api_key','hunter_api_key','nvidia_api_key','groq_api_key',
   'serper_enabled','hunter_enabled','nvidia_enabled','groq_enabled',
@@ -727,7 +731,10 @@ app.post('/api/settings', (req, res) => {
       const connectionChanged = before[`${provider}_api_key`] !== updated[`${provider}_api_key`]
         || (provider === 'nvidia' && (before.nvidia_model !== updated.nvidia_model || before.nvidia_base_url !== updated.nvidia_base_url))
         || (provider === 'groq' && before.groq_model !== updated.groq_model);
-      if (connectionChanged) resetV1ProviderFailureState(provider);
+      if (connectionChanged) {
+        resetV1ProviderFailureState(provider);
+        providerObservationSince.set(provider, Math.max(Date.now(), (providerObservationSince.get(provider) ?? 0) + 1));
+      }
       if (connectionChanged || before[`${provider}_enabled`] !== updated[`${provider}_enabled`]) v1ProviderTests.delete(provider);
     }
     res.json({
@@ -1238,7 +1245,8 @@ function buildV1ProviderReport() {
     const metric = metrics[provider] || { requestCount: 0, successCount: 0, failureCount: 0, timeoutCount: 0, rateLimitCount: 0, averageLatencyMs: null, lastError: null, lastHttpStatus: null, lastCompletedAt: null };
     const testSample = v1ProviderTests.get(provider);
     const test = hasRecentProviderObservation(testSample?.testedAt) ? testSample : undefined;
-    const operationAfterTest = Boolean(test && metric.lastCompletedAt && Date.parse(metric.lastCompletedAt) > Date.parse(test.testedAt));
+    const recentOperation = isRecentProviderOperation(metric.lastRequestedAt, metric.lastCompletedAt, providerObservationSince.get(provider) ?? Infinity);
+    const operationAfterTest = recentOperation && (!test || Date.parse(metric.lastCompletedAt) > Date.parse(test.testedAt));
     const suppressionReason = suppressed.get(provider) || '';
     const cooldown = coolingDown.get(provider);
     const errorText = suppressionReason || cooldown?.reason || (operationAfterTest ? metric.lastError : test?.message) || metric.lastError || '';
@@ -1254,8 +1262,8 @@ function buildV1ProviderReport() {
     } else if (cooldown) {
       routingState = 'cooldown';
       status = /429|quota|rate.?limit/i.test(cooldown.reason) ? 'rate_limited' : /timeout|aborted/i.test(cooldown.reason) ? 'timeout' : 'degraded';
-    } else if (test) {
-      const success = operationAfterTest ? !metric.lastError : test.success;
+    } else if (test || recentOperation) {
+      const success = operationAfterTest ? !metric.lastError : test!.success;
       status = success ? 'healthy' : httpStatus === 401 || httpStatus === 403 || /unauthor|invalid.*key/i.test(errorText) ? 'auth_failed' : httpStatus === 429 || /quota|rate.?limit|billing period/i.test(errorText) ? 'rate_limited' : httpStatus === 408 || /timeout|aborted|timed out/i.test(errorText) ? 'timeout' : 'degraded';
     }
     return [provider, {
@@ -1270,9 +1278,9 @@ function buildV1ProviderReport() {
       failureCount: metric.failureCount,
       timeoutCount: metric.timeoutCount,
       rateLimitCount: metric.rateLimitCount,
-      retryCount: 0,
-      cacheHits: 0,
-      cacheMisses: 0,
+      retryCount: null,
+      cacheHits: null,
+      cacheMisses: null,
       averageLatencyMs: metric.averageLatencyMs,
       lastDiagnosticLatencyMs: testSample?.latencyMs ?? null,
       lastError: status === 'healthy' ? null : errorText || null,
@@ -1443,12 +1451,17 @@ app.post('/api/system/health/test', async (req, res) => {
     if (settings.groq_enabled && settings.groq_api_key?.trim()) tests.push(['groq', () => testGroqKey(settings.groq_api_key, settings.groq_model)]);
     await Promise.all(tests.map(async ([provider, perform]) => {
       const started = performance.now();
+      const observationBoundary = providerObservationSince.get(provider);
       try {
         const result = await perform();
+        if (providerObservationSince.get(provider) !== observationBoundary) return;
         const statusMatch = result.message.match(/(?:status|HTTP)\s+(\d{3})/i);
         v1ProviderTests.set(provider, { ...result, testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: result.httpStatus ?? (statusMatch ? Number(statusMatch[1]) : null) });
       }
-      catch (error: any) { v1ProviderTests.set(provider, { success: false, message: error?.message || 'Connection test failed', testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: null }); }
+      catch (error: any) {
+        if (providerObservationSince.get(provider) !== observationBoundary) return;
+        v1ProviderTests.set(provider, { success: false, message: error?.message || 'Connection test failed', testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: null });
+      }
     }));
     res.json({ success: true, providers: buildV1ProviderReport(), tested_at: new Date().toISOString() });
   } catch (err: any) {
@@ -1491,8 +1504,8 @@ app.get('/api/runtime/state', async (req, res) => {
       groq: usage.groq || 0,
       directHttp: usage['direct-http'] || 0,
       pagesAnalyzed: recentRuns.reduce((sum, run) => sum + run.results.filter(result => result.text || result.markdown || result.html).length, 0),
-      cacheHits: 0,
-      cacheMisses: 0,
+      cacheHits: null,
+      cacheMisses: null,
     };
 
     // 2. Jobs

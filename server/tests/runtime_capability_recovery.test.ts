@@ -36,6 +36,12 @@ try {
   const recovered = await fetchRuntimeState();
   assert.equal(recovered.capabilities.company_enrichment.available, true, 'next valid response must restore actions without reloading');
   assert.equal(recovered.resources.serper, 42);
+  globalThis.fetch = (async () => Response.json({ ...snapshot, resources: { ...snapshot.resources, cacheHits: null, cacheMisses: null } })) as typeof fetch;
+  const unknownCache = await fetchRuntimeState();
+  assert.equal(unknownCache.capabilities.company_enrichment.available, true, 'unmeasured cache fields must not invalidate the runtime response');
+  assert.equal(unknownCache.resources.cacheHits, null);
+  globalThis.fetch = (async () => Response.json({ ...snapshot, resources: { ...snapshot.resources, serper: null } })) as typeof fetch;
+  assert.equal((await fetchRuntimeState()).capabilities.company_enrichment.available, false, 'only explicitly nullable measurements may be unknown');
   let observedAbort = false;
   globalThis.fetch = ((_input, options) => new Promise<Response>((_resolve, reject) => {
     options?.signal?.addEventListener('abort', () => { observedAbort = true; reject(new DOMException('Controlled abort', 'AbortError')); }, { once: true });

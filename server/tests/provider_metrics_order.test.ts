@@ -32,6 +32,7 @@ try {
   assert.equal(metric.timeoutCount, 1);
   assert.equal(metric.averageLatencyMs, 100);
   assert.equal(metric.lastCompletedAt, '2026-10-19T10:03:00.000Z');
+  assert.equal(metric.lastRequestedAt, '2026-10-19T10:03:00.000Z', 'request start stays associated with the latest completed call');
   assert.equal(metric.lastError, null);
   assert.equal(metric.lastHttpStatus, null, 'no synthetic HTTP 200 should be invented for an unrecorded success status');
   save('run-metric-known-success', '2026-10-19T10:04:00.000Z', undefined, 201);

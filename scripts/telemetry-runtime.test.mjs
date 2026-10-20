@@ -60,6 +60,9 @@ try {
   assert.equal(body.providers.hunter.status, 'healthy');
   assert.equal(body.providers.serper.lastHttpStatus, 200);
   assert.equal(body.providers.hunter.lastHttpStatus, 200);
+  assert.equal(body.providers.serper.cacheHits, null);
+  assert.equal(body.providers.serper.retryCount, null);
+  assert.equal((await (await fetch(`${base}/api/runtime/state`)).json()).resources.cacheMisses, null);
   const saveSettings = async patch => {
     const result = await fetch(`${base}/api/settings`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(patch) });
     assert.equal(result.status, 200);
@@ -91,6 +94,7 @@ try {
   assert.equal((await health()).serper.routingState, 'available', 'credential replacement must release the old account failure');
   const recovered = await enrich('Synthetic Diagnostic Recovery Company');
   assert.notEqual(recovered.run.status, 'FAILED', 'normal UI settings flow must recover without a backend restart');
+  assert.equal((await health()).serper.status, 'healthy', 'a recent real request establishes health without an extra diagnostic');
   await saveSettings({ serper_api_key: 'synthetic-upstream-failed-key' });
   await fetch(`${base}/api/system/health/test`, { method: 'POST' });
   assert.equal((await health()).serper.status, 'healthy');
