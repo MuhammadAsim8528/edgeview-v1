@@ -28,3 +28,34 @@ exit and owned lock removal, and reopens preserved data. This avoids incorrectly
 calling Windows child.kill(SIGTERM) graceful: that API forcibly terminates there.
 Actual console Ctrl+C/terminal-close delivery and active live-provider shutdown
 are NOT VERIFIED. Production PID 36216 was not stopped or replaced by these tests.
+
+## Database startup safety
+
+Invalid, unreadable or zero-byte existing operational databases are retained at
+their original path and initialization fails with DATABASE_UNAVAILABLE. They are
+not silently renamed and replaced by an empty working database. This refusal is
+the operational DB boundary, not a claim that every application route becomes
+read-only; failure UX and whole-app mutation gating still need separate audit.
+Restore a verified stopped-state backup and restart after investigating storage.
+
+Schema initialization runs against the in-memory sql.js image, suppressing disk
+publication until all DDL/version steps succeed. One existing atomic writer then
+publishes the completed image. Earlier-schema bytes receive the existing
+pre-migration backup first; newer schema versions refuse downgrade. Column
+existence is checked explicitly rather than swallowing all ALTER failures.
+Legacy tables/data are retained; this does not remove archived work or migrate to
+a new storage engine. An initialization failure remains failed until restart.
+
+Disposable tests retain exact original bytes for corrupt/empty/future-version and
+mid-schema failures, and verify successful legacy row retention, matching backup,
+integrity/version and idempotent reopen. No production database migration or
+restore was run. Power interruption, filesystem-specific atomicity and a complete
+historical-schema upgrade matrix remain separate acceptance gates.
+
+Health includes a read-only operational lifecycle snapshot (unknown/initializing/
+ok/degraded) from that same DB owner, not a fresh database open per request.
+Overall database health is degraded unless initialization succeeded. A failed
+runtime write marks it degraded; a successful durable retry restores ok.
+The compiled disposable production fixture checks corrupt bytes are retained,
+health is degraded, normal shutdown returns failure rather than claim a clean
+flush, and a fresh fixture restart reports healthy before upload/history tests.

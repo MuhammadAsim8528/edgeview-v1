@@ -64,7 +64,8 @@ export async function runDoctor({ root = installation, full = false, request = f
     const liveBuild = health.app?.build;
     add('running_build', !localBuild.available || !liveBuild?.available ? 'WARN' : localBuild.buildId === liveBuild.buildId ? 'PASS' : 'FAIL',
       !localBuild.available || !liveBuild?.available ? 'Live or local build identity is unavailable; deployment NOT VERIFIED.' : localBuild.buildId === liveBuild.buildId ? 'Running backend captured the current build identity at startup.' : 'Running backend belongs to a different build; normal restart required.');
-    add('database', health.database?.status === 'ok' ? 'PASS' : 'FAIL', health.database?.status === 'ok' ? 'Backend reports database checks healthy.' : 'Backend database status is degraded or unknown.');
+    const databaseState = health.database?.status !== 'ok' ? 'FAIL' : health.database?.operational?.status === 'ok' ? 'PASS' : 'WARN';
+    add('database', databaseState, databaseState === 'PASS' ? 'Backend reports dataset and operational database healthy.' : databaseState === 'WARN' ? 'Dataset projection responds; operational database health is not reported by this backend.' : 'Backend database status is degraded or unknown.');
     const resources = health.resources;
     const observedResources = resources?.status === 'PASS' && ['rssBytes', 'cpuPercent', 'systemTotalBytes', 'diskAvailableBytes'].every(key => typeof resources[key] === 'number' && Number.isFinite(resources[key]) && resources[key] >= 0);
     add('resources', observedResources ? 'PASS' : 'WARN', observedResources ? 'Backend reports measured process/system/disk resources; unsupported metrics remain unknown.' : 'Resource measurements are partial or unavailable; initial CPU sample needs a later refresh.');

@@ -42,6 +42,7 @@ jobs:
       - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/shutdown.test.ts
+      - run: node --import tsx server/tests/sqlite_initialization_safety.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/provider_model_discovery_e2e.test.ts
       - run: node scripts/model-test-outcome.test.mjs

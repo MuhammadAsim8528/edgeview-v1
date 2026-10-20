@@ -46,7 +46,7 @@ import { hasRecentProviderObservation, isRecentProviderOperation } from './share
 import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
 import { createShutdownController } from './server/shutdown';
-import { flushInitializedDatabase } from './server/sqlite';
+import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
 
 const app = express();
 let closing = false;
@@ -217,6 +217,8 @@ app.get('/api/health', (req, res) => {
     database.status = 'degraded';
     database.message = err?.message || 'Database status check failed';
   }
+  database.operational = getOperationalDatabaseStatus();
+  if (database.operational.status !== 'ok') database.status = 'degraded';
 
   let settings: ReturnType<typeof getAppSettings>;
   try {

@@ -61,6 +61,15 @@ denial without an approval dialog; no workaround attempted.
 This ledger reconciles the requested work. Source/tests, deployed behavior, and
 visual verification are separate gates. Earlier progress reports are not proof.
 
+Database startup increment: corrupt/empty/unreadable operational files are no
+longer automatically replaced by an empty database; failed schema initialization
+retains original bytes and publishes no intermediate schema image. Legacy fixture
+row/backup/integrity/reopen, compiled degraded-health and failed-flush exit tests
+pass. Health/doctor distinguish dataset projection from operational readiness.
+Source, V1, shutdown, release/history and packaged backup tests passed; this is
+not a production migration/restore, full historical upgrade matrix, whole-app
+read-only gating or visual failure-UX verification. See docs/SHUTDOWN_RECOVERY.md.
+
 Normal shutdown increment: HTTP intake/job scheduling stop, bounded task drain,
 initialized-DB flush, Vite close and lock release at exit now replace immediate
 signal exit. Pending-write reopen and compiled production signal-handler/history

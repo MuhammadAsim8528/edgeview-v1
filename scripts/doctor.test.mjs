@@ -17,6 +17,9 @@ try {
   assert.equal(healthy.checks.find(check => check.id === 'provider_serper').status, 'WARN');
   assert.equal(healthy.checks.find(check => check.id === 'resources').status, 'WARN', 'old runtime cannot fabricate resource measurements');
   const measured = await runDoctor({ root, request: async () => Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'ok' }, resources: { status: 'PASS', rssBytes: 1, cpuPercent: 0, systemTotalBytes: 2, diskAvailableBytes: 3 } }) });
+  assert.equal(measured.checks.find(check => check.id === 'database').status, 'WARN', 'legacy projection-only health must not certify the operational DB');
+  const unhealthyDb = await runDoctor({ root, request: async () => Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'degraded', operational: { status: 'degraded' } } }) });
+  assert.equal(unhealthyDb.checks.find(check => check.id === 'database').status, 'FAIL');
   assert.equal(measured.checks.find(check => check.id === 'resources').status, 'PASS');
   const commands = [];
   const full = await runDoctor({ root, request, full: true, execute: command => { commands.push(command); return { status: command === 'build' ? 1 : 0 }; } });

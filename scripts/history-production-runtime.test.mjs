@@ -46,12 +46,12 @@ async function start() {
   }
   throw new Error('Isolated production history server did not become ready');
 }
-async function stop() {
+async function stop(expectedExit = 0) {
   if (child && child.exitCode === null && child.signalCode === null) {
     const exiting = child;
     let timeout;
     const exited = new Promise((resolve, reject) => {
-      exiting.once('exit', code => { clearTimeout(timeout); code === 0 ? resolve() : reject(new Error('Normal shutdown failed')); });
+      exiting.once('exit', code => { clearTimeout(timeout); code === expectedExit ? resolve() : reject(new Error('Normal shutdown returned an unexpected exit code')); });
       timeout = setTimeout(() => { exiting.kill('SIGTERM'); reject(new Error('Normal shutdown exceeded test deadline')); }, 20000);
     });
     exiting.send('edgeview-test-normal-shutdown');
@@ -63,7 +63,20 @@ const json = async route => {
   const response = await fetch(`${base}${route}`); assert.equal(response.status, 200, route); return response.json();
 };
 try {
+  const corruptPath = path.join(app, 'edgeview.db');
+  const corruptBytes = Buffer.from('synthetic corrupt database retained unchanged');
+  fs.writeFileSync(corruptPath, corruptBytes);
   await start();
+  const degraded = await json('/api/health');
+  assert.equal(degraded.database.status, 'degraded', 'dataset projection alone cannot certify the operational DB');
+  assert.equal(degraded.database.operational.status, 'degraded');
+  assert.deepEqual(fs.readFileSync(corruptPath), corruptBytes);
+  await stop(1); // failed operational initialization cannot claim a clean flush
+  assert.deepEqual(fs.readFileSync(corruptPath), corruptBytes);
+  // Remove only this explicitly created disposable fixture, never user data.
+  fs.unlinkSync(corruptPath);
+  await start();
+  assert.equal((await json('/api/health')).database.operational.status, 'ok');
   if (process.platform === 'win32') {
     for (const file of ['config.json', 'config.prev.json']) {
       const disk = fs.readFileSync(path.join(app, file), 'utf8');

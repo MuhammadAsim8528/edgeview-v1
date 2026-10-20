@@ -18,6 +18,10 @@ export interface DatabaseWrapper {
 
 let dbInstance: DatabaseWrapper | null = null;
 let initPromise: Promise<DatabaseWrapper> | null = null;
+let operationalStatus: 'unknown' | 'initializing' | 'ok' | 'degraded' = 'unknown';
+export function getOperationalDatabaseStatus() {
+  return { status: operationalStatus, code: operationalStatus === 'degraded' ? 'DATABASE_UNAVAILABLE' : null };
+}
 /** Do not initialize/create a database merely because the process is closing. */
 export async function flushInitializedDatabase(): Promise<void> {
   if (initPromise) await initPromise;
@@ -30,12 +34,14 @@ export function resetDbInstanceForTests(): void {
   if (!isTestProcess()) throw new Error('resetDbInstanceForTests is test-only');
   dbInstance = null;
   initPromise = null;
+  operationalStatus = 'unknown';
 }
 
 export async function getDb(): Promise<DatabaseWrapper> {
   if (dbInstance) return dbInstance;
   if (initPromise) return initPromise;
 
+  operationalStatus = 'initializing';
   initPromise = (async () => {
     const DB_PATH = getSqlitePath();
     const SQL = await initSqlJs();
@@ -44,28 +50,20 @@ export async function getDb(): Promise<DatabaseWrapper> {
     if (fs.existsSync(DB_PATH)) {
       try {
         const fileBuffer = fs.readFileSync(DB_PATH);
+        if (!fileBuffer.length) throw new Error('Existing operational database is empty');
         db = new SQL.Database(fileBuffer);
         const integrity = db.exec('PRAGMA integrity_check;');
         const integrityResult = String(integrity?.[0]?.values?.[0]?.[0] || '').toLowerCase();
         if (integrityResult !== 'ok') throw new Error(`SQLite integrity check failed: ${integrityResult || 'no result'}`);
       } catch (err) {
-        console.error('Failed to load existing SQLite db (corrupted or invalid). Creating backup and initializing in-memory fallback:', err);
-        try {
-          if (fs.existsSync(DB_PATH)) {
-            const backupPath = `${DB_PATH}.corrupt.${Date.now()}`;
-            fs.renameSync(DB_PATH, backupPath);
-            console.warn(`Original corrupted database safely backed up to ${backupPath}`);
-          }
-        } catch (backupErr) {
-          console.error('Failed to create backup of corrupted database file:', backupErr);
-        }
-        db = new SQL.Database();
+        throw Object.assign(new Error('DATABASE_UNAVAILABLE: Existing operational database is invalid or unreadable. Original file retained; restore a verified backup and restart.', { cause: err }), { code: 'DATABASE_UNAVAILABLE' });
       }
     } else {
       db = new SQL.Database();
     }
 
     let saveTimer: NodeJS.Timeout | null = null;
+    let initializing = true;
     let pendingPersistenceError: Error | null = null;
     const persistenceError = (err: unknown) => {
       const rawCode = String((err as any)?.code || '').toUpperCase();
@@ -77,6 +75,9 @@ export async function getDb(): Promise<DatabaseWrapper> {
       return error;
     };
     const saveToDisk = () => {
+      // sql.js schema changes stay private in memory until every initialization
+      // step succeeds. Failed migration cannot publish a partial disk image.
+      if (initializing) return;
       const tempPath = `${DB_PATH}.${process.pid}.${Date.now()}.tmp`;
       let handle: number | undefined;
       try {
@@ -89,12 +90,14 @@ export async function getDb(): Promise<DatabaseWrapper> {
         handle = undefined;
         fs.renameSync(tempPath, DB_PATH);
         pendingPersistenceError = null;
+        operationalStatus = 'ok';
       } catch (err) {
         if (handle !== undefined) {
           try { fs.closeSync(handle); } catch { /* best-effort cleanup */ }
         }
         try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
         pendingPersistenceError = persistenceError(err);
+        operationalStatus = 'degraded';
         console.error('Failed to persist SQLite db to disk:', err);
         throw pendingPersistenceError;
       }
@@ -403,27 +406,28 @@ export async function getDb(): Promise<DatabaseWrapper> {
         ON research_campaign_candidate_facts(campaign_id, created_at);
     `);
 
-    try {
+    const hasColumn = (table: string, column: string) => db.exec(`PRAGMA table_info(${table});`)[0]?.values.some(row => row[1] === column);
+    if (!hasColumn('contact_cache', 'details_json')) {
       await wrapper.exec(`ALTER TABLE contact_cache ADD COLUMN details_json TEXT;`);
-    } catch (e) {
-      // Column already exists, ignore error
     }
 
-    try {
+    if (!hasColumn('research_jobs', 'is_pilot')) {
       await wrapper.exec(`ALTER TABLE research_jobs ADD COLUMN is_pilot INTEGER DEFAULT 0;`);
-    } catch (e) {}
+    }
 
-    try {
+    if (!hasColumn('research_jobs', 'pilot_authorized')) {
       await wrapper.exec(`ALTER TABLE research_jobs ADD COLUMN pilot_authorized INTEGER DEFAULT 0;`);
-    } catch (e) {}
+    }
 
     if (existingSchemaVersion < CURRENT_SCHEMA_VERSION) {
       await wrapper.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`);
     }
 
+    initializing = false;
+    saveToDisk();
     dbInstance = wrapper;
     return wrapper;
-  })();
+  })().catch(error => { operationalStatus = 'degraded'; throw error; });
 
   return initPromise;
 }
