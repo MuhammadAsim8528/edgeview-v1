@@ -71,6 +71,11 @@ history scan passes; this is not entropy scanning or proof no secret ever existe
 Five moderate dependency rollups remain at the last documented audit; re-audit
 before release. No new comprehensive scan is claimed by this intake document.
 
+Follow-up: hosted run 39431744015 passed all Windows test/build/cold-package gates
+after direct framework loading. Its artifact upload rejected a parent-relative
+glob; an absolute resolved path exposed via a step output replaces that glob.
+Complete hosted delivery remains pending a new run, not assumed from local tests.
+
 P1: safe diagnostics export, boot/recovery/cancellation gaps, database restore and
 foreign-key/index/transaction review, package build metadata, dependency licenses/
 SBOM, supported interface E2E and repeatable performance thresholds.

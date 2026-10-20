@@ -72,15 +72,17 @@ jobs:
       - run: node scripts/package-launch-check.test.mjs
       - run: node scripts/package-cold-runtime.test.mjs
       - name: Hash release package
+        id: release-files
         shell: pwsh
         run: |
-          $archive = Resolve-Path ../../outputs/EdgeView-V1-Windows.zip
+          $archive = (Resolve-Path ../../outputs/EdgeView-V1-Windows.zip).Path
           $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
           "$digest  EdgeView-V1-Windows.zip" | Set-Content -Encoding utf8NoBOM "$archive.sha256"
+          "archive=$archive" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
           name: EdgeView-V1-Windows
-          path: ../../outputs/EdgeView-V1-Windows.zip*
+          path: ${{ steps.release-files.outputs.archive }}*
           if-no-files-found: error
           retention-days: 14
 
