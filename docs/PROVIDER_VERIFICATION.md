@@ -45,3 +45,13 @@ No periodic paid health requests were added. Cache/retry counters stay null unti
 instrumented, and cache counts/rate display Unknown rather than fabricated zero.
 Client payload validation accepts null only for the explicitly nullable fields.
 API/presentation/client-recovery tests are separate from rendered UI verification.
+
+Settings Test connection and the system-wide diagnostic action now use the same
+bounded observation recorder. A saved-key/model/base-URL check updates the shared
+health report; an unsaved candidate key/model/URL only returns its own test result.
+It cannot certify or overwrite the canonical configuration. A diagnostic that
+finishes after configuration replacement is ignored for shared health. Input
+type/length checks reject malformed test fields before provider access. Compiled
+API fixtures exercise saved-key propagation, an invalid unsaved candidate that
+does not replace healthy state, and invalid field rejection. No claim of an
+actual browser click or rendered result follows from these API assertions.

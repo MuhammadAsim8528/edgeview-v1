@@ -46,6 +46,23 @@ try {
   const nextResources = (await (await fetch(`${base}/api/health`)).json()).resources;
   assert.ok(Number.isFinite(nextResources.cpuPercent) && nextResources.cpuPercent >= 0);
   assert.ok(!JSON.stringify(nextResources).includes('synthetic-serper-diagnostic'));
+  const settingsTest = payload => fetch(`${base}/api/settings/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const savedTest = await settingsTest({ service: 'serper', key: '' });
+  assert.equal(savedTest.status, 200);
+  assert.equal((await savedTest.json()).success, true);
+  const savedObservation = (await (await fetch(`${base}/api/system/health`)).json()).providers.serper;
+  assert.equal(savedObservation.status, 'healthy', 'Settings saved-key test must update the common health authority');
+  assert.equal(savedObservation.lastHttpStatus, 200);
+  const unsavedTest = await settingsTest({ service: 'serper', key: 'synthetic-auth-failed-unsaved-key' });
+  assert.equal((await unsavedTest.json()).success, false);
+  const afterUnsaved = (await (await fetch(`${base}/api/system/health`)).json()).providers.serper;
+  assert.equal(afterUnsaved.lastTested, savedObservation.lastTested, 'testing an unsaved key must not overwrite saved configuration health');
+  assert.equal(afterUnsaved.status, 'healthy');
+  for (const invalid of [{ key: [] }, { model: {} }, { baseUrl: false }, { key: 'x'.repeat(4097) }]) {
+    const response = await settingsTest({ service: 'serper', ...invalid });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'INVALID_INPUT');
+  }
   const tested = await fetch(`${base}/api/system/health/test`, { method: 'POST' });
   assert.equal(tested.status, 200);
   const body = await tested.json();

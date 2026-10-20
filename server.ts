@@ -751,7 +751,13 @@ app.post('/api/settings', (req, res) => {
 
 app.post('/api/settings/test', async (req, res) => {
   try {
-    const { service, key, model, baseUrl } = req.body;
+    const { service } = req.body || {};
+    let key: string | undefined, model: string | undefined, baseUrl: string | undefined;
+    try {
+      key = boundedText(req.body?.key, 'API key', 4096);
+      model = boundedText(req.body?.model, 'Model', 300);
+      baseUrl = boundedText(req.body?.baseUrl, 'Provider URL', 2048);
+    } catch { return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'Invalid provider test input.' }); }
     if (typeof service !== 'string' || !V1_PROVIDER_IDS.has(service)) {
       return res.status(400).json({ success: false, message: 'Only EdgeView V1 providers can be tested.' });
     }
@@ -767,22 +773,22 @@ app.post('/api/settings/test', async (req, res) => {
 
     if (service === 'serper') {
       const testKey = resolveApiKey(key, settings.serper_api_key);
-      const result = await testSerperKey(testKey);
+      const result = await observeProviderDiagnostic(service, () => testSerperKey(testKey), testKey === settings.serper_api_key);
       return res.json(result);
     } else if (service === 'nvidia') {
       const testKey = resolveApiKey(key, settings.nvidia_api_key);
       const testModel = model || settings.nvidia_model;
       const testUrl = baseUrl || settings.nvidia_base_url;
-      const result = await testNvidiaKey(testKey, testModel, testUrl);
+      const result = await observeProviderDiagnostic(service, () => testNvidiaKey(testKey, testModel, testUrl), testKey === settings.nvidia_api_key && testModel === settings.nvidia_model && testUrl === settings.nvidia_base_url);
       return res.json(result);
     } else if (service === 'groq') {
       const testKey = resolveApiKey(key, settings.groq_api_key);
       const testModel = model || settings.groq_model;
-      const result = await testGroqKey(testKey, testModel);
+      const result = await observeProviderDiagnostic(service, () => testGroqKey(testKey, testModel), testKey === settings.groq_api_key && testModel === settings.groq_model);
       return res.json(result);
     } else if (service === 'hunter') {
       const testKey = resolveApiKey(key, settings.hunter_api_key);
-      const result = await testHunterKey(testKey);
+      const result = await observeProviderDiagnostic(service, () => testHunterKey(testKey), testKey === settings.hunter_api_key);
       return res.json(result);
     } else {
       return res.status(400).json({ success: false, message: 'Invalid service.' });
@@ -1228,6 +1234,19 @@ app.get('/api/governor/stats', async (req, res) => {
 
 type ProviderTestState = { success: boolean; message: string; testedAt: string; latencyMs: number; httpStatus: number | null };
 const v1ProviderTests = new Map<string, ProviderTestState>();
+type ProviderDiagnosticResult = { success: boolean; message: string; httpStatus?: number | null };
+async function observeProviderDiagnostic(provider: string, perform: () => Promise<ProviderDiagnosticResult>, canonical = true): Promise<ProviderDiagnosticResult> {
+  const started = performance.now();
+  const observationBoundary = providerObservationSince.get(provider);
+  let result: ProviderDiagnosticResult;
+  try { result = await perform(); }
+  catch (error: any) { result = { success: false, message: error?.message || 'Connection test failed', httpStatus: null }; }
+  if (canonical && providerObservationSince.get(provider) === observationBoundary) {
+    const statusMatch = result.message.match(/(?:status|HTTP)\s+(\d{3})/i);
+    v1ProviderTests.set(provider, { ...result, testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: result.httpStatus ?? (statusMatch ? Number(statusMatch[1]) : null) });
+  }
+  return result;
+}
 
 function buildV1ProviderReport() {
   const settings = getAppSettings();
@@ -1449,20 +1468,7 @@ app.post('/api/system/health/test', async (req, res) => {
     if (settings.hunter_enabled && settings.hunter_api_key?.trim()) tests.push(['hunter', () => testHunterKey(settings.hunter_api_key)]);
     if (settings.nvidia_enabled && settings.nvidia_api_key?.trim()) tests.push(['nvidia', () => testNvidiaKey(settings.nvidia_api_key, settings.nvidia_model, settings.nvidia_base_url)]);
     if (settings.groq_enabled && settings.groq_api_key?.trim()) tests.push(['groq', () => testGroqKey(settings.groq_api_key, settings.groq_model)]);
-    await Promise.all(tests.map(async ([provider, perform]) => {
-      const started = performance.now();
-      const observationBoundary = providerObservationSince.get(provider);
-      try {
-        const result = await perform();
-        if (providerObservationSince.get(provider) !== observationBoundary) return;
-        const statusMatch = result.message.match(/(?:status|HTTP)\s+(\d{3})/i);
-        v1ProviderTests.set(provider, { ...result, testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: result.httpStatus ?? (statusMatch ? Number(statusMatch[1]) : null) });
-      }
-      catch (error: any) {
-        if (providerObservationSince.get(provider) !== observationBoundary) return;
-        v1ProviderTests.set(provider, { success: false, message: error?.message || 'Connection test failed', testedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), httpStatus: null });
-      }
-    }));
+    await Promise.all(tests.map(([provider, perform]) => observeProviderDiagnostic(provider, perform)));
     res.json({ success: true, providers: buildV1ProviderReport(), tested_at: new Date().toISOString() });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to test system health' });
