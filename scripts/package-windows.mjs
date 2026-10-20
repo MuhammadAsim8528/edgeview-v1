@@ -52,7 +52,7 @@ try {
 fs.mkdirSync(stage, { recursive: true });
 for (const directory of includedDirectories) copyTree(path.join(root, directory), path.join(stage, directory), directory);
 fs.mkdirSync(path.join(stage, 'scripts'), { recursive: true });
-for (const script of ['build-if-needed.mjs','verify-package.mjs','dev-server.mjs','ensure-dependencies.mjs','doctor.mjs']) copyFile(path.join(root,'scripts',script), path.join(stage,'scripts',script));
+for (const script of ['build-if-needed.mjs','verify-package.mjs','dev-server.mjs','ensure-dependencies.mjs','doctor.mjs','backup-runtime.mjs']) copyFile(path.join(root,'scripts',script), path.join(stage,'scripts',script));
 for (const file of includedFiles) copyFile(path.join(root, file), path.join(stage, file));
 
 const prohibited = [];

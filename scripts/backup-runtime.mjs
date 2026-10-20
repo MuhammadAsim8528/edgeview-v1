@@ -3,8 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+if (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
+const requireStopped = () => {
+  if (fs.existsSync(path.join(root, 'edgeview.db.lock'))) throw new Error('Stop EdgeView normally before backup. Backup never removes an existing backend lock.');
+};
+requireStopped();
+const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}`;
 const destination = path.join(root, 'backups', `EdgeView-${stamp}`);
+const staging = path.join(root, 'backups', `INCOMPLETE-EdgeView-${stamp}`);
 const included = ['edgeview.db', 'edgeview_db.json', 'config.json', 'data', 'uploads'];
 const manifest = { format: 1, created_at: new Date().toISOString(), files: [] };
 
@@ -15,23 +21,31 @@ async function sha256File(file) {
 }
 
 async function copyTree(source, target, relative) {
-  const stat = fs.statSync(source);
+  const stat = fs.lstatSync(source);
+  if (stat.isSymbolicLink()) throw new Error('Runtime links are not supported in backups.');
   if (stat.isDirectory()) {
     fs.mkdirSync(target, { recursive: true });
     for (const entry of fs.readdirSync(source)) await copyTree(path.join(source, entry), path.join(target, entry), `${relative}/${entry}`);
     return;
   }
+  if (!stat.isFile()) throw new Error('Unsupported runtime file type.');
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
-  manifest.files.push({ path: relative.replace(/\\/g, '/'), bytes: stat.size, sha256: await sha256File(target) });
+  const digest = await sha256File(target);
+  if (fs.statSync(source).size !== stat.size || fs.statSync(target).size !== stat.size || await sha256File(source) !== digest) throw new Error('Runtime file changed during backup.');
+  manifest.files.push({ path: relative.replace(/\\/g, '/'), bytes: stat.size, sha256: digest });
 }
 
-fs.mkdirSync(path.dirname(destination), { recursive: true });
-fs.mkdirSync(destination, { recursive: false });
+const parent = path.dirname(destination);
+if (fs.existsSync(parent) && fs.lstatSync(parent).isSymbolicLink()) throw new Error('Backup destination links are not supported.');
+fs.mkdirSync(parent, { recursive: true });
+fs.mkdirSync(staging, { recursive: false });
 for (const item of included) {
   const source = path.join(root, item);
-  if (fs.existsSync(source)) await copyTree(source, path.join(destination, item), item);
+  if (fs.existsSync(source)) await copyTree(source, path.join(staging, item), item);
 }
 if (!manifest.files.length) throw new Error('No EdgeView runtime files were found to back up.');
-fs.writeFileSync(path.join(destination, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+requireStopped();
+fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+fs.renameSync(staging, destination);
 console.log(JSON.stringify({ backup: destination, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0) }));

@@ -408,3 +408,31 @@ No claim of release completion or broad production readiness is made.
   expconfig.nvl still lists 17,612 rows. Read-only doctor passed checked gates with
   explicit WARN/SKIPPED for unverified providers/unsupported checks; no provider
   request was made. Refreshed 120-file package and 437-component SBOM verified.
+
+### Backup publication and packaged restore regression
+
+- Confirmed defect: backup documentation promised INCOMPLETE snapshots, but the
+  script previously wrote directly into an ordinary final folder. Failed copy
+  could leave a misleading completed-looking directory. Backups now publish by
+  rename only after copying/hashing and final stopped-state check; failures stay
+  prefixed INCOMPLETE. Existing backend locks are never removed by this command.
+- Added installation identity check, runtime/destination link refusal and a
+  copied/source checksum comparison. No production backup/restore was performed
+  while the real backend was running. This is not VSS or a concurrent-writer
+  transactional snapshot; app must remain stopped, and external edits unsupported.
+- Independent subprocess fixture verifies wrong-root/live-lock refusal, empty
+  and mid-copy failure, previous completed backup preservation and junction
+  refusal. A new empty restore folder receives manifest-checked bytes; sql.js
+  integrity_check and retained SQL row, dataset JSON, config and evidence pass.
+  This is not a production database migration or end-user restore UI test.
+- Windows ZIP previously omitted the script behind npm run backup. It now
+  includes it, with the same regression exercised against the staged script.
+  Typecheck, lint, nine V1 suites, production build, release smoke and 122-file
+  package verification pass after the change. No live backend restart is needed
+  for this standalone maintenance-script change.
+- Separately observed hosted run 39466064224 for ab98219 succeeded: Windows verify
+  5m55s and Docker QA 1m08s, artifact uploaded; publish skipped (not a version tag).
+  Local extracted ZIP SHA256 9f6a754de857a4a1441cdbad19c2d4e6445538a0ac5b1ac43054a4d40bfc9899
+  passed locked install 66,740ms, smoke 6,608ms, rebuild 11,472ms, rebuilt smoke
+  4,856ms. These results precede the backup changes and do not verify them in
+  hosted CI or satisfy the no-Node clean-machine/visual gates.

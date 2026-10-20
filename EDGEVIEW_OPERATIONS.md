@@ -92,6 +92,7 @@ The Windows ZIP requires Node.js and npm. First launch installs dependencies if 
 For a complete local operational backup, copy these while EdgeView is stopped:
 
 - `edgeview.db`;
+- `edgeview_db.json` (uploaded dataset persistence);
 - `data/v1-runs/`;
 - `uploads/`;
 - `config.json` through a secure secret-storage process.
@@ -99,6 +100,13 @@ For a complete local operational backup, copy these while EdgeView is stopped:
 The distributable ZIP is not a data backup because sensitive configuration and runtime data are excluded intentionally.
 
 Run `npm run backup` from the installed source folder for a non-overwriting snapshot with a SHA-256 manifest. Large evidence histories can make this operation take several minutes; it streams hashes and does not load entire evidence files into memory. A folder prefixed `INCOMPLETE-` is not a valid backup and must not be used for restore.
+
+Backup refuses an existing backend lock, never deletes stale locks, rejects
+symbolic links and checks copied bytes against the source before publishing by
+directory rename. Keep the app stopped throughout: this is not a filesystem
+shadow copy or a transaction against unrelated external writers. Failed attempts
+remain explicitly INCOMPLETE for inspection. Protected credentials remain bound
+to their Windows user/machine; copying them is not portable key recovery.
 
 ### Evidence audit and quarantine
 

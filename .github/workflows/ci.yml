@@ -32,6 +32,7 @@ jobs:
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/ensure-dependencies.test.mjs
       - run: node scripts/npm-policy-isolation.test.mjs
+      - run: node scripts/backup-runtime.test.mjs
       - run: node --experimental-strip-types server/tests/resource_snapshot.test.ts
       - run: node scripts/doctor.test.mjs
       - run: node scripts/generate-sbom.test.mjs
@@ -74,6 +75,7 @@ jobs:
       - run: npm run test:release
       - run: npm run package:windows
       - run: npm run verify:package
+      - run: node scripts/backup-runtime.test.mjs ../../outputs/EdgeView-V1-Windows/scripts/backup-runtime.mjs
       - run: node scripts/package-launch-check.test.mjs
       - run: node scripts/package-cold-runtime.test.mjs
       - run: node scripts/generate-sbom.mjs

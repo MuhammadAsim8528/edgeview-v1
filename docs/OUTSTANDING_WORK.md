@@ -30,7 +30,17 @@ Resource-monitoring increment: Node process/system/filesystem sampler now feeds
 the existing health API, doctor and a Settings health panel. Sampling and API
 regressions are separate gates; rendered QA and long-run measurements remain
 unverified. See docs/RESOURCE_MONITORING.md. The owner closed the backend after
-the dependency file-lock blocker; exact locked-toolchain restoration is in progress.
+the dependency file-lock blocker; exact locked-toolchain restoration succeeded,
+with zero direct-version mismatches. Source checks/build, isolated telemetry API,
+release smoke and extracted-package cold install/rebuild passed for ab98219.
+
+Backup increment: failed copies now stay INCOMPLETE until final publication;
+existing backend locks and runtime/destination links are refused. Independent
+fixtures verify interrupted-copy preservation, manifest hashes, isolated SQLite
+integrity/row restore plus JSON/config/evidence retention. The Windows package now
+includes the backup command; staged-script regression is a release gate. This is
+not a VSS snapshot, concurrent-writer guarantee, production-data restore, portable
+credential recovery or completed full crash-recovery audit.
 
 This ledger reconciles the requested work. Source/tests, deployed behavior, and
 visual verification are separate gates. Earlier progress reports are not proof.
@@ -49,7 +59,7 @@ visual verification are separate gates. Earlier progress reports are not proof.
 | Exposed credentials | Owner must rotate exposed provider keys and replace them locally. Encryption/redaction is not revocation; do not print keys or revoke working credentials without a safe replacement plan. |
 | Dependency advisories | Five moderate rollups previously remain; no claim every dependency is patched. UUID affected-buffer API not reached by application ExcelJS call sites; published sprintf-js fix unavailable at last check. Recheck when dependencies change. |
 | Windows launcher/logo/shortcut/package | Existing launcher/package retained. Package checks pass. Verify user's actual desktop shortcut/icon/launch target visually; do not create a second installation authority. |
-| GitHub and CI/CD | Private MuhammadAsim8528/edgeview-v1 created, main pushed. Hosted run 39433269772 for 6f24778 passed Windows + Docker QA and uploaded EdgeView-V1-Windows (2.86 MB). Tag-gated release publishing is configured but not exercised. Newer changes require their own green run; no production-readiness claim. |
+| GitHub and CI/CD | Private MuhammadAsim8528/edgeview-v1; hosted run 39466064224 for ab98219 passed Windows + Docker QA with artifact uploaded. Tag-gated publishing skipped/not exercised. Backup changes need their own hosted green run; no production-readiness claim. |
 | Docker | Non-root isolated QA image built; offline release smoke passes. Not a supported Linux production replacement for Windows DPAPI. |
 | Local live deployment | Restarted same-root production build on port 3901 after confirming no active jobs; health PID 31216 verified. expconfig.nvl still listed; config protected without printing secrets. Future source changes need build/restart; not every UI behavior verified. |
 | Performance | Prior bounded load checks are documented; repeated large-dataset/browser memory and full enrichment measurements remain. No modest-hardware or million-row readiness claim. |
