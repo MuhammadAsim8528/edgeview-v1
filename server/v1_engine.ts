@@ -7,6 +7,7 @@ import { isSafeExternalUrl, safeFetchOutboundText } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
 import { readProviderResponse, validateProviderEnvelope, providerSchemaError } from './provider_response';
+import { crawlOfficialPages } from './official_site_crawl';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -680,14 +681,13 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
     `${origin}/leadership`, `${origin}/our-team`, `${origin}/team`,
     `${origin}/board-of-directors`, `${origin}/about`, `${origin}/about-us`,
   ];
-  const candidates = [...new Set([...discoveredSearchPages, origin, ...fallbackUrls])]
-    .slice(0, run.limits.max_scrapes);
-  const captures = candidates.map((url, index) => {
+  const existingPages = run.results.filter(result => sameDomainOrSubdomain(result.url, domain) && result.status === 'success' && Boolean(result.html || result.text || result.markdown));
+  await crawlOfficialPages(domain, run.limits.max_scrapes, existingPages, [...discoveredSearchPages, ...fallbackUrls], async (url, rank) => {
     const result: V1Result = {
       id: id('result'), run_id: run.id, raw_record_id: '',
       query: `official website crawl: ${run.company_name} ${run.country}`,
-      provider: 'direct-http', rank: index + 1,
-      title: index === 0 ? `${run.company_name} official website` : `Official page: ${new URL(url).pathname || '/'}`,
+      provider: 'direct-http', rank,
+      title: `Official page: ${new URL(url).pathname || '/'}`,
       url, snippet: 'Bounded deterministic crawl of the resolved official company domain.',
       links: [], metadata: { official_domain: domain, official_domain_confidence: run.identity_resolution?.confidence },
       search_latency_ms: 0, status: 'pending',
@@ -695,10 +695,10 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
     // Official pages use one deterministic, bounded capture path. This avoids
     // conflicting scrape payloads while preserving the complete HTTP response
     // (or structured failure) for every attempted page.
-    return { result, capture: scrapeDirectFallback(run, result, 10_000) };
+    run.results.push(result);
+    await scrapeDirectFallback(run, result, 10_000);
+    return result;
   });
-  await Promise.all(captures.map(item => item.capture));
-  run.results.push(...captures.map(item => item.result));
 }
 
 async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'bulk'): Promise<void> {

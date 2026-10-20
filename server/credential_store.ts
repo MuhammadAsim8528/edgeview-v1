@@ -6,7 +6,7 @@ const FIELD = '_edgeview_credentials';
 export const CREDENTIAL_FIELDS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'].map(p => `${p}_api_key`);
 const cache = new Map<string, Record<string, string>>();
 export class CredentialStorageError extends Error {
-  constructor() { super('Saved credentials could not be protected or opened for this Windows user. Configuration was not replaced.'); }
+  constructor(readonly code: 'DPAPI_TIMEOUT' | 'DPAPI_UNAVAILABLE' = 'DPAPI_UNAVAILABLE') { super(`Saved credentials could not be protected or opened for this Windows user (${code}). Configuration was not replaced.`); }
 }
 
 function crypt(input: string, operation: 'Protect' | 'Unprotect'): string {
@@ -19,9 +19,9 @@ function crypt(input: string, operation: 'Protect' | 'Unprotect'): string {
   }
   const result = spawnSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-    { input, encoding: 'utf8', env, windowsHide: true, timeout: 10000, maxBuffer: 1024 * 1024 });
+    { input, encoding: 'utf8', env, windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 });
   const output = result.stdout?.trim();
-  if (result.error || result.status !== 0 || !output || !/^[A-Za-z0-9+/]+={0,2}$/.test(output)) throw new CredentialStorageError();
+  if (result.error || result.status !== 0 || !output || !/^[A-Za-z0-9+/]+={0,2}$/.test(output)) throw new CredentialStorageError((result.error as NodeJS.ErrnoException)?.code === 'ETIMEDOUT' ? 'DPAPI_TIMEOUT' : 'DPAPI_UNAVAILABLE');
   return output;
 }
 

@@ -14,7 +14,7 @@ snapshot before clearing keys. Test-mode persistence fixtures deliberately remai
 plaintext and must never contain real credentials.
 
 DPAPI uses the fixed Windows PowerShell executable, fixed code, redirected pipes,
-an allowlisted child environment, a ten-second deadline and bounded output. Keys
+an allowlisted child environment, a thirty-second deadline and bounded output. Keys
 are not command arguments or environment variables. Decryption cache holds at most
 four bundles identified by the complete ciphertext SHA-256 digest.
 

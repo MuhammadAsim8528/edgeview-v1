@@ -31,8 +31,10 @@ registered CVE identifiers or verified severity.
 - JSON body parsing already applies globally with a 5 MB limit.
 - Host/origin checks and security headers already apply globally, including static
   responses. API-only rate limiting was a separate issue corrected above.
-- Plaintext local configuration is a real at-rest limitation; DPAPI migration is
-  not implemented in this patch. Same-user compromise is outside the current
+- Plaintext local configuration was a real at-rest limitation in the original
+  follow-up. Windows DPAPI serialization/startup migration was added on 2026-10-20;
+  see CREDENTIAL_STORAGE.md for tests, deployment gates and recovery restrictions.
+  Same-user compromise is outside the current
   isolation boundary and encryption alone would not isolate that account.
 - Dynamic imports of local bundled code do not require browser subresource
   integrity. A compromised application file requires a broader integrity model.

@@ -36,6 +36,7 @@ jobs:
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
       - run: node --import tsx server/tests/credential_store.test.ts
+      - run: node --import tsx server/tests/official_site_crawl.test.ts
       - run: node --import tsx server/tests/config_root_ownership.test.ts
       - run: node --import tsx server/tests/runtime_log_security.test.ts
       - run: node --import tsx server/tests/telemetry_presentation.test.ts
