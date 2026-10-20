@@ -77,10 +77,10 @@ visual verification are separate gates. Earlier progress reports are not proof.
 | Windows launcher/logo/shortcut/package | Existing launcher/package retained. Package checks pass. Verify user's actual desktop shortcut/icon/launch target visually; do not create a second installation authority. |
 | GitHub and CI/CD | Private MuhammadAsim8528/edgeview-v1; hosted run 39466064224 for ab98219 passed Windows + Docker QA with artifact uploaded. Tag-gated publishing skipped/not exercised. Backup changes need their own hosted green run; no production-readiness claim. |
 | Docker | Non-root isolated QA image built; offline release smoke passes. Not a supported Linux production replacement for Windows DPAPI. |
-| Local live deployment | Restarted same-root production build on port 3901 after confirming no active jobs; health PID 31216 verified. expconfig.nvl still listed; config protected without printing secrets. Future source changes need build/restart; not every UI behavior verified. |
+| Local live deployment | Last read-only check: production backend PID 36216 still owns port 3901 and reports no build identity. New content-identity build is NOT deployed. Owner close attempt did not stop it; process-control restart was policy-denied. Do not infer deployment from source/build/package success. |
 | Performance | Prior bounded load checks are documented; repeated large-dataset/browser memory and full enrichment measurements remain. No modest-hardware or million-row readiness claim. |
 | Documentation and final handoff | Architecture/control/security/operations/delivery docs exist. Final report must name exact exercised behaviors, provider coverage, limitations and launch steps. |
-| HWID/no-cloud concept | Licensing design document only; not verified implemented authentication or a public-service security model. No cloud deployment or multi-user readiness claim. |
+| HWID/no-cloud concept | Licensing design reconciled to random installation UUID/keypair as primary, optional hardware signal secondary; reuse one protected-storage owner. Design only, no enforced activation or implemented installation keypair. No cloud deployment or multi-user readiness claim. |
 
 All unresolved rows remain release gates where applicable. Do not mark V1 complete
 merely because builds, a job counter, or one provider diagnostic passes.
