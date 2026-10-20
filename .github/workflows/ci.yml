@@ -35,6 +35,15 @@ jobs:
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
+      - name: Verify Windows user data protection primitive
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Security
+          $sample = [Text.Encoding]::UTF8.GetBytes('synthetic-ci-fixture-only')
+          $encrypted = [Security.Cryptography.ProtectedData]::Protect($sample, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+          $restored = [Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+          if ([Convert]::ToBase64String($sample) -ne [Convert]::ToBase64String($restored)) { throw 'Windows user protection round trip failed' }
+          Write-Output 'Windows CurrentUser protection primitive passed'
       - run: node --import tsx server/tests/credential_store.test.ts
       - run: node --import tsx server/tests/official_site_crawl.test.ts
       - run: node --import tsx server/tests/config_root_ownership.test.ts
