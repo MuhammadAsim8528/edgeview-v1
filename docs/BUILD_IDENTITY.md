@@ -56,3 +56,12 @@ child deadline. Observed 2026-10-20: 100 requests, concurrency 12, zero failures
 p50 15ms / p95 47ms / max 47ms; RSS 124 → 126.2MB. This empty isolated dataset
 smoke is not representative large-file, paid enrichment or long-run leak evidence.
 The subsequent stale-process/restart/invalid-metadata checks also passed.
+
+The load probe now bounds each request to 10s, streams/discards ordinary response
+bodies up to 16MiB and caps health JSON at 1MiB. It refuses redirects/non-loopback
+targets, missing RSS/process identity and changed backend PID. Synthetic failure
+regressions cover missing metrics, restart, quota HTTP failure and oversized
+health payload; these are test-only mocks, not provider health claims. The real
+isolated rerun passed with p95 36ms and RSS 124 → 126.6MB. Hosted CI status for
+these changes was not observed: browser tool acquisition failed with a local
+kernel-assets/path error, distinct from the saved EdgeView-origin denial.
