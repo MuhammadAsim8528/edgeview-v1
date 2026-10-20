@@ -12,14 +12,14 @@ export class CredentialStorageError extends Error {
 function crypt(input: string, operation: 'Protect' | 'Unprotect'): string {
   if (process.platform !== 'win32' || input.length > 262144) throw new CredentialStorageError();
   // Fixed code/absolute executable; secrets travel only through redirected pipes.
-  const script = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; try { $b=[Convert]::FromBase64String([Console]::In.ReadToEnd()); $e=[Text.Encoding]::UTF8.GetBytes('EdgeView.credentials.v1'); $r=[Security.Cryptography.ProtectedData]::${operation}($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Convert]::ToBase64String($r)) } catch { exit 1 }`;
+  const script = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; try { $b=[Convert]::FromBase64String([Console]::In.ReadLine()); $e=[Text.Encoding]::UTF8.GetBytes('EdgeView.credentials.v1'); $r=[Security.Cryptography.ProtectedData]::${operation}($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Convert]::ToBase64String($r)) } catch { exit 1 }`;
   const env: NodeJS.ProcessEnv = {};
   for (const name of ['SystemRoot', 'WINDIR', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP']) {
     if (process.env[name]) env[name] = process.env[name];
   }
   const result = spawnSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-    { input, encoding: 'utf8', env, windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 });
+    { input: `${input}\n`, encoding: 'utf8', env, windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 });
   const output = result.stdout?.trim();
   if (result.error || result.status !== 0 || !output || !/^[A-Za-z0-9+/]+={0,2}$/.test(output)) throw new CredentialStorageError((result.error as NodeJS.ErrnoException)?.code === 'ETIMEDOUT' ? 'DPAPI_TIMEOUT' : 'DPAPI_UNAVAILABLE');
   return output;
