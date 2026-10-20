@@ -29,6 +29,7 @@ import {
   testHunterKey,
   resolveApiKey,
   getConfigPath,
+  protectStoredCredentialsAtStartup,
 } from './server/settings';
 import { processExportRequest, transformFullDatasetRecords, FULL_DATASET_COLUMNS, generateCsvData, generateXlsxWorkbook, contactReportColumns, flattenContactReportRows } from './server/export_manager';
 import { buildContactReport } from './server/contact_report_model';
@@ -2451,6 +2452,9 @@ async function startServer() {
     }
   }
 
+  // Credential failure must abort startup, not skip hydration and serve an
+  // apparently empty installation through the persistence recovery catch.
+  protectStoredCredentialsAtStartup();
   try {
     const loadedFiles = await loadAllFilesFromDb();
     const persistedIds = new Set(loadedFiles.map((f) => f.id));

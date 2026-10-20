@@ -4,6 +4,7 @@ import { config as loadDotEnv } from 'dotenv';
 import { getProjectRoot, isTestProcess } from './db_paths';
 import { assertSafeHeaderValue } from './utils/header_encoder';
 import { readProviderResponse, validateProviderEnvelope } from './provider_response';
+import { CredentialStorageError, decodeCredentials, encodeCredentials } from './credential_store';
 
 // Use the same validated, executable-first root as databases and health identity.
 // An unrelated working directory must not supply credentials or receive saves.
@@ -138,7 +139,7 @@ export function getAppSettings(): AppSettings {
     if (fs.existsSync(cfgPath)) {
       const raw = fs.readFileSync(cfgPath, 'utf-8');
       if (raw.trim()) {
-        const parsed = JSON.parse(raw);
+        const parsed = decodeCredentials(JSON.parse(raw)) as Partial<AppSettings>;
         return migrateDeprecatedNvidiaModels({
           ...DEFAULT_SETTINGS,
           ...parsed,
@@ -156,7 +157,10 @@ export function getAppSettings(): AppSettings {
       }
     }
   } catch (err) {
-    console.error('Error reading config.json:', err);
+    if (err instanceof CredentialStorageError) throw err;
+    // A damaged file must never fall back to environment keys and then be saved
+    // over the only recoverable credential state.
+    throw new CredentialStorageError();
   }
 
   return migrateDeprecatedNvidiaModels({
@@ -178,7 +182,7 @@ export function getAppSettings(): AppSettings {
 export function getAppSettingsFromPath(filePath: string): AppSettings {
   const resolved = path.resolve(filePath);
   const raw = fs.readFileSync(resolved, 'utf-8');
-  const parsed = raw.trim() ? JSON.parse(raw) : {};
+  const parsed = (raw.trim() ? decodeCredentials(JSON.parse(raw)) : {}) as Partial<AppSettings>;
   return migrateDeprecatedNvidiaModels({
     ...DEFAULT_SETTINGS,
     ...parsed,
@@ -246,12 +250,11 @@ function backupConfigForReset(): string | null {
   if (!src || !fs.existsSync(src)) return null;
   const backupPath = path.join(path.dirname(src), 'config.prev.json');
   try {
-    fs.copyFileSync(src, backupPath);
+    atomicWriteJson(backupPath, encodeCredentials(getAppSettingsFromPath(src)));
     try { fs.chmodSync(backupPath, 0o600); } catch { /* Windows may ignore POSIX modes */ }
     return backupPath;
   } catch (err) {
-    console.error('Failed to preserve config before reset:', err);
-    return null;
+    throw new CredentialStorageError();
   }
 }
 
@@ -282,7 +285,7 @@ export function saveAppSettings(settings: Partial<AppSettings>): AppSettings {
   });
 
   try {
-    atomicWriteJson(getConfigPath(), updated);
+    atomicWriteJson(getConfigPath(), isTestProcess() ? updated : encodeCredentials(updated));
     // Runtime consumers reload the canonical settings; saved secrets must not
     // be copied into process.env and inherited by unrelated child processes.
   } catch (err) {
@@ -302,6 +305,22 @@ export function resetAppSettings(): AppSettings {
     throw err;
   }
   return DEFAULT_SETTINGS;
+}
+
+/** Call only after exclusive backend ownership, never from a read or launcher. */
+export function protectStoredCredentialsAtStartup(): void {
+  if (isTestProcess()) return;
+  const active = getConfigPath();
+  for (const filePath of [active, path.join(path.dirname(active), 'config.prev.json')]) {
+    if (!fs.existsSync(filePath)) continue;
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    // Validate existing protected snapshots too; never silently replace failures.
+    decodeCredentials(raw);
+    if (!Object.hasOwn(raw, '_edgeview_credentials')) {
+      const settings = getAppSettingsFromPath(filePath);
+      atomicWriteJson(filePath, encodeCredentials(settings));
+    }
+  }
 }
 
 export async function testHunterKey(key: string): Promise<{ success: boolean; message: string }> {

@@ -16,7 +16,10 @@ let output = '';
 fs.mkdirSync(path.join(app, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify({ name: 'edgeview', type: 'module' }));
 fs.copyFileSync(path.join(source, 'dist/server.cjs'), path.join(app, 'dist/server.cjs'));
-fs.writeFileSync(path.join(app, 'config.json'), JSON.stringify({ serper_enabled: false, hunter_enabled: false, nvidia_enabled: false, groq_enabled: false, serper_api_key: '', hunter_api_key: '', nvidia_api_key: '', groq_api_key: '' }));
+const syntheticKeys = Object.fromEntries(['serper','hunter','nvidia','groq','gemini','firecrawl','tavily','exa','linkup','apify'].map(provider => [`${provider}_api_key`, process.platform === 'win32' ? `synthetic-local-test-${provider}-not-real` : '']));
+const syntheticConfig = { ...syntheticKeys, serper_enabled: false, hunter_enabled: false, nvidia_enabled: false, groq_enabled: false };
+fs.writeFileSync(path.join(app, 'config.json'), JSON.stringify(syntheticConfig));
+fs.writeFileSync(path.join(app, 'config.prev.json'), JSON.stringify(syntheticConfig));
 const env = { ...process.env, NODE_ENV: 'production', PORT: String(port), HOST: '127.0.0.1',
   NODE_PATH: path.join(source, 'node_modules'), EDGEVIEW_CONFIG: path.join(app, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(app, 'data/runs'),
   SERPER_API_KEY: '', HUNTER_API_KEY: '', NVIDIA_API_KEY: '', GROQ_API_KEY: '' };
@@ -52,6 +55,13 @@ const json = async route => {
 };
 try {
   await start();
+  if (process.platform === 'win32') {
+    for (const file of ['config.json', 'config.prev.json']) {
+      const disk = fs.readFileSync(path.join(app, file), 'utf8');
+      assert.ok(JSON.parse(disk)._edgeview_credentials, 'startup must protect active and reset snapshots');
+      for (const secret of Object.values(syntheticKeys)) assert.equal(disk.includes(secret), false);
+    }
+  }
   const ids = [];
   for (const [index, name] of ['latest.csv','sample-customer.csv'].entries()) {
     const form = new FormData();
@@ -73,6 +83,15 @@ try {
   assert.deepEqual(restored.data.map(record => record.id).sort(), ids.sort(), 'real uploads remain visible after process restart');
   for (const id of ids) {
     const data = await json(`/api/files/${id}/data`); assert.equal(data.total_count, 1);
+  }
+  if (process.platform === 'win32') {
+    await stop();
+    const previous = JSON.parse(fs.readFileSync(path.join(app, 'config.prev.json'), 'utf8'));
+    previous._edgeview_credentials.ciphertext = 'AAAA';
+    fs.writeFileSync(path.join(app, 'config.prev.json'), JSON.stringify(previous));
+    await assert.rejects(start(), /exited before readiness/, 'unreadable snapshot must abort, never serve an empty installation');
+    const intact = JSON.parse(fs.readFileSync(path.join(app, 'edgeview_db.json'), 'utf8'));
+    assert.equal(intact.length, 2, 'credential failure must not erase saved records');
   }
   console.log('PASS production-mode upload/history provenance survives restart without touching live installation');
 } finally {
