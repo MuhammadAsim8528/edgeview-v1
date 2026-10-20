@@ -325,3 +325,27 @@ No claim of release completion or broad production readiness is made.
   V1 suites, dependency/archive graph, 108-file Windows manifest and staged/ZIP
   extraction launch checks. The live health endpoint still reports `ok`; its
   response does not establish deployment of the rebuilt backend.
+
+### 2026-10-20: hosted credential-transport regression
+
+- Symptom/environment: Windows GitHub Actions credential_store.test timed out at
+  ten seconds, then thirty seconds; the local Windows account passed. CI runs
+  39428991745, 39430024095 and 39430629975 document the failures.
+- Reproduction: real synthetic-key DPAPI round trip via the production helper,
+  not mocked encryption. Line framing and a longer deadline alone did not resolve
+  the runner failure. No failed check was disabled or allowed to become plaintext.
+- Diagnosis: run 39431052023 passed native Windows CurrentUser protection but
+  emitted only the fixed `startup` phase from the Node child before timeout,
+  locating the stall at Add-Type before input/crypto. Only fixed phase markers,
+  never stderr bodies or credential values, were exposed by this diagnostic.
+- Change: a887116 directly loads the strong-named .NET Framework System.Security
+  assembly instead of invoking PowerShell module discovery. Same OS DPAPI,
+  CurrentUser scope, fixed executable, pipe-only secrets, child-env allowlist,
+  output bounds and timeout remain. No cryptographic primitive was reimplemented.
+- Verification: local synthetic round trip, corruption/mixed-format rejection,
+  TypeScript, lint, V1 suites, isolated production restart and release smoke pass.
+  Hosted run 39431744015 passed the credential gate and reached cold-package launch;
+  the full workflow was still pending when this entry was written.
+- Scope/remaining: latest transport changes are built/packaged but a subsequent
+  live restart was denied; live PID 31216 retains its earlier working reader.
+  Source-level correction and hosted workflow completion are separate gates.
