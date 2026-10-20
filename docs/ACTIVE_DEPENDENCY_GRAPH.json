@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-19T15:51:30.919Z",
+  "generated_at": "2026-10-20T11:34:27.980Z",
   "backend": {
     "files": [
       "server.ts",
@@ -42,7 +42,7 @@
       "src/utils/countryNormalizer.ts"
     ],
     "count": 38,
-    "lines": 14825
+    "lines": 14816
   },
   "frontend": {
     "files": [

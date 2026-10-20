@@ -19,6 +19,7 @@ export interface UploadedFileRecord {
   unique_importers: number;
   uploaded_at: string;
   source: 'real' | 'test';
+  provenance_version?: 1;
   file_type: string;
   size: number;
   file_data: {
@@ -54,20 +55,18 @@ export function isTestRecord(id?: string, fileName?: string): boolean {
   const nameLower = (fileName || '').toLowerCase().trim();
   const idLower = (id || '').toLowerCase().trim();
   return (
-    idLower.includes('sample') ||
-    idLower.includes('test') ||
-    idLower.includes('demo') ||
-    idLower.includes('mock') ||
-    nameLower.includes('sample') ||
-    nameLower.includes('test') ||
-    nameLower.includes('demo') ||
-    nameLower.includes('mock') ||
-    nameLower.includes('pharma_imports_2026') ||
-    nameLower.includes('shipments_q2') ||
-    nameLower.includes('suppliers_master') ||
-    nameLower.includes('trade_manifest') ||
-    nameLower.includes('compliance_audit_report')
+    /^(?:file[-_])?(?:sample|test|demo|mock)(?:[-_.\s]|$)/.test(idLower) ||
+    /^(?:sample|test|demo|mock)(?:[-_.\s]|$)/.test(nameLower) ||
+    /^(?:pharma_imports_2026|shipments_q2|suppliers_master|trade_manifest|compliance_audit_report)(?:\.[a-z0-9]+)?$/.test(nameLower)
   );
+}
+
+/** Legacy filename hints never override versioned, explicitly recorded origin. */
+export function resolveDatasetSource(record: { id?: string; file_name?: string; source?: unknown; provenance_version?: unknown }, testProcess = isTestProcess()): 'real' | 'test' {
+  if (record.provenance_version === 1 && (record.source === 'real' || record.source === 'test')) return record.source;
+  if (record.source === 'test' || isTestRecord(record.id, record.file_name)) return 'test';
+  if (record.source === 'real') return 'real';
+  return testProcess ? 'test' : 'real';
 }
 
 /** True when a persistence DB file has been created on disk before this boot (not a fresh first run). */
@@ -91,15 +90,7 @@ function readRecordsFromDisk(): UploadedFileRecord[] {
     return items.map((r: any, idx: number) => {
       const fName = r.file_name || r.filename || r.name || 'uploaded_file';
       const fId = r.id || r.file_id || r.fileId || `file-persisted-${idx + 1}`;
-      let recordSource: 'real' | 'test' = 'real';
-
-      if (isTestRecord(fId, fName)) {
-        recordSource = 'test';
-      } else if (r.source === 'test' || r.source === 'real') {
-        recordSource = r.source;
-      } else if (isTestProcess()) {
-        recordSource = 'test';
-      }
+      const recordSource = resolveDatasetSource({ id: fId, file_name: fName, source: r.source, provenance_version: r.provenance_version });
 
       const cols = r.file_data?.columns || r.columns || [];
       const rws = r.file_data?.rows || r.rows || [];
@@ -115,6 +106,7 @@ function readRecordsFromDisk(): UploadedFileRecord[] {
         unique_importers: r.unique_importers !== undefined ? r.unique_importers : computeUniqueImporters(rws),
         uploaded_at: r.uploaded_at || r.upload_time || new Date().toISOString(),
         source: recordSource,
+        ...(r.provenance_version === 1 ? { provenance_version: 1 as const } : {}),
         file_type: r.file_type || 'Unknown',
         size: r.size || 0,
         file_data: {
@@ -227,9 +219,7 @@ export async function saveFileToDb(fileRecord: FileRecord, fileHash: string, exp
 
   // Source classification logic
   let source: 'real' | 'test' = explicitSource || 'real';
-  if (isTestRecord(fileRecord.id, fileRecord.name)) {
-    source = 'test';
-  } else if (isTestProcess()) {
+  if (isTestProcess() || (explicitSource !== 'real' && isTestRecord(fileRecord.id, fileRecord.name))) {
     source = 'test';
   }
 
@@ -243,6 +233,7 @@ export async function saveFileToDb(fileRecord: FileRecord, fileHash: string, exp
     unique_importers: computeUniqueImporters(rows),
     uploaded_at: fileRecord.upload_time || new Date().toISOString(),
     source,
+    provenance_version: 1,
     file_type: fileRecord.file_type || 'Unknown',
     size: fileRecord.size || 0,
     file_data: {
@@ -297,7 +288,7 @@ export async function getHistoryFilesFromDb(): Promise<UploadedFileRecord[]> {
   const records = readRecordsFromDisk();
   // Filter strictly for real records, excluding any test records
   const realRecords = records.filter(
-    (r) => r.source === 'real' && !isTestRecord(r.id, r.file_name)
+    (r) => r.source === 'real'
   );
   realRecords.sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
   return realRecords;

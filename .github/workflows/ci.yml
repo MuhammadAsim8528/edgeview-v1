@@ -34,6 +34,7 @@ jobs:
       - run: node --import tsx server/tests/provider_metrics_order.test.ts
       - run: node --import tsx server/tests/provider_response.test.ts
       - run: node --import tsx server/tests/export_selection_validation.test.ts
+      - run: node --import tsx server/tests/history_provenance.test.ts
       - run: node --import tsx server/tests/export_paging_client.test.ts
       - run: node --import tsx server/tests/provider_diagnostic_payload.test.ts
       - run: node --import tsx server/tests/runtime_capability_recovery.test.ts
@@ -45,6 +46,7 @@ jobs:
       - run: npm run test:v1
       - run: npm run build
       - run: node scripts/telemetry-runtime.test.mjs
+      - run: node scripts/history-production-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release
       - run: npm run package:windows

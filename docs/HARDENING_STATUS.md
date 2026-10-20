@@ -295,3 +295,33 @@ No claim of release completion or broad production readiness is made.
   substring matching. That can hide a legitimate filename from history. This
   classification path still needs a narrow forward fix and preservation-focused
   regression; existing records must not be mass-reclassified without evidence.
+
+### 2026-10-20: history provenance fix and visual-access recheck
+
+- The preceding pending filename-classification finding is now fixed in source.
+  Substring checks were narrowed to recognizable synthetic prefixes and exact
+  legacy seed names. `latest.xlsx`, `contest.csv` and similar legitimate names
+  no longer become test records merely because they contain matching letters.
+- New saves record `provenance_version: 1` alongside the canonical source. Explicit
+  real uploads retain real provenance regardless of their filename; isolated test
+  processes still force new saves to test. Legacy known synthetic files and
+  existing explicit test classifications remain excluded. Existing ambiguous test
+  records are not automatically promoted. History reads do not rewrite the file.
+- `history_provenance.test.ts` checks classification, versioned/legacy behavior,
+  source preservation and byte-identical persistence after read-only listing.
+- `history-production-runtime.test.mjs` creates its own temporary EdgeView root,
+  runs the compiled backend in actual production mode with providers disabled,
+  verifies PID/root before mutations, uploads latest.csv and sample-customer.csv,
+  saves and verifies real/versioned provenance, restarts that backend, then verifies
+  both history entries and row counts. It passed and removed only its own temporary
+  installation. It did not restart or mutate the live port-3901 installation.
+- Browser observation was retried in Chrome at the user's request. The saved
+  origin gate again explicitly denied `http://127.0.0.1:3901` and prohibited
+  alternate-surface workarounds. No screenshot, button click or rendered QA was
+  possible in that attempt. Computer-use skill guidance was applied; the explicit
+  denial is a limitation, not a passed visual check.
+- Post-fix checks passed: history provenance regression, TypeScript, ESLint,
+  production-mode temporary-install restart test, expanded release smoke, all nine
+  V1 suites, dependency/archive graph, 108-file Windows manifest and staged/ZIP
+  extraction launch checks. The live health endpoint still reports `ok`; its
+  response does not establish deployment of the rebuilt backend.
