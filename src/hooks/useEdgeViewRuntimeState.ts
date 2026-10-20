@@ -11,13 +11,14 @@ export interface RuntimeCapability {
 }
 
 export interface RuntimeState {
+  usageScope?: 'persisted_completed_provider_calls' | null;
   resources: {
-    serper: number;
-    hunter: number;
-    nvidia: number;
-    groq: number;
-    directHttp: number;
-    pagesAnalyzed: number;
+    serper: number | null;
+    hunter: number | null;
+    nvidia: number | null;
+    groq: number | null;
+    directHttp: number | null;
+    pagesAnalyzed: number | null;
     cacheHits: number | null;
     cacheMisses: number | null;
   };
@@ -52,7 +53,8 @@ export interface RuntimeState {
 }
 
 const DEFAULT_STATE: RuntimeState = {
-  resources: { serper: 0, hunter: 0, nvidia: 0, groq: 0, directHttp: 0, pagesAnalyzed: 0, cacheHits: null, cacheMisses: null },
+  usageScope: null,
+  resources: { serper: null, hunter: null, nvidia: null, groq: null, directHttp: null, pagesAnalyzed: null, cacheHits: null, cacheMisses: null },
   jobs: { active: 0, completed: 0, failed: 0, partial: 0 },
   enrichment: { currentCompany: null, status: 'IDLE', completedCompanies: 0, totalCompanies: 0, quality: { complete: 0, partial: 0, notFound: 0, failed: 0, pending: 0 } },
   providers: {
@@ -85,7 +87,8 @@ function validRuntimePayload(value: unknown): value is RuntimeState & { success:
     const record = candidate as Record<string, unknown>;
     return Object.keys(template).every(key => (nullable.includes(key) && record[key] === null) || (typeof record[key] === 'number' && Number.isFinite(record[key]) && Number(record[key]) >= 0));
   };
-  if (data.success !== true || !counts(data.resources, DEFAULT_STATE.resources, ['cacheHits', 'cacheMisses']) || !counts(data.jobs, DEFAULT_STATE.jobs)
+  if (data.usageScope !== undefined && data.usageScope !== null && data.usageScope !== 'persisted_completed_provider_calls') return false;
+  if (data.success !== true || !counts(data.resources, DEFAULT_STATE.resources, Object.keys(DEFAULT_STATE.resources)) || !counts(data.jobs, DEFAULT_STATE.jobs)
     || !data.enrichment || typeof data.enrichment !== 'object' || !data.providers || typeof data.providers !== 'object'
     || !data.capabilities || typeof data.capabilities !== 'object' || !Array.isArray(data.logs)) return false;
   const enrichment = data.enrichment as Record<string, unknown>;

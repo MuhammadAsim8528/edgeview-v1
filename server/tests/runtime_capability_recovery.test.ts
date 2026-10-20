@@ -40,8 +40,8 @@ try {
   const unknownCache = await fetchRuntimeState();
   assert.equal(unknownCache.capabilities.company_enrichment.available, true, 'unmeasured cache fields must not invalidate the runtime response');
   assert.equal(unknownCache.resources.cacheHits, null);
-  globalThis.fetch = (async () => Response.json({ ...snapshot, resources: { ...snapshot.resources, serper: null } })) as typeof fetch;
-  assert.equal((await fetchRuntimeState()).capabilities.company_enrichment.available, false, 'only explicitly nullable measurements may be unknown');
+  globalThis.fetch = (async () => Response.json({ ...snapshot, resources: { ...snapshot.resources, serper: 'invalid' } })) as typeof fetch;
+  assert.equal((await fetchRuntimeState()).capabilities.company_enrichment.available, false, 'invalid measurements must be rejected, not coerced');
   let observedAbort = false;
   globalThis.fetch = ((_input, options) => new Promise<Response>((_resolve, reject) => {
     options?.signal?.addEventListener('abort', () => { observedAbort = true; reject(new DOMException('Controlled abort', 'AbortError')); }, { once: true });

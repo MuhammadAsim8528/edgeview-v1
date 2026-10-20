@@ -1519,19 +1519,15 @@ app.get('/api/runtime/state', async (req, res) => {
     const { db: pharmaDb } = await import('./server/db');
 
     // 1. Resources
-    const recentRunSummaries = listV1RunSummaries(10);
-    const recentRuns = recentRunSummaries.map(summary => getV1Run(summary.id)).filter(Boolean) as NonNullable<ReturnType<typeof getV1Run>>[];
-    const usage = recentRuns.flatMap(run => run.raw_records).reduce<Record<string, number>>((acc, record) => {
-      acc[record.provider] = (acc[record.provider] || 0) + 1;
-      return acc;
-    }, {});
+    // Monitoring must not hydrate immutable provider payloads on every poll.
+    const metrics = getV1ProviderMetrics();
     const resources = {
-      serper: usage.serper || 0,
-      hunter: usage.hunter || 0,
-      nvidia: usage.nvidia || 0,
-      groq: usage.groq || 0,
-      directHttp: usage['direct-http'] || 0,
-      pagesAnalyzed: recentRuns.reduce((sum, run) => sum + run.results.filter(result => result.text || result.markdown || result.html).length, 0),
+      serper: metrics.serper?.requestCount ?? 0,
+      hunter: metrics.hunter?.requestCount ?? 0,
+      nvidia: metrics.nvidia?.requestCount ?? 0,
+      groq: metrics.groq?.requestCount ?? 0,
+      directHttp: null,
+      pagesAnalyzed: null,
       cacheHits: null,
       cacheMisses: null,
     };
@@ -1594,11 +1590,13 @@ app.get('/api/runtime/state', async (req, res) => {
     }]));
 
     // 5. Recent Logs
-    const logs = recentRuns.slice(0, 10).flatMap(run => run.timeline.map(event => ({ ...event, company_name: run.company_name, run_id: run.id }))).slice(0, 50);
+    const logs = readRuntimeLogs(50);
 
     const payload = {
       success: true,
       resources,
+      usageScope: 'persisted_completed_provider_calls',
+      logsSource: 'bounded_runtime_log_tail',
       jobs,
       enrichment,
       providers,

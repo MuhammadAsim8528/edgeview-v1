@@ -1,0 +1,10 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import assert from 'node:assert/strict';
+import { SystemHealthPanel } from '../../src/components/SystemHealthPanel';
+const html = renderToStaticMarkup(<SystemHealthPanel />);
+assert.ok(html.includes('Provider Usage — Scope Unavailable'));
+assert.ok(html.includes('Cache hit rate: Unknown'));
+assert.ok(!html.includes('System Cache Efficiency Summary'));
+assert.ok(!html.includes('>0</span>'), 'unloaded usage metrics must not render as measured zero');
+console.log('PASS unloaded runtime usage stays unknown in static component markup; not visual QA');

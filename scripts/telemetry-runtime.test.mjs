@@ -8,6 +8,13 @@ import { unusedTestPort } from './test-server-port.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-telemetry-runtime-'));
 const runDir = path.join(root, 'runs'); fs.mkdirSync(runDir);
+const runReadMarker = path.join(root, 'unexpected-run-read');
+fs.writeFileSync(path.join(runDir, 'run-runtime-payload.json'), JSON.stringify({
+  id: 'run-runtime-payload', company_name: 'Synthetic Runtime Payload Company', country: 'Kenya',
+  status: 'COMPLETED', started_at: new Date().toISOString(), completed_at: new Date().toISOString(),
+  queries: [], results: [], raw_records: [], timeline: [],
+  payload: 'x'.repeat(4 * 1024 * 1024),
+}));
 const config = path.join(root, 'config.json');
 fs.writeFileSync(config, JSON.stringify({ serper_enabled: true, serper_api_key: 'synthetic-serper-diagnostic', hunter_enabled: true, hunter_api_key: 'synthetic-hunter-diagnostic', nvidia_enabled: false, nvidia_api_key: '', groq_enabled: false, groq_api_key: '' }));
 fs.writeFileSync(path.join(runDir, 'provider-metrics.json'), JSON.stringify({ format: 1, processed_run_ids: [], providers: {
@@ -16,7 +23,7 @@ fs.writeFileSync(path.join(runDir, 'provider-metrics.json'), JSON.stringify({ fo
 const port = await unusedTestPort();
 const base = `http://127.0.0.1:${port}`;
 const child = spawn(process.execPath, ['--import', pathToFileURL(path.resolve('server/tests/fixtures/telemetry-fetch.mjs')).href, 'dist/server.cjs'], {
-  env: { ...process.env, PORT: String(port), NODE_ENV: 'test', EDGEVIEW_TEST_MODE: '1', EDGEVIEW_TEST_DB_DIR: root, EDGEVIEW_CONFIG: config, EDGEVIEW_V1_DATA_DIR: runDir },
+  env: { ...process.env, PORT: String(port), NODE_ENV: 'test', EDGEVIEW_TEST_MODE: '1', EDGEVIEW_TEST_DB_DIR: root, EDGEVIEW_CONFIG: config, EDGEVIEW_V1_DATA_DIR: runDir, EDGEVIEW_TEST_RUN_READ_MARKER: runReadMarker },
   stdio: ['ignore','pipe','pipe'],
 });
 let output = '';
@@ -46,6 +53,8 @@ try {
   const nextResources = (await (await fetch(`${base}/api/health`)).json()).resources;
   assert.ok(Number.isFinite(nextResources.cpuPercent) && nextResources.cpuPercent >= 0);
   assert.ok(!JSON.stringify(nextResources).includes('synthetic-serper-diagnostic'));
+  const runList = await (await fetch(`${base}/api/v1/runs`)).json();
+  assert.ok(runList.runs.some(run => run.id === 'run-runtime-payload'), 'large fixture must be discoverable in the real lightweight run index');
   const settingsTest = payload => fetch(`${base}/api/settings/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const savedTest = await settingsTest({ service: 'serper', key: '' });
   assert.equal(savedTest.status, 200);
@@ -79,7 +88,14 @@ try {
   assert.equal(body.providers.hunter.lastHttpStatus, 200);
   assert.equal(body.providers.serper.cacheHits, null);
   assert.equal(body.providers.serper.retryCount, null);
-  assert.equal((await (await fetch(`${base}/api/runtime/state`)).json()).resources.cacheMisses, null);
+  const runtime = await (await fetch(`${base}/api/runtime/state`)).json();
+  assert.equal(runtime.resources.cacheMisses, null);
+  assert.equal(runtime.resources.serper, 2, 'usage comes from persisted completed-call metrics, not recent raw records');
+  assert.equal(runtime.resources.pagesAnalyzed, null);
+  assert.equal(runtime.usageScope, 'persisted_completed_provider_calls');
+  assert.equal(runtime.logsSource, 'bounded_runtime_log_tail');
+  assert.ok(runtime.logs.length <= 50);
+  assert.equal(fs.existsSync(runReadMarker), false, 'polling must not open the full multi-megabyte run payload');
   const saveSettings = async patch => {
     const result = await fetch(`${base}/api/settings`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(patch) });
     assert.equal(result.status, 200);

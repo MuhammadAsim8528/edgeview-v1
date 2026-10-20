@@ -1,4 +1,15 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import fs from 'node:fs';
+const originalRead = fs.readFileSync;
+if (process.env.EDGEVIEW_TEST_RUN_READ_MARKER) {
+  fs.readFileSync = function (file, ...args) {
+    if (/[\\/]run-runtime-payload\.json$/.test(String(file))) {
+      fs.writeFileSync(process.env.EDGEVIEW_TEST_RUN_READ_MARKER, 'unexpected full run hydration');
+      throw new Error('Runtime polling must not hydrate provider evidence');
+    }
+    return originalRead.call(this, file, ...args);
+  };
+}
 
 // Isolated test process only: unexpected external requests fail instead of
 // reaching a real provider. No production account or dataset is used.

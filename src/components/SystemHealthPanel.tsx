@@ -252,7 +252,7 @@ export const SystemHealthPanel: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-xs font-semibold text-white flex items-center space-x-1.5">
             <BarChart3 className="w-4 h-4 text-amber-400" />
-            <span>System Cache Efficiency Summary</span>
+            <span>{runtimeState.usageScope === 'persisted_completed_provider_calls' ? 'Completed Provider Calls — Local Aggregate' : 'Provider Usage — Scope Unavailable'}</span>
           </h4>
           <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
             Cache hit rate: {cacheHitRate}
@@ -262,22 +262,22 @@ export const SystemHealthPanel: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="p-3 bg-[#1a1a1a] border border-[#333333] rounded-lg">
             <span className="text-[10px] text-[#9ca3af] block uppercase font-mono">Serper</span>
-            <span className="text-sm font-bold text-white font-mono mt-0.5 block">{runtimeState.resources.serper}</span>
+            <span className="text-sm font-bold text-white font-mono mt-0.5 block">{formatObservedCount(runtimeState.resources.serper)}</span>
           </div>
 
           <div className="p-3 bg-[#1a1a1a] border border-[#333333] rounded-lg">
             <span className="text-[10px] text-[#9ca3af] block uppercase font-mono">Hunter</span>
-            <span className="text-sm font-bold text-white font-mono mt-0.5 block">{healthReport.hunter?.requestCount || 0}</span>
+            <span className="text-sm font-bold text-white font-mono mt-0.5 block">{formatObservedCount(runtimeState.resources.hunter)}</span>
           </div>
 
           <div className="p-3 bg-[#1a1a1a] border border-[#333333] rounded-lg">
             <span className="text-[10px] text-[#9ca3af] block uppercase font-mono">NVIDIA NIM</span>
-            <span className="text-sm font-bold text-sky-400 font-mono mt-0.5 block">{runtimeState.resources.nvidia}</span>
+            <span className="text-sm font-bold text-sky-400 font-mono mt-0.5 block">{formatObservedCount(runtimeState.resources.nvidia)}</span>
           </div>
 
           <div className="p-3 bg-[#1a1a1a] border border-[#333333] rounded-lg">
             <span className="text-[10px] text-[#9ca3af] block uppercase font-mono">Groq AI</span>
-            <span className="text-sm font-bold text-orange-400 font-mono mt-0.5 block">{runtimeState.resources.groq}</span>
+            <span className="text-sm font-bold text-orange-400 font-mono mt-0.5 block">{formatObservedCount(runtimeState.resources.groq)}</span>
           </div>
 
           <div className="p-3 bg-[#1a1a1a] border border-emerald-500/20 rounded-lg">
