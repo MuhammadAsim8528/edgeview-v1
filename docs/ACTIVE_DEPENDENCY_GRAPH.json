@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-20T18:06:07.184Z",
+  "generated_at": "2026-10-20T18:33:05.240Z",
   "backend": {
     "files": [
       "server.ts",
@@ -34,6 +34,7 @@
       "server/sqlite.ts",
       "server/sqlite_persistence.ts",
       "server/stats_router.ts",
+      "server/storage_mutation_guard.ts",
       "server/summary.ts",
       "server/trade_relationship_resolver.ts",
       "server/url_safety.ts",
@@ -46,8 +47,8 @@
       "shared/v1_contact_contract.ts",
       "src/utils/countryNormalizer.ts"
     ],
-    "count": 43,
-    "lines": 15154
+    "count": 44,
+    "lines": 15241
   },
   "frontend": {
     "files": [
@@ -84,7 +85,7 @@
       "src/utils/telemetryFormat.ts"
     ],
     "count": 31,
-    "lines": 10544
+    "lines": 10548
   },
   "retired_inputs": 0,
   "archive": {

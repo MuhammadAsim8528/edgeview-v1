@@ -35,7 +35,8 @@ Invalid, unreadable or zero-byte existing operational databases are retained at
 their original path and initialization fails with DATABASE_UNAVAILABLE. They are
 not silently renamed and replaced by an empty working database. This refusal is
 the operational DB boundary, not a claim that every application route becomes
-read-only; failure UX and whole-app mutation gating still need separate audit.
+read-only. The targeted mutation guard below covers dependent writes; unrelated
+surfaces and rendered failure UX still need separate audit.
 Restore a verified stopped-state backup and restart after investigating storage.
 
 Schema initialization runs against the in-memory sql.js image, suppressing disk
@@ -59,3 +60,27 @@ runtime write marks it degraded; a successful durable retry restores ok.
 The compiled disposable production fixture checks corrupt bytes are retained,
 health is degraded, normal shutdown returns failure rather than claim a clean
 flush, and a fresh fixture restart reports healthy before upload/history tests.
+
+## Storage-dependent mutation guard
+
+Before upload parsing/provider access, mutating /api/enrich and /api/files actions
+and the supported upload/history-save aliases require operational state ok.
+Unavailable storage returns structured 503 OPERATIONAL_DATABASE_UNAVAILABLE with
+recovery guidance; company/batch capability reports are also unavailable.
+This prevents primary JSON deletion or new paid research being started while
+their operational checkpoints cannot be saved. It is not a distributed
+transaction across the JSON and SQLite stores.
+
+Job stop remains callable so it can clear scheduling even if its final DB write
+fails. Read requests, evidence, settings, diagnostics and export endpoints are
+not blocked by this guard; a particular read/export can still fail if its own
+implementation needs unavailable storage. No claim that every recovery export
+works on a corrupt DB is made. In-flight requests that began before a runtime
+failure retain their existing write-error handling; this is not rollback of
+already-running work. Restart/repair guidance remains explicit.
+
+Route-classification fixtures cover casing/trailing slash, upload aliases,
+history/deletion and stop/recovery exceptions. The compiled corrupt-DB fixture
+checks unavailable capabilities, structured refusal of research/upload/history
+mutations before provider calls, and continued settings access. Real UI behavior
+and physical disk-full/power-loss scenarios remain unverified.

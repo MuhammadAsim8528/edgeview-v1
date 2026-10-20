@@ -71,6 +71,15 @@ try {
   assert.equal(degraded.database.status, 'degraded', 'dataset projection alone cannot certify the operational DB');
   assert.equal(degraded.database.operational.status, 'degraded');
   assert.deepEqual(fs.readFileSync(corruptPath), corruptBytes);
+  const unavailable = await json('/api/capabilities');
+  assert.equal(unavailable.capabilities.company_enrichment.available, false);
+  assert.match(unavailable.capabilities.company_enrichment.reason, /storage/);
+  for (const route of ['/api/enrich/company', '/api/files/upload', '/api/stats/save-to-history']) {
+    const response = await fetch(`${base}${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).code, 'OPERATIONAL_DATABASE_UNAVAILABLE');
+  }
+  assert.equal((await fetch(`${base}/api/settings`)).status, 200, 'recovery settings remain accessible');
   await stop(1); // failed operational initialization cannot claim a clean flush
   assert.deepEqual(fs.readFileSync(corruptPath), corruptBytes);
   // Remove only this explicitly created disposable fixture, never user data.

@@ -47,6 +47,7 @@ import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
 import { createShutdownController } from './server/shutdown';
 import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
+import { requiresOperationalDatabase } from './server/storage_mutation_guard';
 
 const app = express();
 let closing = false;
@@ -184,6 +185,18 @@ app.use('/api', (req, res, next) => {
 });
 
 // Temp storage for uploads
+app.use((req, res, next) => {
+  if (requiresOperationalDatabase(req.method, req.path) && getOperationalDatabaseStatus().status !== 'ok') {
+    return res.status(503).json({
+      success: false, code: 'OPERATIONAL_DATABASE_UNAVAILABLE',
+      message: 'Operational storage is unavailable; data-changing research actions are paused.',
+      recoverable: true,
+      remediation: 'Review System Health, stop EdgeView, restore a verified backup if needed, then restart. Existing files and evidence are retained.',
+    });
+  }
+  next();
+});
+
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -1374,6 +1387,13 @@ function buildV1Capabilities(providerReport: Record<string, any> = buildV1Provid
     dependencies: ['serper'],
     ...(searchRemediation ? { remediation: searchRemediation } : {}),
   };
+  if (getOperationalDatabaseStatus().status !== 'ok') {
+    companyEnrichment.available = false;
+    companyEnrichment.status = 'UNAVAILABLE';
+    companyEnrichment.reason = 'Operational storage is unavailable; research cannot durably save progress.';
+    companyEnrichment.dependencies.push('operational-database');
+    companyEnrichment.remediation = 'Review System Health, restore a verified stopped-state backup if needed, then restart.';
+  }
 
   return {
     company_enrichment: companyEnrichment,
