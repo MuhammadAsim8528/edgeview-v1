@@ -55,3 +55,13 @@ type/length checks reject malformed test fields before provider access. Compiled
 API fixtures exercise saved-key propagation, an invalid unsaved candidate that
 does not replace healthy state, and invalid field rejection. No claim of an
 actual browser click or rendered result follows from these API assertions.
+
+Audit of the older provider_model_discovery_e2e test found that it swallowed
+model-list transport/assertion errors then printed overall 100% success. It now
+defaults to an explicitly isolated synthetic-catalog contract with an unexpected
+network trap and temporary configuration. Live catalog mode requires explicit
+EDGEVIEW_LIVE_PROVIDER_TESTS=1 and fails on missing/failed catalogs; it was not
+rerun live as part of this change. Neither mode is browser or generation QA.
+Subprocess regressions deliberately fail each isolated catalog and require exit 1
+without the overall PASS message. Both test modes avoid dumping raw provider
+exceptions. The guarded synthetic failure switches exist only in the test file.
