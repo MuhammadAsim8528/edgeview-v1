@@ -247,3 +247,43 @@ directive acceptance rules, SBOM and copyleft review remain in force.
 M0–M5 execution order remains; these requirements expand the appropriate milestones
 and add final completion gates. Earlier real-company accuracy, full importer scope,
 UI state/visibility, provider evidence and key-rotation requirements remain open.
+
+### 2026-10-21 independent source audit and retrieval fix
+
+Standard offline scan `fd56c873-d8dd-4055-b090-9b89a81e19ac` reviewed 221/226
+tracked source/context paths at `a58f3fe`. Three branding binaries were excluded;
+two lockfiles received metadata/pattern review, not dependency implementation
+review. Seven validated findings: four medium, three low. The sealed report is
+in the local Codex Security workbench; source review is not visual acceptance.
+
+- [x] Source fix: pin each retrieval connection to the single validated DNS
+  answer set; reject mixed private/public answers. Share this GET transport with
+  NVIDIA model discovery, preserving credential-origin checks and no redirects.
+- [x] Source fix: one absolute deadline covers DNS, redirects and body capture;
+  late DNS cannot start a connection. Preserve exact response bytes for strict
+  provider decoding. Synthetic transport tests and actual NVIDIA catalog passed.
+  This does not implement immediate batch-stop cancellation or a global run SLA.
+- [ ] Fix parser header-by-row cell amplification and bound document resources.
+- [ ] Fix/retire unsafe legacy HTML block export and stats CSV quote handling.
+- [ ] Prevent nonloopback HOST exposure and export filename path traversal.
+- [ ] Resolve backup effective-path overrides and previous-config completeness.
+- [ ] Batch dashboard: hydrate complete job before rendering company_states;
+  remove Firecrawl/obsolete-model labels and unknown-limit arithmetic.
+- [ ] Enable metadata-only paginated dataset export controls without requiring
+  empty local row arrays to be populated.
+- [ ] Preserve usageScope when the runtime hook publishes validated state.
+- [ ] Diagnose occasional saved-config DPAPI open failure. One standalone read
+  failed; synthetic DPAPI roundtrip and subsequent actual config read succeeded.
+  Configuration was not replaced; do not fall back to plaintext or reset keys.
+
+Verified for retrieval patch: typecheck, lint, test:v1, synthetic outbound suite,
+model-origin and diagnostic payload contracts, production build/release smoke,
+Windows package verification (130 files) and staged/ZIP unchanged-launch checks.
+Actual NVIDIA model catalog: HTTP 200, 83 models, selected model available,
+257 ms. Catalog access does not prove generation or real-company accuracy.
+
+Live port 3901 still belongs to old PID 36216. No policy-denied restart bypass
+was attempted. Supported browser documentation retry failed before navigation:
+`failed to write kernel assets: The system cannot find the path specified.
+(os error 3)`. No permission dialog or visual QA occurred. Full UI/research,
+clean-machine, current hosted CI and remaining A–K gates are still open.

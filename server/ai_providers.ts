@@ -1,6 +1,6 @@
 import { getAppSettings, resolveApiKey } from './settings';
 import { assertSafeHeaderValue } from './utils/header_encoder';
-import { assertSafeOutboundUrl, isSafeExternalUrl } from './url_safety';
+import { isSafeExternalUrl, safeFetchOutboundUrl } from './url_safety';
 import { createHash } from 'node:crypto';
 import { readProviderResponse, providerSchemaError } from './provider_response';
 
@@ -70,9 +70,7 @@ export const NvidiaProvider: AIProvider = {
     if (!isSafeExternalUrl(endpoint)) {
       throw new Error('Blocked: NVIDIA base URL is not a safe external http(s) address (SSRF guard)');
     }
-    await assertSafeOutboundUrl(endpoint);
-
-    const res = await fetch(`${endpoint}/models`, {
+    const res = await safeFetchOutboundUrl(`${endpoint}/models`, {
       method: 'GET',
       redirect: 'error',
       signal: AbortSignal.timeout(20_000),
@@ -283,7 +281,7 @@ export async function fetchProviderModels(
   }
 
   if (provider.name === 'NVIDIA' && effectiveBaseUrl?.trim()) {
-    await assertSafeOutboundUrl(effectiveBaseUrl.trim());
+    if (!isSafeExternalUrl(effectiveBaseUrl.trim())) throw new Error('Blocked: NVIDIA base URL is not a safe external http(s) address (SSRF guard)');
   }
 
   if (!effectiveKey || !effectiveKey.trim()) {

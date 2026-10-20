@@ -90,7 +90,7 @@ export function isSafeExternalUrl(urlStr: string): boolean {
   }
 }
 
-export async function assertSafeOutboundUrl(urlStr: string): Promise<void> {
+async function resolveSafeOutboundAddress(urlStr: string): Promise<{ address: string; family: number }> {
   if (!isSafeExternalUrl(urlStr)) {
     throw new Error('Blocked: URL is not a safe external http(s) address (SSRF guard)');
   }
@@ -100,11 +100,11 @@ export async function assertSafeOutboundUrl(urlStr: string): Promise<void> {
 
   if (net.isIPv4(host)) {
     if (isPrivateIPv4(host)) throw new Error('Blocked: URL resolves to a private IPv4 address');
-    return;
+    return { address: host, family: 4 };
   }
   if (net.isIPv6(host)) {
     if (isPrivateIPv6(host)) throw new Error('Blocked: URL resolves to a private IPv6 address');
-    return;
+    return { address: host, family: 6 };
   }
 
   let addresses;
@@ -113,7 +113,9 @@ export async function assertSafeOutboundUrl(urlStr: string): Promise<void> {
   } catch {
     throw new Error('Blocked: could not resolve URL hostname (SSRF guard)');
   }
+  if (!addresses.length) throw new Error('Blocked: could not resolve URL hostname (SSRF guard)');
   for (const addr of addresses) {
+    if (!net.isIP(addr.address)) throw new Error('Blocked: invalid DNS address (SSRF guard)');
     if (net.isIPv4(addr.address) && isPrivateIPv4(addr.address)) {
       throw new Error('Blocked: URL hostname resolves to a private IPv4 address');
     }
@@ -121,6 +123,11 @@ export async function assertSafeOutboundUrl(urlStr: string): Promise<void> {
       throw new Error('Blocked: URL hostname resolves to a private IPv6 address');
     }
   }
+  return addresses[0];
+}
+
+export async function assertSafeOutboundUrl(urlStr: string): Promise<void> {
+  await resolveSafeOutboundAddress(urlStr);
 }
 
 /**
@@ -131,39 +138,9 @@ export async function safeFetchOutboundUrl(
   options: RequestInit = {},
   maxRedirects = 5
 ): Promise<Response> {
-  let currentUrl = urlStr;
-  let remainingRedirects = maxRedirects;
-
-  while (true) {
-    await assertSafeOutboundUrl(currentUrl);
-
-    const fetchOptions: RequestInit = {
-      ...options,
-      redirect: 'manual',
-    };
-
-    const response = await fetch(currentUrl, fetchOptions);
-
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      if (!location) {
-        return response;
-      }
-
-      if (remainingRedirects <= 0) {
-        await response.body?.cancel().catch(() => undefined);
-        throw new Error('Blocked: Maximum redirect limit exceeded (SSRF guard)');
-      }
-      remainingRedirects--;
-
-      const nextUrl = new URL(location, currentUrl).toString();
-      await response.body?.cancel().catch(() => undefined);
-      currentUrl = nextUrl;
-      continue;
-    }
-
-    return response;
-  }
+  // No production caller needs a streaming or non-GET variant. Reuse the
+  // pinned, bounded capture rather than validating DNS then resolving again.
+  return (await safeFetchOutboundText(urlStr, { ...options, maxRedirects, timeoutMs: 20_000 })).response;
 }
 
 export const DEFAULT_EXTERNAL_PAGE_MAX_BYTES = 2 * 1024 * 1024;
@@ -193,37 +170,52 @@ export async function safeFetchOutboundText(
   } = options;
   const method = String(requestOptions.method || 'GET').toUpperCase();
   if (method !== 'GET') throw new Error('Safe page retrieval supports GET only');
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120_000
+    || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024
+    || !Number.isSafeInteger(maxRedirects) || maxRedirects < 0 || maxRedirects > 10) throw new Error('Invalid retrieval bounds');
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(new Error('RETRIEVAL_ABORTED'));
+  if (requestOptions.signal?.aborted) abortFromCaller();
+  else requestOptions.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  const timer = setTimeout(() => controller.abort(new Error('RETRIEVAL_TIMEOUT')), timeoutMs);
+  const signal = controller.signal;
+  const ensureActive = () => { if (signal.aborted) throw signal.reason; };
+  let rejectAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    rejectAbort = () => reject(signal.reason);
+    if (signal.aborted) rejectAbort();
+    else signal.addEventListener('abort', rejectAbort, { once: true });
+  });
 
   const requestPage = async (currentUrl: string, redirectsLeft: number): Promise<SafeOutboundTextResult> => {
-    await assertSafeOutboundUrl(currentUrl);
+    ensureActive();
+    // Resolve exactly once per hop. Every answer is checked and the selected
+    // numeric address is passed directly to the transport (no second lookup).
+    const target = await resolveSafeOutboundAddress(currentUrl);
+    ensureActive();
     const parsed = new URL(currentUrl);
     const host = stripBrackets(parsed.hostname).replace(/\.$/, '');
-    let targetHost = host;
-    let targetPort = parsed.port || (parsed.protocol === 'https:' ? 443 : 80);
-    
-    if (!net.isIP(host)) {
-      const addresses = await dns.resolve4(host);
-      if (!addresses || addresses.length === 0) throw new Error('Blocked: could not resolve URL hostname (SSRF guard)');
-      targetHost = addresses[0];
-    }
+    const targetPort = parsed.port || (parsed.protocol === 'https:' ? 443 : 80);
 
     return new Promise<SafeOutboundTextResult>((resolve, reject) => {
       const headers = Object.fromEntries(new Headers(requestOptions.headers).entries());
       headers['accept-encoding'] = 'identity';
-      headers['host'] = host;
+      headers['host'] = parsed.host;
       const transport = parsed.protocol === 'https:' ? https : http;
       const req = transport.request({
         method: 'GET',
-        hostname: targetHost,
+        hostname: target.address,
+        family: target.family,
         port: targetPort,
         path: parsed.pathname + parsed.search,
         headers,
-        signal: requestOptions.signal,
-        ...(parsed.protocol === 'https:' ? { servername: host } : {}),
+        signal,
+        ...(parsed.protocol === 'https:' && !net.isIP(host) ? { servername: host } : {}),
       }, (incoming) => {
         const status = incoming.statusCode || 0;
         if ([301, 302, 303, 307, 308].includes(status) && incoming.headers.location) {
-          incoming.resume();
+          incoming.destroy();
+          if (requestOptions.redirect === 'error') return reject(new Error('RETRIEVAL_REDIRECT_REJECTED'));
           if (redirectsLeft <= 0) return reject(new Error('Blocked: Maximum redirect limit exceeded (SSRF guard)'));
           let nextUrl: string;
           try { nextUrl = new URL(incoming.headers.location, currentUrl).toString(); } catch { return reject(new Error('RETRIEVAL_INVALID_REDIRECT')); }
@@ -262,14 +254,17 @@ export async function safeFetchOutboundText(
         });
         incoming.on('error', reject);
         incoming.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8');
+          const bytes = Buffer.concat(chunks);
+          const text = bytes.toString('utf8');
           const responseHeaders = new Headers();
           for (const [key, value] of Object.entries(incoming.headers)) {
             if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(key, item));
             else if (value !== undefined) responseHeaders.set(key, String(value));
           }
           const validStatus = (status >= 200 && status <= 599) ? status : 502;
-          const body = [204, 205, 304].includes(validStatus) ? null : text;
+          // Keep the Response byte-exact. Provider consumers use fatal UTF-8
+          // validation; decoding/re-encoding here would conceal malformed bytes.
+          const body = [204, 205, 304].includes(validStatus) ? null : new Uint8Array(bytes);
           resolve({ response: new Response(body, { status: validStatus, headers: responseHeaders }), text });
         });
       });
@@ -279,5 +274,10 @@ export async function safeFetchOutboundText(
     });
   };
 
-  return requestPage(urlStr, maxRedirects);
+  try { return await Promise.race([requestPage(urlStr, maxRedirects), aborted]); }
+  finally {
+    clearTimeout(timer);
+    if (rejectAbort) signal.removeEventListener('abort', rejectAbort);
+    requestOptions.signal?.removeEventListener('abort', abortFromCaller);
+  }
 }
