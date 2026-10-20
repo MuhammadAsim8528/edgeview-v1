@@ -12,7 +12,9 @@ export class CredentialStorageError extends Error {
 function crypt(input: string, operation: 'Protect' | 'Unprotect'): string {
   if (process.platform !== 'win32' || input.length > 262144) throw new CredentialStorageError();
   // Fixed code/absolute executable; secrets travel only through redirected pipes.
-  const script = `$ErrorActionPreference='Stop'; [Console]::Error.WriteLine('EV:startup'); Add-Type -AssemblyName System.Security; [Console]::Error.WriteLine('EV:assembly'); try { $b=[Convert]::FromBase64String([Console]::In.ReadLine()); [Console]::Error.WriteLine('EV:input'); $e=[Text.Encoding]::UTF8.GetBytes('EdgeView.credentials.v1'); $r=[Security.Cryptography.ProtectedData]::${operation}($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Error.WriteLine('EV:crypto'); [Console]::Out.Write([Convert]::ToBase64String($r)) } catch { exit 1 }`;
+  // Load the fixed framework assembly directly: Add-Type invokes PowerShell
+  // module discovery, which can hang under a minimal hosted-runner environment.
+  const script = `$ErrorActionPreference='Stop'; [Console]::Error.WriteLine('EV:startup'); [void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a'); [Console]::Error.WriteLine('EV:assembly'); try { $b=[Convert]::FromBase64String([Console]::In.ReadLine()); [Console]::Error.WriteLine('EV:input'); $e=[Text.Encoding]::UTF8.GetBytes('EdgeView.credentials.v1'); $r=[Security.Cryptography.ProtectedData]::${operation}($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Error.WriteLine('EV:crypto'); [Console]::Out.Write([Convert]::ToBase64String($r)) } catch { exit 1 }`;
   const env: NodeJS.ProcessEnv = {};
   for (const name of ['SystemRoot', 'WINDIR', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP']) {
     if (process.env[name]) env[name] = process.env[name];
