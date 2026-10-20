@@ -15,7 +15,7 @@ const excludedNames = new Set([
 const excludedPatterns = [/^\.env(?:\.|$)/i, /^edgeview\.db(?:[-.].*)?$/i, /\.log$/i, /\.tmp$/i];
 const includedDirectories = ['assets', 'dist', 'public', 'server', 'shared', 'src', 'docs'];
 const includedFiles = [
-  '.gitignore', 'EDGEVIEW_ARCHITECTURE.md', 'EDGEVIEW_CONTROL_AUDIT.md', 'EDGEVIEW_LICENSING_DESIGN.md', 'EDGEVIEW_OPERATIONS.md',
+  '.gitignore', 'EDGEVIEW_ARCHITECTURE.md', 'EDGEVIEW_ENGINEERING_AUDIT.md', 'EDGEVIEW_CONTROL_AUDIT.md', 'EDGEVIEW_LICENSING_DESIGN.md', 'EDGEVIEW_OPERATIONS.md',
   'EDGEVIEW_QA_REPORT.md', 'EDGEVIEW_SECURITY_AUDIT.md', 'EDGEVIEW_V1_VERIFICATION.md', 'EdgeView.bat', 'README.md', 'index.html',
   'package-lock.json', 'package.json', 'tsconfig.json', 'vite.config.ts', 'server.ts', 'eslint.config.js',
 ];
