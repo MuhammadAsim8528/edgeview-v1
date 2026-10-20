@@ -72,6 +72,11 @@ or runtime, not an invented Python/WebView/cloud stack. One active source writer
   probing, resources/Git-state and device identity explicitly remain WARN/SKIPPED.
   Full developer mode is not available in an end-user ZIP lacking test/dev tools.
   See docs/DOCTOR.md; M1 remains open for these gaps and SBOM/version work.
+  Standard npm CycloneDX production-lock inventory now generated locally (437
+  components), with canonical identity/preservation regression tests and CI/release
+  attachment wiring. See docs/OSS_INVENTORY.md. Six missing license metadata records
+  and existing MPL-2.0 Lightning CSS family need review; attribution, binary/OS
+  inventory and new hosted CI verification remain open.
 - [ ] M2: Close security/database/contract/recovery gaps with regression tests.
 - [ ] M3: Independent company truthsets and normal-user rendered enrichment QA;
   reconcile all importer scope, weak records and resource measurements.

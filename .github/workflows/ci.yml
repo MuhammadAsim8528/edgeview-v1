@@ -28,9 +28,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: node scripts/audit-git-secrets.mjs
+      - run: npm audit --omit=dev --audit-level=high
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/ensure-dependencies.test.mjs
       - run: node scripts/doctor.test.mjs
+      - run: node scripts/generate-sbom.test.mjs
       - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
@@ -72,6 +74,7 @@ jobs:
       - run: npm run verify:package
       - run: node scripts/package-launch-check.test.mjs
       - run: node scripts/package-cold-runtime.test.mjs
+      - run: node scripts/generate-sbom.mjs
       - name: Hash release package
         id: release-files
         shell: pwsh
@@ -111,5 +114,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release/EdgeView-V1-Windows.zip release/EdgeView-V1-Windows.zip.sha256 --verify-tag --generate-notes --title "EdgeView $RELEASE_TAG"
+        run: gh release create "$RELEASE_TAG" release/EdgeView-V1-Windows.zip release/EdgeView-V1-Windows.zip.sha256 release/EdgeView-V1-Windows.zip.sbom.cdx.json --verify-tag --generate-notes --title "EdgeView $RELEASE_TAG"
 
