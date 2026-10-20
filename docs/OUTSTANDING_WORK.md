@@ -74,3 +74,85 @@ or runtime, not an invented Python/WebView/cloud stack. One active source writer
 - [ ] M5: Packaged runtime E2E, clean restart/update/restore proof, passing hosted
   CI and factual release handoff. Conditional cloud/device/WebView tasks stay
   explicitly conditional rather than being silently omitted or falsely completed.
+
+## OSS composition directive intake (40 sections + phases A–K)
+
+Added 2026-10-20; additive to every preceding requirement. Engineering strategy is
+**compose proven OSS/platform capabilities with custom EdgeView domain logic**,
+not "dependencies only as a last resort" and not "a package for everything".
+Reuse good existing implementation first; evaluate maintained libraries/repos,
+public APIs and legally adaptable implementations before substantial generic
+infrastructure. Do not automatically install the named examples.
+
+For EACH subsystem review below, record these eight fields before selection:
+existing implementation; available OSS/platform options; selected approach; why;
+license/attribution; integration plan; security consequences; test plan. Record
+upstream version/commit and EdgeView modifications for adopted source. Prior master
+directive acceptance rules, SBOM and copyleft review remain in force.
+
+| New sections | Added or clarified task / acceptance gate |
+|---|---|
+| 1: resource monitoring | PLANNED unified bounded resource service using actual Node/Windows capabilities or a justified maintained adapter. Cover process/system CPU/RAM, uptime/status/children/threads/handles where supported, disk and useful I/O, job/queue/worker/provider/extraction/database timings, failures and cache hits. Unsupported values remain unknown. GPU only if local GPU work exists; no required NVIDIA hardware. Detailed diagnostics rather than a Task Manager clone. |
+| 2: installation/device identity | PLANNED local random installation UUID plus mature crypto keypair and OS-protected private storage, update persistence and recovery/reset tests. Raw/HWID hashes are not authentication; hardware signals secondary and never sent raw to analytics. Cloud registration/signed credentials remain conditional on an actual cloud service. This explicitly adds local identity work; it is no longer entirely deferred merely because cloud registration is optional. |
+| 3: one secret-store abstraction | PARTIAL existing Windows provider-credential codec; PLANNED assess reuse/extension for device keys and local tokens through one owner, no competing plaintext stores. Distributed client must not contain shared cloud service-role secrets. Preserve current configuration and recovery semantics. |
+| 4, 5, 6: crash, analytics, replay | Carry forward Sentry/PostHog evaluations for actual React/Node stack, vendor adapters, correlation/breadcrumb/release IDs, central minimal event schemas and offline-safe delivery. Replay OFF unless separate masking/privacy verification succeeds. No direct vendor calls scattered through product code, no sensitive research payloads exported. |
+| 7, 8: logging / tracing | Reuse existing bounded redacted logs and metrics; evaluate mature backing libraries and simplest adequate tracing (Sentry spans/OTel where justified). Add version/operation/job/provider/stage correlation and privacy-reviewed diagnostics export. Python-specific SDK examples do not require a Python backend. |
+| 9: SQLite | Carry forward measured index/constraint/transaction/migration/corruption/backup/locking/concurrency/schema audit. WAL only where supported/appropriate to actual sql.js persistence; do not claim native SQLite features are automatically active. |
+| 10: optional control plane | CONDITIONAL licensing/registration/update metadata/flags/shared configuration, separated from local research storage. No automatic private-data synchronization or unnecessary PostgreSQL/Supabase migration. |
+| 11, 12: runtime / real automation | Current runtime is browser + loopback Node app. WebView2 detection/bootstrap/CDP tests conditional on a real host; do not add Chromium/Python merely to fit examples. Real interface testing must cover production integration, not a standalone dev page. Existing local-origin denial remains a hard visual-test blocker, not permission for raw-CDP/alternate-port workarounds. |
+| 13, 14, 15: tests / schemas | Evaluate existing TS test stack plus Vitest/RTL/Playwright/MSW where useful; no homemade test engine. Python/pytest/Pydantic conditional on actual Python code. Validate privileged API contracts, payloads, responses, errors, versioning, cancellation and timeouts using existing or justified mature schema tooling. |
+| 16, 17: networking / retries | Retain mature HTTP client/platform fetch and SSRF wrapper. Audit shared TLS, pooling, cancellation, size bounds, telemetry, safe retry classification, attempt cap/backoff/jitter and total deadline. Never indefinite retries or unsafe replay of paid/non-idempotent operations. |
+| 18: background work | Audit actual concurrency across parsing, database-heavy work, exports and research; keep UI responsive with appropriate supported workers/task primitives. No distributed queue added without need. |
+| 19: safe updates | PLANNED evaluate mature Windows update/distribution compatible with current launcher/package. Require HTTPS, verified metadata/hashes/signatures where possible, versions, atomic replacement, rollback and clear UX. Never execute arbitrary server-returned binaries; preserve active jobs and user state. Existing build-on-launch is not a verified automatic update system. |
+| 20, 21, 22, 23: packaging / native / UI / reuse | Inspect actual packaging first, evaluate installer/bundled runtime rather than choose by popularity. Reuse OS capabilities and accessible UI primitives without replacing visual identity. Legally reuse maintained repositories with attribution and acceptance records. No unrelated UI/theme rewrite. |
+| 24: security toolchain | Mandatory release dependency audit plus appropriate mature static/secret scanners and update tooling evaluation. Names-only env template, honest severity/reachability triage and unresolved findings; do not disable legitimate failing checks. |
+| 25: leak/stress tests | PLANNED long repeated representative cycles with bounded fixtures and trend measurements: memory, CPU, child/process count, threads, handles, connections, listeners, DB state and crashes. Include worker/renderer leaks only where actual runtime uses them. Single idle/RSS snapshot is not a leak test. |
+| 26, 27, 28: startup / unified health / doctor | Reuse one canonical health-check set for startup, UI, diagnostics bundles, doctor and tests. Cover runtime, storage/config/permissions/disk, DB/migrations, secrets, providers, jobs/resources/logs/build and identity. Explicitly SKIP nonexistent bridge/WebView/Python features. Human PASS/WARN/FAIL/SKIPPED + machine JSON; nonzero release-blocking failures. Cloud telemetry never required for startup. |
+| 29: advanced diagnostics | Extend existing diagnostics with real version/build/schema/runtime/resources/process/provider/cache/worker/error/health information and Copy/Export/Run Health Check. Clear Safe Cache only for explicitly identified recreatable cache, never evidence/DB/secrets; normal destructive-action rules apply. No fabricated registered/healthy state. |
+| 30: performance budgets | Measure startup/idle/company/detail/directory/research/database/UI baseline first; then set practical regression thresholds and warn/fail as appropriate. No arbitrary hardware promises or invented budgets. |
+| 31, 32: offline / provider resilience | Explicitly distinguish offline, provider outage, auth, quota/rate limit, timeout, server and local failure. Stored intelligence remains browsable where possible. Maintain provider adapters, real timing/success/error/quota/usage states, NVIDIA/Groq routing preferences and no fabricated fallback results. |
+| 33, 34: privacy / telemetry boundary | PLANNED data-egress inventory and SAFE TELEMETRY/PSEUDONYMOUS/SENSITIVE/NEVER TRANSMIT classifications, vendor-independent narrow services. Never transmit credentials, private documents/DB rows/full research/prompts/auth material by default. Centralization must not become a giant duplicate telemetry platform. |
+| 35: flags | CONDITIONAL mature remote rollout/kill-switch system only if justified. Client-controlled flags must never disable mandatory security protections. |
+| 36, 37, 38: backup / crash / shutdown | PLANNED schema-aware backups, integrity/restore validation, interrupted-write/job recovery and stale-lock handling without erasing evidence or marking interrupted work complete. Coordinated bounded shutdown flushes durable state/logs, cancels workers and closes owned children/resources; telemetry cannot stall it forever. |
+| 39: lifecycle gate | PLANNED isolated first-start → DB/local identity → representative real workflow → normal close/restart/persistence → controlled crash/recovery → app/schema upgrade/data-preservation test. Use real supported runtime plus controlled providers, never destructive production fixtures. |
+| 40: full completion | REQUIRED dedicated phases A–K below AFTER feature milestones, then re-run blocking regression gates following all fixes. "Works", one passing test run, healthy counters or an attractive UI are not completion. |
+
+### Dedicated full-product completion phase (not started / not passed)
+
+- [ ] A — Whole-repository audit: major subsystems, duplicates/dead code, unused
+  dependencies, temporary code, TODO/FIXME/debug bypasses, defaults and errors.
+- [ ] B — Complete applicable static/unit/component/integration/contract/E2E/
+  packaged/migration/recovery/provider/offline/stress/leak/security test execution;
+  legitimate failures fixed, not disabled. Explicitly identify irrelevant runtimes.
+- [ ] C — Security pass across dependencies, static/secret checks, API/bridge,
+  URLs/network, filesystem, device/secret storage, runtime and database; classify
+  severity with evidence and resolve release blockers.
+- [ ] D — Measured startup/idle/navigation/large-data/research/export/shutdown
+  CPU, memory, disk/network, provider and DB profile; regressions/leaks addressed.
+- [ ] E — Failure UX: internet loss, DB failure, outage/quota, malformed data,
+  renderer/runtime failure, permission denial, disk full, bad configuration and
+  unexpected shutdown, all tested safely in isolation.
+- [ ] F — Actual distributable install/run: first launch, dependencies, storage,
+  identity, resources, optional telemetry, research, exports, updates and applicable
+  uninstall behavior. Development checkout success is insufficient.
+- [ ] G — Clean Windows/VM gate WITHOUT developer-installed Node/npm/Python,
+  developer environment variables, repository, IDE or dev server. **Current ZIP
+  requires Node/npm and does NOT satisfy this new gate.** Evaluate bundled runtime/
+  installer with licenses/integrity/update/recovery tests; Docker QA and prior
+  cold-package tests are different evidence, not clean-machine substitutes.
+- [ ] H — Release observability: real logs/resources/diagnostics/build IDs and
+  configured privacy-approved crash/analytics services; controlled test error
+  reaches intended destination. Offline/unconfigured vendors clearly distinguished.
+- [ ] I — Final regression: rerun every release-blocking test AFTER security,
+  performance, recovery, packaging and UX fixes.
+- [ ] J — Documentation: architecture/setup, dependency decisions/attribution,
+  tests/diagnostics/release, identity/privacy, recovery and known limitations.
+- [ ] K — Produce `EDGEVIEW_PRODUCTION_READINESS_REPORT.md` with architecture,
+  OSS/custom decisions, exact tests/scans/results, measured performance, monitoring,
+  actual identity design, exact packaged build, clean-machine result, limitations
+  and evidence-backed READY / READY WITH WARNINGS / NOT READY recommendation.
+  Do not issue a favorable report prematurely.
+
+M0–M5 execution order remains; these requirements expand the appropriate milestones
+and add final completion gates. Earlier real-company accuracy, full importer scope,
+UI state/visibility, provider evidence and key-rotation requirements remain open.
