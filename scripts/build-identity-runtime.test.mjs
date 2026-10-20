@@ -42,6 +42,22 @@ try {
   const firstHealth = await start();
   assert.equal(firstHealth.app.build.buildId, first.buildId);
   assert.equal(firstHealth.app.runtime_mode, 'production', 'static runtime mode is separate from NODE_ENV test');
+  // Exercise the existing read-only load probe against this verified owned
+  // process, never the user's fixed-port installation or provider accounts.
+  const load = spawn(process.execPath, [path.join(source, 'scripts/local-load-smoke.mjs')], {
+    cwd: source, env: { ...env, EDGEVIEW_URL: base }, stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60000,
+  });
+  let loadOutput = '';
+  load.stdout.on('data', chunk => { loadOutput += String(chunk); });
+  load.stderr.resume();
+  const loadExit = await new Promise((resolve, reject) => {
+    load.once('error', reject); load.once('exit', resolve);
+  });
+  assert.equal(loadExit, 0, 'isolated read-only load probe failed or timed out');
+  const loadReport = JSON.parse(loadOutput.trim());
+  assert.equal(loadReport.app_pid, child.pid);
+  console.log(JSON.stringify({ isolatedLoad: loadReport }));
   fs.writeFileSync(path.join(root, 'dist/index.html'), '<html>second</html>');
   const second = writeBuildMetadata(root);
   assert.notEqual(second.buildId, first.buildId);

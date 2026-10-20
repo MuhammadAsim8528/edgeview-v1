@@ -49,3 +49,10 @@ production rebuild (14,016 ms), rebuilt identity reuse and smoke (5,083 ms).
 The original distribution manifest was verified before rebuild, not after the
 rebuild changed generated files. This is not a clean-machine/no-Node test,
 fixed-port launcher test, visual test or evidence of live deployment.
+
+The compiled identity lifecycle test also runs the existing read-only load probe
+against its PID-verified temporary backend, with providers disabled and a 60s
+child deadline. Observed 2026-10-20: 100 requests, concurrency 12, zero failures,
+p50 15ms / p95 47ms / max 47ms; RSS 124 → 126.2MB. This empty isolated dataset
+smoke is not representative large-file, paid enrichment or long-run leak evidence.
+The subsequent stale-process/restart/invalid-metadata checks also passed.
