@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-20T17:52:14.450Z",
+  "generated_at": "2026-10-20T18:06:07.184Z",
   "backend": {
     "files": [
       "server.ts",
@@ -30,6 +30,7 @@
       "server/routes/upload.ts",
       "server/runtime_log.ts",
       "server/settings.ts",
+      "server/shutdown.ts",
       "server/sqlite.ts",
       "server/sqlite_persistence.ts",
       "server/stats_router.ts",
@@ -45,8 +46,8 @@
       "shared/v1_contact_contract.ts",
       "src/utils/countryNormalizer.ts"
     ],
-    "count": 42,
-    "lines": 15079
+    "count": 43,
+    "lines": 15154
   },
   "frontend": {
     "files": [

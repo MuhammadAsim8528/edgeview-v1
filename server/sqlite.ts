@@ -18,6 +18,11 @@ export interface DatabaseWrapper {
 
 let dbInstance: DatabaseWrapper | null = null;
 let initPromise: Promise<DatabaseWrapper> | null = null;
+/** Do not initialize/create a database merely because the process is closing. */
+export async function flushInitializedDatabase(): Promise<void> {
+  if (initPromise) await initPromise;
+  if (dbInstance) await dbInstance.flush();
+}
 const CURRENT_SCHEMA_VERSION = 1;
 
 /** Re-open the isolated on-disk database for persistence regression tests. */

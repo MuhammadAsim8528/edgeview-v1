@@ -61,6 +61,13 @@ denial without an approval dialog; no workaround attempted.
 This ledger reconciles the requested work. Source/tests, deployed behavior, and
 visual verification are separate gates. Earlier progress reports are not proof.
 
+Normal shutdown increment: HTTP intake/job scheduling stop, bounded task drain,
+initialized-DB flush, Vite close and lock release at exit now replace immediate
+signal exit. Pending-write reopen and compiled production signal-handler/history
+tests pass. Windows console delivery, forced termination, active provider drain
+and full crash/upgrade lifecycle remain separate unverified gates; see
+docs/SHUTDOWN_RECOVERY.md. No live-process control workaround used.
+
 | Requirement | Current evidence and remaining gate |
 |---|---|
 | Preserve V1 and remove competing old engine | Active dependency/archive graph checked; retired source archived, not restored. |

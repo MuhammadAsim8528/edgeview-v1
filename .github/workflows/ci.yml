@@ -41,6 +41,7 @@ jobs:
       - run: node scripts/generate-sbom.test.mjs
       - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
+      - run: node --import tsx server/tests/shutdown.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts

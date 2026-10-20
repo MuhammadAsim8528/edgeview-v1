@@ -39,14 +39,17 @@ import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey } from './server/company_identity';
 import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
-import { persistV1ContactOverlay, projectHistoricalContactFields } from './server/job_manager';
+import { persistV1ContactOverlay, projectHistoricalContactFields, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
 import { hasRecentProviderObservation } from './shared/provider_telemetry';
 import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
+import { createShutdownController } from './server/shutdown';
+import { flushInitializedDatabase } from './server/sqlite';
 
 const app = express();
+let closing = false;
 const sampleResources = createResourceSampler(getProjectRoot());
 // Capture identity once: rebuilding files must not relabel an older live process.
 const runningBuild = readBuildIdentity(getProjectRoot());
@@ -123,6 +126,7 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (closing) return res.status(503).json({ success: false, code: 'SHUTTING_DOWN', message: 'EdgeView is shutting down.' });
   res.setHeader('Content-Security-Policy', useViteDevServer
     ? "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     : "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
@@ -2427,6 +2431,20 @@ app.use(globalErrorHandler);
 // ==========================================
 async function startServer() {
   let lockHandle: number | null = null;
+  let httpServer: ReturnType<typeof app.listen> | undefined;
+  let closeFrontend: (() => Promise<void>) | undefined;
+  const shutdown = createShutdownController({
+    stopIntake: () => { closing = true; },
+    drain: async () => {
+      const httpDrain = httpServer ? new Promise<void>(resolve => httpServer!.close(() => resolve())) : Promise.resolve();
+      await Promise.all([httpDrain, stopJobsForShutdown()]);
+    },
+    flush: async () => { await flushInitializedDatabase(); await closeFrontend?.(); },
+    report: message => console.warn(message),
+    finish: code => process.exit(code),
+  });
+  process.once('SIGINT', () => { void shutdown(); });
+  process.once('SIGTERM', () => { void shutdown(); });
   if (!isTestProcess()) {
     const lockPath = getBackendLockPath();
     if (fs.existsSync(lockPath)) {
@@ -2447,12 +2465,10 @@ async function startServer() {
         if (lockHandle !== null) {
           try { fs.closeSync(lockHandle); } catch (_) {}
           lockHandle = null;
+          try { fs.unlinkSync(lockPath); } catch (_) {}
         }
-        try { fs.unlinkSync(lockPath); } catch (_) {}
       };
       process.once('exit', releaseLock);
-      process.once('SIGINT', () => { releaseLock(); process.exit(0); });
-      process.once('SIGTERM', () => { releaseLock(); process.exit(0); });
     } catch (error: any) {
       let owner = 'unknown';
       try { owner = fs.readFileSync(lockPath, 'utf8').trim() || owner; } catch (_) {}
@@ -2529,6 +2545,7 @@ async function startServer() {
         appType: 'spa',
       });
       app.use(vite.middlewares);
+      closeFrontend = () => vite.close();
     } else {
       const distPath = path.join(getProjectRoot(), 'dist');
       app.use(express.static(distPath));
@@ -2552,6 +2569,7 @@ async function startServer() {
       apiUrl: `http://${HOST}:${PORT}`, apiVersion: API_VERSION,
     }));
   });
+  httpServer = server;
   server.on('error', (err: any) => {
     if (err?.code === 'EADDRINUSE') {
       console.error(`EdgeView failed to bind port ${PORT}: port already in use. Stop the existing instance first.`);

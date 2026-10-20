@@ -493,6 +493,14 @@ export interface ResearchJob {
 
 // In-memory registry of currently active background jobs to allow graceful stopping
 const activeJobs = new Set<string>();
+const runningTasks = new Set<Promise<void>>();
+let shuttingDown = false;
+export async function stopJobsForShutdown(): Promise<void> {
+  shuttingDown = true;
+  activeJobs.clear(); // workers finish their current company, not the next one
+  const results = await Promise.allSettled([...runningTasks]);
+  if (results.some(result => result.status === 'rejected')) throw new Error('Background job did not drain cleanly');
+}
 
 export function isInternalId(name: string): boolean {
   if (!name) return true;
@@ -507,6 +515,7 @@ export function isInternalId(name: string): boolean {
 }
 
 export async function createJob(companyIds: string[], mode: 'importer' | 'exporter'): Promise<string> {
+  if (shuttingDown) throw new Error('EdgeView is shutting down');
   const db = await getDb();
   const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   
@@ -652,19 +661,22 @@ export function isJobActive(jobId: string): boolean {
 }
 
 export async function runJobLoop(jobId: string, forceFetch = false): Promise<boolean> {
+  if (shuttingDown) return false;
   if (activeJobs.has(jobId)) return false;
   activeJobs.add(jobId);
   const job = await getJob(jobId);
+  if (shuttingDown) { activeJobs.delete(jobId); return false; }
   if (!job) {
     activeJobs.delete(jobId);
     return false;
   }
 
   await updateJob(jobId, { status: 'PENDING' }, true);
+  if (shuttingDown) { activeJobs.delete(jobId); return false; }
 
   // Five bounded workers improve throughput while persisted checkpoints keep
   // the job resumable after a server or browser restart.
-  void (async () => {
+  const task = (async () => {
     try {
       const { db: pharmaDb } = await import('./db');
       if (forceFetch) {
@@ -842,6 +854,10 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
       activeJobs.delete(jobId);
     }
   })();
+  runningTasks.add(task);
+  // Preserve the existing fatal unhandled-rejection behavior if even the
+  // failure checkpoint cannot be persisted; tracking must not swallow it.
+  void task.finally(() => runningTasks.delete(task));
   return true;
 }
 

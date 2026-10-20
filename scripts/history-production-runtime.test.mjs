@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { unusedTestPort } from './test-server-port.mjs';
 
 // A real production-mode backend, but only in this test's own installation root.
@@ -27,7 +28,7 @@ for (const key of ['EDGEVIEW_TEST_MODE','EDGEVIEW_TEST_DB_DIR','EDGEVIEW_JSON_DB
 
 async function start() {
   output = '';
-  child = spawn(process.execPath, ['dist/server.cjs'], { cwd: app, env, stdio: ['ignore','pipe','pipe'] });
+  child = spawn(process.execPath, ['--import', pathToFileURL(path.join(source, 'scripts/test-fixtures/normal-shutdown.mjs')).href, 'dist/server.cjs'], { cwd: app, env, stdio: ['ignore','pipe','pipe','ipc'] });
   const collect = chunk => { output = (output + chunk).slice(-8000); };
   child.stdout.on('data', collect); child.stderr.on('data', collect);
   const deadline = Date.now() + 30000;
@@ -47,7 +48,15 @@ async function start() {
 }
 async function stop() {
   if (child && child.exitCode === null && child.signalCode === null) {
-    const exited = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGTERM'); await exited;
+    const exiting = child;
+    let timeout;
+    const exited = new Promise((resolve, reject) => {
+      exiting.once('exit', code => { clearTimeout(timeout); code === 0 ? resolve() : reject(new Error('Normal shutdown failed')); });
+      timeout = setTimeout(() => { exiting.kill('SIGTERM'); reject(new Error('Normal shutdown exceeded test deadline')); }, 20000);
+    });
+    exiting.send('edgeview-test-normal-shutdown');
+    await exited;
+    assert.equal(fs.existsSync(path.join(app, 'edgeview.db.lock')), false, 'normal exit retains no owned backend lock');
   }
 }
 const json = async route => {
