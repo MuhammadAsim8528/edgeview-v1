@@ -10,7 +10,22 @@ export function dependencyFingerprint(root) {
     .update(`${process.platform}/${process.arch}/${process.versions.node.split('.')[0]}/omit-dev-ignore-scripts-v1`).digest('hex');
 }
 
-export function ensureDependencies(root, install = () => spawnSync('npm ci --omit=dev --ignore-scripts --no-audit --no-fund --cache .npm-cache', { cwd: root, stdio: 'inherit', shell: true })) {
+export function ensureDependencies(root, install = () => {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === 'npm_config_allow_scripts') delete env[key];
+  }
+  const userConfig = process.platform === 'win32' ? 'NUL' : '/dev/null';
+  const npmArgs = [
+    'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
+    '--cache', '.npm-cache', `--userconfig=${userConfig}`,
+  ];
+  if (process.platform === 'win32') {
+    const command = ['npm.cmd', ...npmArgs].join(' ');
+    return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], { cwd: root, stdio: 'inherit', env });
+  }
+  return spawnSync('npm', npmArgs, { cwd: root, stdio: 'inherit', env });
+}) {
   const marker = path.join(root, 'node_modules', '.edgeview-install.json');
   const fingerprint = dependencyFingerprint(root);
   const dependenciesExist = () => {
