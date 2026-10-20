@@ -14,6 +14,9 @@ try {
   assert.equal(healthy.exitCode, 0); assert.equal(calls, 1);
   assert.ok(!JSON.stringify(healthy).includes('must-not-leak'));
   assert.equal(healthy.checks.find(check => check.id === 'provider_serper').status, 'WARN');
+  assert.equal(healthy.checks.find(check => check.id === 'resources').status, 'WARN', 'old runtime cannot fabricate resource measurements');
+  const measured = await runDoctor({ root, request: async () => Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'ok' }, resources: { status: 'PASS', rssBytes: 1, cpuPercent: 0, systemTotalBytes: 2, diskAvailableBytes: 3 } }) });
+  assert.equal(measured.checks.find(check => check.id === 'resources').status, 'PASS');
   const commands = [];
   const full = await runDoctor({ root, request, full: true, execute: command => { commands.push(command); return { status: command === 'build' ? 1 : 0 }; } });
   assert.equal(full.exitCode, 1); assert.deepEqual(commands, ['check', 'build']);

@@ -37,6 +37,15 @@ try {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.ok(ready, output);
+  const resourceSnapshot = (await (await fetch(`${base}/api/health`)).json()).resources;
+  assert.ok(resourceSnapshot.rssBytes > 0);
+  assert.ok(resourceSnapshot.heapUsedBytes > 0);
+  assert.equal(resourceSnapshot.handles, null);
+  assert.equal(resourceSnapshot.gpu, null);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const nextResources = (await (await fetch(`${base}/api/health`)).json()).resources;
+  assert.ok(Number.isFinite(nextResources.cpuPercent) && nextResources.cpuPercent >= 0);
+  assert.ok(!JSON.stringify(nextResources).includes('synthetic-serper-diagnostic'));
   const tested = await fetch(`${base}/api/system/health/test`, { method: 'POST' });
   assert.equal(tested.status, 200);
   const body = await tested.json();

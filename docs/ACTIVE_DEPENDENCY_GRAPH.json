@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-20T13:25:59.235Z",
+  "generated_at": "2026-10-20T17:24:48.039Z",
   "backend": {
     "files": [
       "server.ts",
@@ -26,6 +26,7 @@
       "server/pdf_report.ts",
       "server/phone_country.ts",
       "server/provider_response.ts",
+      "server/resource_snapshot.ts",
       "server/routes/upload.ts",
       "server/runtime_log.ts",
       "server/settings.ts",
@@ -43,8 +44,8 @@
       "shared/v1_contact_contract.ts",
       "src/utils/countryNormalizer.ts"
     ],
-    "count": 40,
-    "lines": 14957
+    "count": 41,
+    "lines": 15027
   },
   "frontend": {
     "files": [
@@ -60,6 +61,7 @@
       "src/components/LogsViewerPanel.tsx",
       "src/components/Reports.tsx",
       "src/components/ResearchWorkspace.tsx",
+      "src/components/RuntimeResourcesPanel.tsx",
       "src/components/SettingsTabV1.tsx",
       "src/components/Sidebar.tsx",
       "src/components/SourceEvidenceModal.tsx",
@@ -79,8 +81,8 @@
       "src/utils/safeFetch.ts",
       "src/utils/telemetryFormat.ts"
     ],
-    "count": 30,
-    "lines": 10460
+    "count": 31,
+    "lines": 10520
   },
   "retired_inputs": 0,
   "archive": {

@@ -31,6 +31,8 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/ensure-dependencies.test.mjs
+      - run: node scripts/npm-policy-isolation.test.mjs
+      - run: node --experimental-strip-types server/tests/resource_snapshot.test.ts
       - run: node scripts/doctor.test.mjs
       - run: node scripts/generate-sbom.test.mjs
       - run: node scripts/package-preservation.test.mjs

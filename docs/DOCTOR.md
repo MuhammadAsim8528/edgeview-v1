@@ -24,5 +24,10 @@ portion; no process is silently started to make that check pass.
 Still explicit SKIPPED: build freshness/commit identity, independent secret-store
 probe, cryptographic device identity, rendered UI tests and full security audits.
 Python/WebView checks are inapplicable to this browser/Node release. Resource,
-disk/permissions, Git-state, build metadata and diagnostics integration remain
+permissions, Git-state, build metadata and broader diagnostics integration remain
 backlog work. No new health authority or telemetry vendor was introduced.
+
+Resources now reuse the existing backend health response: bounded Node process/
+system/disk sampling, no subprocesses or polling in doctor. Partial/absent or
+initial CPU measurements yield WARN. The same source feeds Settings' runtime
+resources panel. Browser memory and unsupported native counters are not inferred.

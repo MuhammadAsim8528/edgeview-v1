@@ -1,5 +1,37 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Continuation directive intake (sections 0–28)
+
+The 096e1b20 and e3289d42 continuation attachments are additive and equivalent
+work packages, not proof of a current deployment. Preserve e8a73d5 npm-policy
+isolation. New regression covers real offline npm with inherited allow-scripts,
+unrelated user/global npmrc, missing config and restart; existing recovery tests
+also cover partial installations, stale/corrupt markers and wrong/corrupt package
+metadata. No production dependency reinstall is required for these fixtures.
+
+Execution order: finish launcher verification/package; then extend existing
+SystemHealthPanel/runtime metrics/doctor through one shared diagnostics authority,
+including actual bounded resources and build identity. Sections 5–12 require
+source-to-runtime-to-render evidence, safe log export and explicit unsupported
+metrics. External monitoring (8–10) requires privacy-reviewed optional adapters,
+no default replay or private-data transmission; unconfigured is not successful.
+Sections 13–19 remain installation identity, DB restore, failure UX, bundled-runtime
+clean-VM distribution, safe updates and measured long-run performance work.
+Sections 20–25 add current-HEAD security/CI/license review, real-company truthsets,
+normal-UI importer workflow and crash/shutdown recovery. Sections 26–28 preserve
+all A–K completion gates below and evidence-backed final reporting.
+
+Supported browser acquisition was genuinely attempted again at user request;
+the tool returned a saved-origin permission denial, not an interactive approval
+prompt. No alternate browser/port/raw-CDP workaround is permitted. Visual QA is
+unperformed pending a supported permission change, not permanently abandoned.
+
+Resource-monitoring increment: Node process/system/filesystem sampler now feeds
+the existing health API, doctor and a Settings health panel. Sampling and API
+regressions are separate gates; rendered QA and long-run measurements remain
+unverified. See docs/RESOURCE_MONITORING.md. The owner closed the backend after
+the dependency file-lock blocker; exact locked-toolchain restoration is in progress.
+
 This ledger reconciles the requested work. Source/tests, deployed behavior, and
 visual verification are separate gates. Earlier progress reports are not proof.
 

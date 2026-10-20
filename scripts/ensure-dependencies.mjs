@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -15,16 +16,23 @@ export function ensureDependencies(root, install = () => {
   for (const key of Object.keys(env)) {
     if (key.toLowerCase() === 'npm_config_allow_scripts') delete env[key];
   }
-  const userConfig = process.platform === 'win32' ? 'NUL' : '/dev/null';
+  // npm rejects loading one path as both user and global config. Use distinct
+  // empty files owned by this invocation, not the user's npmrc or a shared file.
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-npm-config-'));
+  const userConfig = path.join(configDir, 'user.npmrc');
+  const globalConfig = path.join(configDir, 'global.npmrc');
+  fs.writeFileSync(userConfig, ''); fs.writeFileSync(globalConfig, '');
   const npmArgs = [
     'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
-    '--cache', '.npm-cache', `--userconfig=${userConfig}`,
+    '--cache', '.npm-cache', `--userconfig=${userConfig}`, `--globalconfig=${globalConfig}`,
   ];
-  if (process.platform === 'win32') {
-    const command = ['npm.cmd', ...npmArgs].join(' ');
-    return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], { cwd: root, stdio: 'inherit', env });
-  }
-  return spawnSync('npm', npmArgs, { cwd: root, stdio: 'inherit', env });
+  try {
+    if (process.platform === 'win32') {
+      const command = ['npm.cmd', ...npmArgs.map(arg => `"${arg}"`)].join(' ');
+      return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], { cwd: root, stdio: 'inherit', env, windowsVerbatimArguments: true });
+    }
+    return spawnSync('npm', npmArgs, { cwd: root, stdio: 'inherit', env });
+  } finally { fs.rmSync(configDir, { recursive: true, force: true }); }
 }) {
   const marker = path.join(root, 'node_modules', '.edgeview-install.json');
   const fingerprint = dependencyFingerprint(root);

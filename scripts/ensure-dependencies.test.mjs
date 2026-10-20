@@ -32,5 +32,11 @@ try {
   write('node_modules/fixture/package.json', { version: '9.9.9' });
   ensureDependencies(root, install);
   assert.equal(installs, 4, 'wrong installed version is repaired');
+  fs.writeFileSync(path.join(root, 'node_modules/fixture/package.json'), '{broken');
+  ensureDependencies(root, install);
+  assert.equal(installs, 5, 'corrupt installed metadata is repaired');
+  fs.writeFileSync(marker, '{broken');
+  ensureDependencies(root, install);
+  assert.equal(installs, 6, 'corrupt completion marker is repaired');
   console.log('PASS dependency installation retries partial/changed/corrupt installs and reuses verified completion');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

@@ -43,8 +43,10 @@ import { persistV1ContactOverlay, projectHistoricalContactFields } from './serve
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
 import { hasRecentProviderObservation } from './shared/provider_telemetry';
+import { createResourceSampler } from './server/resource_snapshot';
 
 const app = express();
+const sampleResources = createResourceSampler(getProjectRoot());
 const PORT = Number(process.env.PORT) || 3000;
 // Production/static mode is the safe default. Vite middleware must be opted
 // into explicitly so a launcher or service missing NODE_ENV cannot serve an
@@ -229,6 +231,7 @@ app.get('/api/health', (req, res) => {
     api_version: API_VERSION,
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.round(process.uptime()),
+    resources: sampleResources(),
     memory: (() => {
       const usage = process.memoryUsage();
       const mb = (bytes: number) => Math.round(bytes / 1024 / 1024 * 10) / 10;

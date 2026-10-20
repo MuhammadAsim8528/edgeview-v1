@@ -13,6 +13,7 @@ import {
 import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { safeFetchJson } from '../utils/safeFetch';
 import { formatObservedLatency, formatObservedRate } from '../utils/telemetryFormat';
+import { RuntimeResourcesPanel } from './RuntimeResourcesPanel';
 
 export interface ProviderHealth {
   provider: string;
@@ -231,6 +232,7 @@ export const SystemHealthPanel: React.FC = () => {
       {(testError || healthError) && <div role="alert" className="rounded border border-rose-800 bg-rose-950/40 p-3 text-xs text-rose-200">{testError || healthError}{Object.keys(healthReport).length > 0 ? ' Previously loaded metrics remain visible.' : ''}</div>}
 
       {/* The V1 critical path intentionally exposes only approved providers. */}
+      <RuntimeResourcesPanel />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.keys(healthReport).length > 0 ? (
           Object.entries(healthReport)

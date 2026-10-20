@@ -54,6 +54,9 @@ export async function runDoctor({ root = installation, full = false, request = f
     if (health.app?.name !== 'edgeview' || !sameRoot) throw new Error();
     add('local_backend', health.status === 'ok' ? 'PASS' : 'FAIL', 'Responding EdgeView backend belongs to this installation.');
     add('database', health.database?.status === 'ok' ? 'PASS' : 'FAIL', health.database?.status === 'ok' ? 'Backend reports database checks healthy.' : 'Backend database status is degraded or unknown.');
+    const resources = health.resources;
+    const observedResources = resources?.status === 'PASS' && ['rssBytes', 'cpuPercent', 'systemTotalBytes', 'diskAvailableBytes'].every(key => typeof resources[key] === 'number' && Number.isFinite(resources[key]) && resources[key] >= 0);
+    add('resources', observedResources ? 'PASS' : 'WARN', observedResources ? 'Backend reports measured process/system/disk resources; unsupported metrics remain unknown.' : 'Resource measurements are partial or unavailable; initial CPU sample needs a later refresh.');
     for (const provider of ['nvidia', 'groq', 'serper', 'hunter']) {
       const state = health.providers?.[provider];
       add(`provider_${provider}`, !state?.enabled ? 'SKIPPED' : 'WARN', !state?.enabled ? 'Disabled or unknown; no provider request made.' : state.configured ? 'Configured only; authentication/quota/reachability NOT VERIFIED.' : 'Enabled but not configured.');

@@ -349,3 +349,62 @@ No claim of release completion or broad production readiness is made.
 - Scope/remaining: latest transport changes are built/packaged but a subsequent
   live restart was denied; live PID 31216 retains its earlier working reader.
   Source-level correction and hosted workflow completion are separate gates.
+
+### 2026-10-20: continuation and npm-policy isolation
+
+- Preserved e8a73d5 and added isolation from global npm configuration as well as
+  user npm configuration. Distinct invocation-owned empty npmrc files are needed:
+  npm rejects loading the same null path as both config authorities. Windows
+  cmd argument framing was corrected after the real-npm fixture caught quoting
+  being passed literally. Lifecycle scripts remain disabled; the lock remains
+  the install authority. Temporary config files are removed after the command.
+- Real offline npm fixture passes with inherited allow-scripts and unrelated
+  user/global npmrc, missing configuration and restart after repair. Existing
+  recovery regression additionally covers corrupt package metadata and marker.
+  These fixtures have no external packages and do not prove clean-machine support.
+- Read-only live check reports production PID 29112 and the canonical root;
+  process start is after the existing dist timestamp. This is not a build digest
+  comparison and does not establish rendered UI behavior.
+- Supported visual-QA acquisition again received an explicit saved-origin denial.
+  No interactive permission prompt appeared. No alternate browser/port/CDP bypass
+  attempted, no visual verification or new real-company enrichment claimed.
+- Verification interruption: checkout development dependencies were absent after
+  the prior production-only installation. Full checks stopped at missing tsc.
+  Clean dependency repair hit a Windows Rollup native-file lock; a non-clean repair
+  completed but direct-version validation detected lock mismatches, so no new
+  build/package/test success is claimed. Restoring locked versions also hit EBUSY.
+  Owner normal backend close is required before dependency repair and full checks.
+  The existing production process remained responsive; no forced termination or
+  modified dependency lockfile was used to bypass this blocker.
+- Follow-up: owner closed the backend; the locked install subsequently completed
+  (542 packages) with zero direct production/development version mismatches.
+  Typecheck, ESLint, nine V1 suites, launcher repair/policy fixtures, doctor and
+  resource sampler regressions passed on the restored toolchain. Production build,
+  isolated telemetry/resource API test, release smoke and 120-file package
+  verification passed. Secret-store/redacted-log, build/package recovery and
+  dependency/archive closure checks also passed (41 backend / 31 frontend inputs).
+  No visual UI or long-run memory/leak result is inferred from these checks.
+
+### Bounded runtime-resource increment
+
+- Reused Node CPU/memory/uptime, OS memory and filesystem statistics; one cached
+  snapshot and CPU baseline, one-second cache, no polling loop or subprocess.
+  CPU uses monotonic elapsed time, and 100% means one logical core. Initial or
+  failed measurements remain unknown. Handles/threads/process-tree/disk-I/O/GPU
+  remain explicitly unsupported, not fabricated zeros.
+- Existing health API supplies both doctor and the Settings health panel. The
+  panel loads once, refreshes manually, bounds request time to eight seconds,
+  aborts obsolete requests and labels retained values stale after failures.
+  React best-practices review retained bounded rendering and cleanup; no library,
+  global browser listener, cloud analytics or data-egress path was added.
+- Synthetic and real-current-process sampler tests pass; isolated compiled API
+  checks assert numeric memory, second-sample CPU, unsupported nulls and absence
+  of synthetic secret material. UI buttons/rendering remain unverified because
+  the supported origin permission gate still denies access.
+- Live backend launched normally from the rebuilt dist, production PID 36216,
+  canonical root and port 3901. A subsequent sample returned resource PASS,
+  process CPU about 1.3%, RSS 149,487,616 bytes and available disk 18,536,218,624
+  bytes. These are point-in-time backend observations, not leak/performance budgets.
+  expconfig.nvl still lists 17,612 rows. Read-only doctor passed checked gates with
+  explicit WARN/SKIPPED for unverified providers/unsupported checks; no provider
+  request was made. Refreshed 120-file package and 437-component SBOM verified.
