@@ -36,6 +36,7 @@ import { normalizeCountryName } from '../utils/countryNormalizer';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { contactResearchCategory, matchesResearchFilter } from '../../shared/contact_research_scope';
+import { directoryPage as getDirectoryPage } from '../utils/directoryPagination';
 
 interface ContactsProps {
   contacts: CompanyContact[];
@@ -805,11 +806,24 @@ function bullets(value: string): string[] {
     .filter(Boolean);
 }
 
-const IntlDirectoryTable: React.FC<{
+export const IntlDirectoryTable: React.FC<{
   data: IntlDirectory | null;
   loading: boolean;
   onReload: () => void;
 }> = ({ data, loading, onReload }) => {
+  const [requestedPage, setDirectoryPage] = useState(() => {
+    try { return Number(localStorage.getItem('edgeview_directory_page_v1')) || 1; } catch { return 1; }
+  });
+  const pageInfo = React.useMemo(() => getDirectoryPage(data?.countrySections || [], requestedPage), [data, requestedPage]);
+  const directoryPage = pageInfo.page;
+  const directoryTotalPages = pageInfo.totalPages;
+  const pagedDirectorySections = pageInfo.sections;
+  useEffect(() => {
+    if (!data) return; // Loading must not erase the saved page before rows arrive.
+    if (requestedPage !== directoryPage) setDirectoryPage(directoryPage);
+    try { localStorage.setItem('edgeview_directory_page_v1', String(directoryPage)); } catch { /* Optional UI preference, never a reason to blank the directory. */ }
+  }, [data, directoryPage, requestedPage]);
+
   if (loading && !data) {
     return (
       <div className="px-4 py-12 text-center text-[#9ca3af] italic text-sm bg-[#1a1a1a]">
@@ -832,6 +846,7 @@ const IntlDirectoryTable: React.FC<{
   }
 
   return (
+    <>
     <table className="w-full text-xs text-left border-collapse">
       <thead className="bg-[#262626] text-[#e5e7eb] font-bold sticky top-0 z-10 border-b border-[#333333] uppercase tracking-wider">
         <tr>
@@ -844,12 +859,13 @@ const IntlDirectoryTable: React.FC<{
         </tr>
       </thead>
       <tbody className="divide-y divide-[#262626] text-[#e5e7eb]">
-        {data.countrySections.map((section) => (
+        {pageInfo.totalRows === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-[#9ca3af]">No international importers in this dataset.</td></tr>}
+        {pagedDirectorySections.map((section) => (
           <React.Fragment key={section.country}>
             <tr className="bg-sky-950/40">
               <td colSpan={6} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-sky-300">
                 INTERNATIONAL IMPORTERS — {section.country}
-                <span className="text-sky-500 font-mono normal-case ml-2">({section.importers.length})</span>
+                <span className="text-sky-500 font-mono normal-case ml-2">({section.importers.length} of {section.totalImporters} on this page)</span>
               </td>
             </tr>
             {section.importers.map((row) => {
@@ -939,5 +955,26 @@ const IntlDirectoryTable: React.FC<{
         ))}
       </tbody>
     </table>
+    <nav aria-label="International importer pages" className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-[#333333] bg-[#262626] px-4 py-2 text-[11px] text-[#9ca3af]">
+      <span aria-live="polite">Showing {pageInfo.start}-{pageInfo.end} of {pageInfo.totalRows} importers</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Previous directory page"
+          disabled={directoryPage <= 1}
+          onClick={() => setDirectoryPage(Math.max(1, directoryPage - 1))}
+          className="rounded border border-[#444] bg-[#1a1a1a] px-2 py-1 text-white disabled:opacity-40"
+        >Previous</button>
+        <span className="font-mono text-[#e5e7eb]">Page {directoryPage} of {directoryTotalPages}</span>
+        <button
+          type="button"
+          aria-label="Next directory page"
+          disabled={directoryPage >= directoryTotalPages}
+          onClick={() => setDirectoryPage(Math.min(directoryTotalPages, directoryPage + 1))}
+          className="rounded border border-[#444] bg-[#1a1a1a] px-2 py-1 text-white disabled:opacity-40"
+        >Next</button>
+      </div>
+    </nav>
+    </>
   );
 };

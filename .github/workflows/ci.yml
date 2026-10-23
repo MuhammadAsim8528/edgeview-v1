@@ -35,6 +35,7 @@ jobs:
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/contact_scope_presentation.test.tsx
+      - run: node --import tsx server/tests/directory_pagination_presentation.test.tsx
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/build-metadata.test.mjs
       - run: node scripts/local-load-smoke.test.mjs
