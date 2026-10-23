@@ -87,6 +87,16 @@ try {
   assert.equal(malformedBody.code, 'FILE_PARSE_FAILED');
   assert.equal(Object.hasOwn(malformedBody, 'details'), false, 'parse failure must not disclose local internals');
 
+  const filesBeforeWide = await (await fetch(`${base}/api/files`)).json();
+  const wideUpload = new FormData();
+  wideUpload.append('file', new Blob([`${Array.from({ length: 513 }, (_, i) => `Field${i}`).join(',')}\nx\nx`]), 'wide.csv');
+  const wideResponse = await fetch(`${base}/api/files/upload`, { method: 'POST', body: wideUpload });
+  const wideBody = await wideResponse.json();
+  assert.equal(wideResponse.status, 422);
+  assert.equal(wideBody.code, 'FILE_PARSE_FAILED');
+  assert.equal(Object.hasOwn(wideBody, 'details'), false);
+  assert.deepEqual(await (await fetch(`${base}/api/files`)).json(), filesBeforeWide, 'rejected expansion must not persist a partial file');
+
   const validUpload = new FormData();
   const validName = `release-smoke-${Date.now()}.csv`;
   validUpload.append('file', new Blob(['Date,Importer,Exporter,Country,Item,TOT_FC\n2026-01-01,Alpha,Exporter One,Niger,Product One,100\n2026-01-02,Alpha Trading,Exporter Two,Niger,Product Two,200\n2026-01-03,Alpha,Exporter Three,Nigeria,Product Three,300\n2026-01-04,Unicode Pharma,Exporter Four,Sri Lanka,Product Four,400\n']), validName);

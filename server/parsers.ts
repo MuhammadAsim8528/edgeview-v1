@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import mammoth from 'mammoth';
+import { checkTextColumnCount, TextParseBudget, TextParseLimitError, TEXT_PARSE_LIMITS } from './text_parse_budget';
 
 export interface ParsedResult {
   file_type: 'NVL' | 'DBF' | 'CSV' | 'Excel' | 'DOCX' | 'Unknown';
@@ -44,17 +45,12 @@ export function parseNVL(content: string): { columns: string[]; rows: Record<str
       try {
         const lineStr = line ? String(line).trim() : '';
         if (!lineStr) return [];
-        if (lineStr.includes('\t')) {
-          return lineStr.split('\t').map((c) => c.trim().replace(/^"|"$/g, ''));
-        }
-        if (lineStr.includes(',')) {
-          return lineStr.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
-        }
-        if (/\s{2,}/.test(lineStr)) {
-          return lineStr.split(/\s{2,}/).map((c) => c.trim().replace(/^"|"$/g, ''));
-        }
-        return lineStr.split(/\s+/).map((c) => c.trim().replace(/^"|"$/g, ''));
-      } catch {
+        const delimiter = lineStr.includes('\t') ? '\t' : lineStr.includes(',') ? ',' : /\s{2,}/.test(lineStr) ? /\s{2,}/ : /\s+/;
+        const cells = lineStr.split(delimiter, TEXT_PARSE_LIMITS.columns + 1);
+        checkTextColumnCount(cells.length);
+        return cells.map((c) => c.trim().replace(/^"|"$/g, ''));
+      } catch (err) {
+        if (err instanceof TextParseLimitError) throw err;
         return [line ? String(line) : ''];
       }
     };
@@ -103,6 +99,7 @@ export function parseNVL(content: string): { columns: string[]; rows: Record<str
     }
 
     const rows: Record<string, any>[] = [];
+    const budget = new TextParseBudget();
     const allColsSet = new Set<string>();
 
     headers.forEach((h) => {
@@ -115,6 +112,7 @@ export function parseNVL(content: string): { columns: string[]; rows: Record<str
       if (line.startsWith('#') || line.startsWith('//')) continue;
       const cells = splitLineIntoCells(line);
       if (cells.length === 0) continue;
+      budget.addRow(Math.max(headers.length, cells.length));
 
       const row: Record<string, any> = {};
       requiredCols.forEach((rc) => {
@@ -198,6 +196,7 @@ export function parseNVL(content: string): { columns: string[]; rows: Record<str
       rows: finalRows,
     };
   } catch (err) {
+    if (err instanceof TextParseLimitError) throw err;
     console.warn('parseNVL failed gracefully:', err);
     return { columns: [], rows: [] };
   }
@@ -671,6 +670,7 @@ export async function parseFile(
       nvlCols = res.columns || [];
       nvlRows = res.rows || [];
     } catch (e) {
+      if (e instanceof TextParseLimitError) throw e;
       console.warn('Text NVL parse error:', e);
     }
 
@@ -778,21 +778,25 @@ export async function parseFile(
           inQuotes = !inQuotes;
         } else if (char === delimiter && !inQuotes) {
           result.push(cur.trim().replace(/^"|"$/g, ''));
+          checkTextColumnCount(result.length + 1);
           cur = '';
         } else {
           cur += char;
         }
       }
       result.push(cur.trim().replace(/^"|"$/g, ''));
+      checkTextColumnCount(result.length);
       return result;
     };
 
     const headers = splitCSVLine(lines[0]);
     const rows: Record<string, any>[] = [];
+    const budget = new TextParseBudget();
 
     for (let i = 1; i < lines.length; i++) {
       const cells = splitCSVLine(lines[i]);
       if (cells.length === 0 || (cells.length === 1 && !cells[0])) continue;
+      budget.addRow(headers.length);
       const row: Record<string, any> = {};
       headers.forEach((h, colIdx) => {
         row[h || `Column_${colIdx + 1}`] = cells[colIdx] ?? '';

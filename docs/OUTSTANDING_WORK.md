@@ -1,5 +1,26 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Delimited-text allocation boundary — 2026-10-23
+
+CSV/TSV/TXT and analogous text NVL now reject fields beyond 512 columns during
+tokenization and charge padded row width plus 24 alias/default slots before row
+construction against a fixed two-million-cell budget (also 100,000 row ceiling).
+Limit errors propagate through NVL fallback catches and return no partial rows.
+The existing upload API returns 422 FILE_PARSE_FAILED before summary/persistence.
+Rejected limits require splitting the input, not silent truncation. These are
+local deployment safety limits, not a claim of unlimited file size or scale.
+
+Parser-only regressions passed for oversized headers/later rows, cell-budget
+exhaustion, CSV/TSV/TXT/NVL propagation, duplicate/empty headers, quoted delimiters
+and all 17,432 synthetic trade rows. Existing deduplication/grouping tests passed.
+Independent boundary investigation and one fresh patch review found no concrete
+surviving scoped issue. Typecheck/lint/V1/build passed. The new release fixture
+initially used its request helper before initialization; corrected and rerun:
+release smoke passed, including 422 and unchanged persisted file list. CI runs
+the focused parser suite. No live dataset/provider request was used for this fix.
+Binary DBF and compressed XLSX/DOCX expansion are separate unverified boundaries;
+this change does not claim to remediate them or improve existing CSV syntax.
+
 ## Export path boundary increment — 2026-10-23
 
 Contact ZIP exports no longer incorporate download names into filesystem paths.
