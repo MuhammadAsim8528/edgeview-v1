@@ -14,10 +14,37 @@ export const uploadRouter = express.Router();
 
 const ALLOWED_EXTENSIONS = ['nvl', 'dbf', 'csv', 'tsv', 'xlsx', 'docx', 'txt'];
 
+export function validateUploadFileName(name: string): boolean {
+  // Validate the exact multipart name: trimming would disagree with parser dispatch.
+  if (!name || /[<>:"/\\|?*\x00-\x1f\x7f]/.test(name) || /[ .]$/.test(name)) return false;
+  if (/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)(?:[. ]|$)/i.test(name)) return false;
+  const dot = name.lastIndexOf('.');
+  return dot > 0 && Boolean(name.slice(0, dot).replace(/[.\s]/g, ''))
+    && ALLOWED_EXTENSIONS.includes(name.slice(dot + 1).toLowerCase());
+}
+
+function unsupportedFile(res: express.Response) {
+  return res.status(400).json({
+    success: false,
+    error: 'Unsupported or unsafe upload filename. Choose a supported file with a normal filename.',
+    code: 'UNSUPPORTED_FILE_TYPE',
+    details: `Allowed extensions: ${ALLOWED_EXTENSIONS.join(', ')}`,
+  });
+}
+
 // Configure multer storage
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
+  // Keep wire paths visible to validation instead of silently repairing them.
+  preservePath: true,
+  defParamCharset: 'utf8',
+  fileFilter: (_req, file, callback) => {
+    if (!validateUploadFileName(file.originalname)) {
+      return callback(Object.assign(new Error('Invalid upload filename'), { code: 'UNSUPPORTED_FILE_TYPE' }));
+    }
+    callback(null, true);
+  },
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
 });
 
@@ -27,6 +54,7 @@ function uploadFileHandler(req: express.Request, res: express.Response, next: ex
   
   upload.single('file')(req, res, (err: any) => {
     if (err) {
+      if (err.code === 'UNSUPPORTED_FILE_TYPE') return unsupportedFile(res);
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(400).json({
@@ -77,17 +105,9 @@ async function handleUpload(req: express.Request, res: express.Response) {
     }
 
     const originalName = req.file.originalname || 'uploaded_file';
-    const ext = originalName.split('.').pop()?.toLowerCase() || '';
 
     // 3. Validate File Extension
-    if (ext && !ALLOWED_EXTENSIONS.includes(ext)) {
-      return res.status(400).json({
-        success: false,
-        error: `Unsupported file type ".${ext}". Allowed formats: NVL, DBF, CSV, Excel (XLSX/XLS), DOCX, TXT.`,
-        code: 'UNSUPPORTED_FILE_TYPE',
-        details: `Allowed extensions: ${ALLOWED_EXTENSIONS.join(', ')}`,
-      });
-    }
+    if (!validateUploadFileName(originalName)) return unsupportedFile(res);
 
     const buffer = req.file.buffer;
     const fileHash = computeFileHash(buffer);

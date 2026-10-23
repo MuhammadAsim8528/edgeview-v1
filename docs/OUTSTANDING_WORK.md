@@ -1,5 +1,23 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Upload filename boundary — 2026-10-23
+
+Reproduced bare `csv` acceptance on all four multipart aliases before changing
+the shared router. Exact multipart names now require a supported real suffix;
+paths, controls, trailing Windows-normalized characters and reserved device
+names are rejected before buffering/parsing/hash lookup/persistence. No filename
+trimming or silent path repair. Legacy multipart clients sending a full
+`C:\fakepath\...` name are deliberately rejected; modern browser File names
+remain supported.
+
+`upload_extension_validation.test.ts` exercises the actual shared HTTP router
+on all four aliases, unchanged JSON/SQLite/in-memory state after rejection,
+ordinary and extended multipart filenames, Unicode, valid CSV/NVL/XLSX,
+deduplication bypass attempts and malformed XLSX. Focused test, typecheck,
+lint, V1 suite, build and production release smoke passed. CI runs the focused
+test explicitly. This is not browser upload QA or a clean-Windows gate; those
+remain open. The frontend bundle-size warning remains unresolved.
+
 ## Ownership resolved; official-page capture and contact UI — 2026-10-23
 
 Owner identified the earlier concurrent writer as the coordinator/QA ChatGPT
