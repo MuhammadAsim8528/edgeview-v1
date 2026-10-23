@@ -1,5 +1,38 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Parallel release reconciliation branch — 2026-10-23
+
+Exclusive worktree edgeview-chatgpt; branch
+chatgpt/release-reconciliation-20261023. Main/Qoder dirty files untouched, no
+merge/live restart. These branch commits require review/integration and do not
+certify deployed behavior:
+
+- b6b8cdc: Oct10–23 matrix in RECONCILIATION_2026-10-10_23.md. Git begins Oct19;
+  bounded earlier chat/report coverage explicitly incomplete.
+- e877303: independent license inventory/security evidence workflow and
+  Dependabot configuration. Default-branch activation/security entitlement not
+  inferred. Metadata warns for unknown/copyleft, no legal approval.
+- b244158: bounded A–K evidence-reference checker; hashes/gates cannot grant
+  release acceptance. Synthetic adversarial tests passed.
+- 275fc01: MSIX/update decision record identifies root-writable state and
+  Node/npm-dependent ZIP blockers; not an installer or tested rollback.
+- 1448db1: read-only offline probe of Qoder telemetry source SHA identifies nine
+  synthetic privacy leaks. Do not enable customer telemetry until strict boundary
+  and SDK envelope/delivery acceptance. See OWNER_SUPPORT_PRIVACY_HANDOFF.md.
+- 42ed139: hosted inventory success at275fc01, but Windows audit failure;
+  current production-lock audit reports1high/2moderate (Vite6.4.3/uuid/ExcelJS).
+  Qoder owns dependency remediation; audit thresholds not weakened.
+- f486754: bounded exact-version license-text collector/tests;397entries with
+  legal files/16without/101not installed. This is not complete notices or runtime
+  inventory. See LICENSE_TEXT_EVIDENCE.md.
+
+Live GET health now reports PID30112, build commit f96a6da and buildId2143be79…;
+newer source fixes are not certified deployed. Computer Use still fails during
+kernel initialization before app selection. See LIVE_RELEASE_DRIFT_2026-10-23.md.
+ResearchWorkspace async selection/error UX requires focused follow-up. All A–K,
+real-company UI truthsets, clean Windows, updater, monitoring account delivery,
+private data separation and uncle deployment gates remain open. NOT READY.
+
 ## Working-tree cleanup slice D — run-cache truncation removed — 2026-10-23
 
 Reviewer verdict: do not ship current cache truncation. Removed, not redesigned:
