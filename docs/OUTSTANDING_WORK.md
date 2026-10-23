@@ -1,5 +1,67 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Ownership resolved; official-page capture and contact UI — 2026-10-23
+
+Owner identified the earlier concurrent writer as the coordinator/QA ChatGPT
+conversation and explicitly stopped its repository writes. ChatGPT Desktop is
+sole writer; coordinator is read-only QA. The three handed-over diffs were
+inspected separately, not bulk-committed. Earlier writer-block notes below are
+historical. Frozen Qoder workspace remains untouched.
+
+- 49a5449: successful search evidence only for snippet/domain projection;
+  snippets must contain official-domain/subdomain emails, not arbitrary free-mail.
+  Official-page published free-mail remains supported. Adversarial failures were
+  reproduced before correction. Hosted release checks run 39923794099 completed
+  SUCCESS, Docker/verify SUCCESS, publish SKIPPED. This is not release acceptance.
+- 584d0b5: retained useful coordinator proposal with fixes. Generic direct reads
+  remain 2 MiB; resolved official crawl gets 4 MiB only on matching domain/hops.
+  External redirects fall back to 2 MiB. Page count, deadlines, DNS pinning and
+  private-address rejection are unchanged. Every direct attempt now has its own
+  response/failure and normalized-result reference; the regression exposed prior
+  suppression of the second failure when a URL was attempted twice.
+  Synthetic actual-engine/transport/storage/projection regression covers 3.67 MiB
+  tail contacts/leadership, exact 4 MiB, declared/chunked/multibyte overflow,
+  cross-domain and subdomain redirects, private DNS, repeated failures and 503
+  response bodies. Existing outbound/crawl regressions passed.
+- 8be3f04: shared classification makes summary, Contacts filters and bulk retry
+  agree. Pakistan exporters are excluded even if historical research exists;
+  All Companies/export still retain them. Excluded summary dispatches EXCLUDED,
+  not UNRESEARCHED. Summary actions are keyboard-native buttons. Explicit saved
+  ENRICHED selection survives remount instead of being migrated repeatedly.
+  Actual isolated summary API, initial rendered row matrix and callback tests
+  passed. Categories measure retained state, not verification of contact truth.
+- e626e4d: separate directory pagination recovery with fixes. At most 100 rows
+  are projected/rendered; country boundaries do not drop/duplicate rows. Page is
+  restored from a versioned UI preference, not reset on every data replacement;
+  loading cannot overwrite it before rows arrive. Empty/invalid/denied-storage
+  initial rendering covered. Country header distinguishes page count from total.
+  Browser navigation, refresh effects and scroll position remain NOT VERIFIED.
+
+Live transport check using the engine's existing headers on this date: Emerchemie
+homepage HTTP200/3,675,830 bytes; contact-us.php HTTP200/3,668,585 bytes;
+leadership.php HTTP200/3,677,672 bytes. All fit the new ceiling. A preliminary
+request without those engine headers returned HTTP406; this is not hidden as
+successful content retrieval. No manually fetched data was injected into EdgeView.
+These checks do not prove live enrichment, accurate company projection or UI
+display. Final-URL/source attribution remains a separate open provenance review;
+body-budget scoping is not full redirect-origin trust verification.
+
+After the final UI changes: typecheck/lint/V1, build and isolated release smoke
+passed. Focused official-body, contact-scope, directory-presentation and actual
+summary/export endpoint tests passed on e626e4d. Exact clean e626e4d package QA:
+buildId 5f1d485f95944f83824398badfad4f98b23e6f6f14c95abdbb97dae1144763f3;
+manifest 147 files, staged/extracted unchanged-launch PASS, private-state filename
+check PASS. Disposable ZIP SHA256
+885d5bd1c346db7d29bf2416cef5792ecc188ab3f0b7cab49708b65067e14a77.
+117 developer files remain; installed Node/npm required. NOT customer distribution,
+not a content secret scan, not clean Windows or browser acceptance. The 514 kB
+client chunk warning persists; no leak/performance clearance is implied.
+
+Remaining gates are not removed: upload filename correction/tests, frozen security
+and recovery work, telemetry privacy and real delivery, rendered QA/truthsets,
+live deployment identity, real importer reconciliation, installer/update/signing,
+clean Windows and uncle deployment. Verdict remains NOT READY.
+
 ## Sole-writer handoff and package QA — 2026-10-23
 
 HTML export recovery: de8aeb3 contains only the renderer, exact route/import/error
