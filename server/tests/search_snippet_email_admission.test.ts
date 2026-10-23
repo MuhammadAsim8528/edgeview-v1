@@ -47,4 +47,33 @@ const projected = projectDeterministicContactFields(base);
 assert.equal(projected.website, 'https://trustanchor.co.ke');
 assert.ok(projected.emails_list.includes('sales@trustanchor.co.ke'), 'target-domain email found in a third-party search snippet should be retained');
 assert.ok(!projected.emails_list.includes('partner@partner.example'), 'third-party-domain email from the same snippet must not contaminate the target company');
-console.log('PASS attributable target-domain emails from search snippets are admitted while unrelated third-party emails remain excluded.');
+
+const official = base.results[0];
+const projectSnippet = (snippet: string, overrides: Partial<V1Result> = {}) => projectDeterministicContactFields({
+  ...base,
+  results: [official, result({ id: 'probe', url: 'https://partner.example/profile', snippet, ...overrides })],
+});
+for (const status of ['failed', 'pending', 'skipped'] as const) {
+  assert.deepEqual(projectSnippet('invalid@trustanchor.co.ke', { status }).emails_list, [], `${status} result is not contact evidence`);
+}
+assert.deepEqual(projectSnippet('Third-party help: unrelated.person@gmail.com').emails_list, [], 'a free-mail address on an arbitrary search page is not attributable to the target');
+assert.deepEqual(projectSnippet('sales@trustanchor.co.ke.attacker.example').emails_list, [], 'suffix extension is not the official domain');
+assert.deepEqual(projectSnippet('sales@nottrustanchor.co.ke').emails_list, [], 'substring domain is not ownership');
+assert.deepEqual(projectSnippet('sales@trustanchor.co.ke', { status: undefined as any }).emails_list, [], 'unknown status must not become success');
+assert.deepEqual(projectSnippet('sales@trustanchor.co.ke', { status: 'error' as any }).emails_list, [], 'malformed/legacy error status must not become success');
+assert.deepEqual(projectSnippet('sales@trustanchor.co.ke', { status: 'timeout' as any }).emails_list, [], 'noncanonical timeout status must not become success');
+const accepted = projectSnippet('SALES@TRUSTANCHOR.CO.KE sales@trustanchor.co.ke regional@sales.trustanchor.co.ke');
+assert.deepEqual(accepted.emails_list, ['sales@trustanchor.co.ke', 'regional@sales.trustanchor.co.ke'], 'case, duplicates and legitimate company subdomains work');
+const failedDomain = projectDeterministicContactFields({ ...base, results: [
+  { ...official, status: 'failed' },
+  result({ url: 'https://partner.example/profile', title: 'Partner directory', snippet: 'sales@trustanchor.co.ke' }),
+] });
+assert.equal(failedDomain.website, '', 'failed result cannot establish official-domain ownership');
+assert.deepEqual(failedDomain.emails_list, [], 'successful snippet cannot borrow domain authority from a failed result');
+
+const officialFreeMail = projectDeterministicContactFields({ ...base, results: [official, result({
+  provider: 'direct-http', url: 'https://trustanchor.co.ke/contact', snippet: '', text: 'Contact us: published.company@gmail.com',
+})] });
+assert.ok(officialFreeMail.emails_list.includes('published.company@gmail.com'), 'explicitly published official-site free-mail contact remains supported');
+assert.equal(base.results.length, 2, 'projection does not erase raw result history');
+console.log('PASS snippet admission: successful company-domain evidence only; failed/unknown results, unrelated free-mail and lookalike domains rejected; official-page free-mail preserved');

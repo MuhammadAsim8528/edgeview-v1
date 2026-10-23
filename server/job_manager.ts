@@ -259,7 +259,8 @@ function leadershipFromLinkedInResults(results: Array<any>, companyName: string)
 
 export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name' | 'results' | 'identity_resolution' | 'evidence_workspace'> & Partial<Pick<V1Run, 'country'>>) {
   const results = run.results;
-  const searchEvidence = results.filter(result => !['direct-http', 'hunter', 'groq', 'nvidia'].includes(String(result.provider || '')));
+  // Failure payloads remain in the immutable run, never as domain/contact proof.
+  const searchEvidence = results.filter(result => result.status === 'success' && !['direct-http', 'hunter', 'groq', 'nvidia'].includes(String(result.provider || '')));
   const officialDomain = searchEvidence.length
     ? resolveOfficialDomain(run.company_name, String(run.country || ''), searchEvidence).official_domain
     : (run.identity_resolution?.official_domain || '');
@@ -283,9 +284,13 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   // company's own domain. Admit only email-shaped values attributable to the
   // already-resolved official domain; this preserves useful exact evidence
   // without letting third-party addresses contaminate the company profile.
-  const searchSnippetEmails = searchEvidence.flatMap(result =>
-    [...String(result.snippet || '').matchAll(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi)].map(match => match[0])
-  );
+  const searchSnippetEmails = searchEvidence
+    .flatMap(result =>
+      [...String(result.snippet || '').matchAll(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi)].map(match => match[0])
+    )
+    // Unlike an official contact page, an arbitrary search snippet cannot
+    // attribute a free-mail mailbox to this company merely by mentioning it.
+    .filter(value => officialDomain && sameDomainOrSubdomain(`https://${value.split('@').at(-1)}`, officialDomain));
   const phones = contactPages.flatMap(result => {
     const html = String(result.html || '');
     const text = String(result.text || '');
