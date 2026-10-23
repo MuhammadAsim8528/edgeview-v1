@@ -2,6 +2,24 @@
 
 ## Sole-writer handoff and package QA — 2026-10-23
 
+HTML export recovery: de8aeb3 contains only the renderer, exact route/import/error
+hunks, focused helper/actual-endpoint tests, and their two CI lines. Useful frozen
+renderer/layout recovered with fixes: parsed HTTP(S), pre-trim C0/DEL rejection,
+five-character HTML escaping, noopener/noreferrer. Endpoint regression failed
+against the old route on executable markup and passed after the patch. Actual
+isolated source-server test covers fields, quotes, schemes, controls, multilingual
+text, headers, filtering/empty selection and sanitized failure. Broader check,
+build and release smoke passed during development; downloaded rendering remains
+NOT VERIFIED. Supported Computer Use initialization retried and still failed
+before window enumeration: kernel-assets os error 3, no permission UI.
+
+An unrelated external edit appeared in active server/job_manager.ts during these
+checks. It was left untouched, unstaged and excluded from de8aeb3; owner asked to
+stop any other writer. Its contact-admission change is not accepted or verified.
+Therefore whole-tree/exact-commit packaging acceptance must be rerun once the
+tree is reconciled; do not attribute the mixed-tree broad checks to a clean
+release commit. No edits were made in the frozen Qoder workspace.
+
 Qoder retired by owner instruction. Active source authority remains the
 chatgpt/release-reconciliation-20261023 branch in edgeview-chatgpt. Frozen Qoder
 workspace remains read-only at ef1c074 with eleven modified and eleven untracked
