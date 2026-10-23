@@ -19,6 +19,7 @@ jobs:
           node-version: 24
       - run: node scripts/release-license-inventory.test.mjs
       - run: node scripts/verify-release-evidence.test.mjs
+      - run: node scripts/probe-telemetry-privacy.test.mjs
       - name: Collect lock metadata without installing or running dependencies
         run: |
           mkdir -p evidence
