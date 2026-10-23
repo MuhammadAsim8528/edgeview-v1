@@ -70,3 +70,11 @@ it from a parallel branch or confuse old package proof with this candidate.
 Live PID30112 remains unchanged. A separately isolated research-contract CI
 workflow was added; main CI and its known high dependency-audit failure remain
 untouched. Exact hosted result is not inferred from workflow presence.
+
+## Exact-commit local rerun
+
+After committing85b7d112c1b325167ea99e2effc9f088ce43c9e9, reran both focused
+suites, npm run check, npm run build and npm run test:release: all passed. Worktree
+was clean. build-info.json records that exact Git commit; content build ID stays
+7512a60c58edeb797f97b0add33811dab42a8b89b7dd7db47f4573156716ff05. This is
+local exact-commit execution evidence, not hosted CI, packaging or renderer proof.

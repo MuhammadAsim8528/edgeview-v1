@@ -42,3 +42,20 @@ so a failure can appear empty or leave unrelated old details. This is a concrete
 source path requiring a focused reproduction/fix, NOT a completed rendered
 reproduction. Settings already has different error-toasts; do not generalize one
 component's behavior to the whole app. Full safe-control inventory is incomplete.
+
+## Passive provider-metrics observation
+
+Later read-only GET /api/governor/provider-metrics on the same live installation:
+
+| Provider | Status | Routing | Completed count reported | Success rate | Average latency ms |
+|---|---|---|---:|---:|---:|
+|Serper|unknown|available|16|1|2477|
+|Hunter|disabled|disabled|0|unknown|unknown|
+|NVIDIA|unknown|available|8|0.75|3823|
+|Groq|unknown|available|3|1|1401|
+
+These are reported retained/runtime aggregates, not new operations or a current
+health probe. Unknown must not become healthy; available routing does not prove
+authentication, quota or generation success. No key, error body, company or raw
+provider content was printed. Hunter was not tested/reenabled. Full enabled-
+provider verification and real-company behavior remain open.
