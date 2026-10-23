@@ -1,5 +1,24 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Export path boundary increment — 2026-10-23
+
+Contact ZIP exports no longer incorporate download names into filesystem paths.
+Request and direct-processor validation reject separators, drive/ADS syntax,
+controls and Windows-invalid filename characters. Each export owns a unique
+temporary directory with opaque exclusive filenames; logical Unicode ZIP names
+are retained separately. Outer finally cleanup includes partial writes.
+Focused regression covers malicious prefixes, direct entry points, concurrent
+isolation, partial-write cleanup, outside-file preservation and readable archives
+for all four contact report modes plus full-dataset export. Synthetic empty trade
+indexes avoid production history/provider access. Independent patch review found
+no concrete surviving bypass/regression. Typecheck/lint/V1, production build and
+release smoke passed. These are not rendered download/browser tests.
+
+Supported Windows Computer Use initialization was retried on 2026-10-23. The
+JavaScript host failed before app enumeration with: `failed to write kernel
+assets: The system cannot find the path specified. (os error 3)`. No permission UI
+or screenshot was returned; no bypass/alternate-port approach was attempted.
+
 ## Continuation directive intake (sections 0–28)
 
 The 096e1b20 and e3289d42 continuation attachments are additive and equivalent

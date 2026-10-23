@@ -2,9 +2,8 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { selectExportRecords, validateExportRequest } from './export_validation';
+import { selectExportRecords, validateExportRequest, validateExportFilenamePart } from './export_validation';
+import { ExportTemporaryFiles } from './export_temp';
 import {
   Document,
   Packer,
@@ -784,6 +783,9 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
   failedFormats?: string[];
 }> {
   logMem('processContactExport START');
+  validateExportFilenamePart(payload.filenamePrefix);
+  const temporary = new ExportTemporaryFiles();
+  try {
   const { title, format, filenamePrefix = 'EdgeView_Contacts_Export' } = payload;
   const reportType: 'importer' | 'exporter' | 'both' | 'international_importer' =
     payload.report_type && ['importer', 'exporter', 'both', 'international_importer'].includes(payload.report_type)
@@ -856,24 +858,10 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
     if (fmt === 'all') {
       logMem('generateSingle all START');
       const failedFormats: string[] = [];
-      const tempBase = path.join(os.tmpdir(), 'edgeview_exports');
-      fs.mkdirSync(tempBase, { recursive: true });
       const tempPaths: string[] = [];
 
       const writeTemp = async (name: string, data: Buffer | string): Promise<void> => {
-        const filePath = path.join(tempBase, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${name}`);
-        await fs.promises.writeFile(filePath, data);
-        tempPaths.push(filePath);
-      };
-
-      const cleanupTemp = () => {
-        for (const p of tempPaths) {
-          try {
-            fs.unlinkSync(p);
-          } catch {
-            /* ignore */
-          }
-        }
+        tempPaths.push(await temporary.write(name, data));
       };
 
       try {
@@ -912,7 +900,7 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
       // Only one sub-format is read into memory at a time when assembling the ZIP.
       const zip = new JSZip();
       for (const p of tempPaths) {
-        const name = path.basename(p).replace(/^[0-9]+_[a-z0-9]+_/, '');
+        const name = temporary.nameFor(p);
         const data = await fs.promises.readFile(p);
         zip.file(name, data);
         try {
@@ -938,14 +926,10 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
   if (reportType === 'both') {
     if (format === 'all') {
       const failedFormats: string[] = [];
-      const tempBase = path.join(os.tmpdir(), 'edgeview_exports');
-      fs.mkdirSync(tempBase, { recursive: true });
       const tempPaths: string[] = [];
 
       const writeTemp = async (name: string, data: Buffer | string): Promise<void> => {
-        const filePath = path.join(tempBase, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${name}`);
-        await fs.promises.writeFile(filePath, data);
-        tempPaths.push(filePath);
+        tempPaths.push(await temporary.write(name, data));
       };
 
       for (const rt of ['importer', 'exporter'] as const) {
@@ -983,7 +967,7 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
       logMem('both/all formats written to temp files');
       const zip = new JSZip();
       for (const p of tempPaths) {
-        const name = path.basename(p).replace(/^[0-9]+_[a-z0-9]+_/, '');
+        const name = temporary.nameFor(p);
         const data = await fs.promises.readFile(p);
         zip.file(name, data);
         try {
@@ -1061,14 +1045,10 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
 
     if (format === 'all') {
       const failedFormats: string[] = [];
-      const tempBase = path.join(os.tmpdir(), 'edgeview_exports');
-      fs.mkdirSync(tempBase, { recursive: true });
       const tempPaths: string[] = [];
 
       const writeTemp = async (name: string, data: Buffer | string): Promise<void> => {
-        const filePath = path.join(tempBase, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${name}`);
-        await fs.promises.writeFile(filePath, data);
-        tempPaths.push(filePath);
+        tempPaths.push(await temporary.write(name, data));
       };
 
       try {
@@ -1098,7 +1078,7 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
 
       const zipBuf = new JSZip();
       for (const p of tempPaths) {
-        const name = path.basename(p).replace(/^[0-9]+_[a-z0-9]+_/, '');
+        const name = temporary.nameFor(p);
         const data = await fs.promises.readFile(p);
         zipBuf.file(name, data);
         try {
@@ -1119,7 +1099,10 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
     throw new Error(`Unsupported export format: ${format}`);
   }
 
-  return generateSingle(reportType as 'importer' | 'exporter', format);
+  return await generateSingle(reportType as 'importer' | 'exporter', format);
+  } finally {
+    temporary.cleanup();
+  }
 }
 
 // 6. Full Dataset Export Processor (Strictly Isolated Pipeline)
@@ -1130,6 +1113,7 @@ export async function processFullDatasetExport(payload: NormalizedExportPayload)
   failedFormats?: string[];
 }> {
   const { title, format, filenamePrefix = 'EdgeView_Dataset_Export' } = payload;
+  validateExportFilenamePart(payload.filenamePrefix);
   const rawRecords = selectExportRecords(payload);
 
   if (rawRecords.length === 0) {

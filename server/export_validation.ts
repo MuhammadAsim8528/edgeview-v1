@@ -3,12 +3,23 @@ export class ExportValidationError extends Error {
 }
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
+export function validateExportFilenamePart(value: unknown): void {
+  if (value === undefined) return;
+  // Check both platforms' separators and Windows drive/ADS/device syntax even
+  // when tests or a future deployment run on another platform. Never decode or
+  // silently strip input: a rejected prefix must not select a different path.
+  if (typeof value !== 'string' || /[\\/:*?"<>|\u0000-\u001f\u007f]/u.test(value)) {
+    throw new ExportValidationError('Export filename prefix must be a plain name without path separators or control characters.');
+  }
+}
+
 export function validateExportRequest(payload: unknown): void {
   if (!record(payload)) throw new ExportValidationError('Export payload must be an object.');
   if (!['files','contacts','outreach','country','reports','stats','summary'].includes(payload.dataset)) throw new ExportValidationError('Unsupported export dataset.');
   if (!['pdf','docx','xlsx','csv','all'].includes(payload.format)) throw new ExportValidationError('Unsupported export format.');
   if (!Array.isArray(payload.records) || !payload.records.every(record)) throw new ExportValidationError('Export records must be an array of objects.');
   for (const key of ['title', 'filenamePrefix']) if (payload[key] !== undefined && typeof payload[key] !== 'string') throw new ExportValidationError(`Export ${key} must be text.`);
+  validateExportFilenamePart(payload.filenamePrefix);
   if (payload.report_type !== undefined && !['importer','exporter','both','international_importer'].includes(payload.report_type)) throw new ExportValidationError('Unsupported contact report type.');
   if (payload.columns !== undefined && (!Array.isArray(payload.columns) || !payload.columns.every(column => record(column) && typeof column.key === 'string' && typeof column.header === 'string'))) throw new ExportValidationError('Invalid export columns.');
 }
