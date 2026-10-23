@@ -162,6 +162,23 @@ export async function safeFetchOutboundText(
   urlStr: string,
   options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string } = {},
 ): Promise<SafeOutboundTextResult> {
+  return captureOutboundText(urlStr, options, false);
+}
+
+/** Credential-bearing provider calls never follow redirects or use plaintext HTTP. */
+export async function safeFetchProviderRequest(
+  urlStr: string,
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number } = {},
+): Promise<Response> {
+  if (new URL(urlStr).protocol !== 'https:') throw new Error('Provider credentials require HTTPS');
+  return (await captureOutboundText(urlStr, { timeoutMs: 20_000, ...options, redirect: 'error', maxRedirects: 0 }, true)).response;
+}
+
+async function captureOutboundText(
+  urlStr: string,
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string },
+  providerRequest: boolean,
+): Promise<SafeOutboundTextResult> {
   const {
     timeoutMs = 8_000,
     maxBytes = DEFAULT_EXTERNAL_PAGE_MAX_BYTES,
@@ -170,7 +187,14 @@ export async function safeFetchOutboundText(
     ...requestOptions
   } = options;
   const method = String(requestOptions.method || 'GET').toUpperCase();
-  if (method !== 'GET') throw new Error('Safe page retrieval supports GET only');
+  if (!providerRequest && method !== 'GET') throw new Error('Safe page retrieval supports GET only');
+  if (providerRequest && !['GET', 'POST'].includes(method)) throw new Error('Unsupported provider request method');
+  const requestBody = requestOptions.body;
+  if (providerRequest && requestBody !== undefined && requestBody !== null
+    && (method !== 'POST' || (typeof requestBody !== 'string' && !(requestBody instanceof Uint8Array)))) throw new Error('Unsupported provider request body');
+  const bodyBytes = providerRequest && requestBody != null
+    ? Buffer.from(requestBody as string | Uint8Array) : undefined;
+  if (bodyBytes && bodyBytes.length > 2 * 1024 * 1024) throw new Error('Provider request body limit exceeded');
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120_000
     || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024
     || !Number.isSafeInteger(maxRedirects) || maxRedirects < 0 || maxRedirects > 10) throw new Error('Invalid retrieval bounds');
@@ -211,9 +235,13 @@ export async function safeFetchOutboundText(
       const headers = Object.fromEntries(new Headers(requestOptions.headers).entries());
       headers['accept-encoding'] = 'identity';
       headers['host'] = parsed.host;
+      if (bodyBytes) {
+        headers['content-length'] = String(bodyBytes.length);
+        delete headers['transfer-encoding'];
+      }
       const transport = parsed.protocol === 'https:' ? https : http;
       const req = transport.request({
-        method: 'GET',
+        method,
         hostname: target.address,
         family: target.family,
         port: targetPort,
@@ -223,6 +251,10 @@ export async function safeFetchOutboundText(
         ...(parsed.protocol === 'https:' && !net.isIP(host) ? { servername: host } : {}),
       }, (incoming) => {
         const status = incoming.statusCode || 0;
+        if (providerRequest && status >= 300 && status < 400) {
+          incoming.destroy();
+          return reject(new Error('RETRIEVAL_REDIRECT_REJECTED'));
+        }
         if ([301, 302, 303, 307, 308].includes(status) && incoming.headers.location) {
           incoming.destroy();
           if (requestOptions.redirect === 'error') return reject(new Error('RETRIEVAL_REDIRECT_REJECTED'));
@@ -265,7 +297,7 @@ export async function safeFetchOutboundText(
         incoming.on('error', reject);
         incoming.on('end', () => {
           const bytes = Buffer.concat(chunks);
-          const text = bytes.toString('utf8');
+          const text = providerRequest ? '' : bytes.toString('utf8');
           const responseHeaders = new Headers();
           for (const [key, value] of Object.entries(incoming.headers)) {
             if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(key, item));
@@ -280,7 +312,7 @@ export async function safeFetchOutboundText(
       });
       req.setTimeout(timeoutMs, () => req.destroy(new Error('RETRIEVAL_TIMEOUT')));
       req.on('error', reject);
-      req.end();
+      req.end(bodyBytes);
     });
   };
 

@@ -4,13 +4,14 @@ import http from 'node:http';
 import https from 'node:https';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { safeFetchOutboundText, safeFetchOutboundUrl } from '../url_safety';
+import { safeFetchOutboundText, safeFetchOutboundUrl, safeFetchProviderRequest } from '../url_safety';
 import { readProviderResponse } from '../provider_response';
 import { NvidiaProvider } from '../ai_providers';
 
 // Synthetic DNS/transport only: no external or private-network connections.
 const original = { lookup: dns.lookup, resolve4: dns.resolve4, http: http.request, https: https.request };
 const calls: any[] = [];
+const bodies: Array<Buffer | undefined> = [];
 let lookups = 0;
 let lookup = async (_host: string): Promise<any> => [{ address: '93.184.216.34', family: 4 }];
 let respond: (incoming: any) => void = incoming => incoming.end('ok');
@@ -26,18 +27,18 @@ const transport = ((options: any, callback: (incoming: any) => void) => {
     if (!destroyed) { destroyed = true; incoming?.destroy(error); request.emit('error', error); }
     return request;
   };
-  request.end = () => queueMicrotask(() => {
+  request.end = (body?: Buffer) => { bodies.push(body); return queueMicrotask(() => {
     if (options.signal.aborted) return abort();
     incoming = new PassThrough(); incoming.statusCode = status; incoming.headers = { ...headers };
     incoming.once('close', () => options.signal.removeEventListener('abort', abort));
     options.signal.addEventListener('abort', abort, { once: true });
     callback(incoming);
     if (!incoming.destroyed) respond(incoming);
-  });
+  }); };
   return request;
 }) as typeof http.request;
 const reset = () => {
-  calls.length = 0; lookups = 0; status = 200; headers = { 'content-type': 'text/html' };
+  calls.length = 0; bodies.length = 0; lookups = 0; status = 200; headers = { 'content-type': 'text/html' };
   lookup = async () => [{ address: '93.184.216.34', family: 4 }]; respond = incoming => incoming.end('ok');
 };
 try {
@@ -49,6 +50,45 @@ try {
   assert.equal(calls[0].hostname, '93.184.216.34'); assert.equal(calls[0].family, 4);
   assert.equal(calls[0].servername, 'company.test'); assert.equal(calls[0].headers.host, 'company.test:8443');
   assert.equal(calls[0].path, '/contact?q=one');
+  reset();
+  const payload = '{"text":"医薬品 🧪","messages":[]}';
+  await safeFetchProviderRequest('https://company.test:8443/custom/v1/chat/completions?q=one', {
+    method: 'POST', body: payload, headers: { Authorization: 'Bearer synthetic-wire-key', 'Content-Type': 'application/json' },
+  });
+  assert.equal(lookups, 1);
+  assert.equal(calls[0].hostname, '93.184.216.34');
+  assert.equal(calls[0].servername, 'company.test');
+  assert.equal(calls[0].headers.host, 'company.test:8443');
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(calls[0].path, '/custom/v1/chat/completions?q=one');
+  assert.equal(calls[0].headers.authorization, 'Bearer synthetic-wire-key');
+  assert.equal(calls[0].headers['content-length'], String(Buffer.byteLength(payload)));
+  assert.deepEqual(bodies[0], Buffer.from(payload));
+  reset();
+  const opaqueBytes = new Uint8Array([0, 255, 195, 40]);
+  await safeFetchProviderRequest('https://company.test/v1', { method: 'POST', body: opaqueBytes });
+  assert.deepEqual(bodies[0], Buffer.from(opaqueBytes), 'byte bodies must not be decoded and re-encoded');
+  for (const url of ['http://company.test/v1', 'https://127.0.0.1/v1', 'https://[::1]/v1', 'https://user:password@company.test/v1']) {
+    reset(); await assert.rejects(safeFetchProviderRequest(url, { method: 'POST', body: payload }));
+    assert.equal(calls.length, 0, 'unsafe credentials destination never receives bytes');
+  }
+  for (const addresses of [[{ address: '127.0.0.1', family: 4 }], [{ address: '93.184.216.34', family: 4 }, { address: '10.0.0.1', family: 4 }]]) {
+    reset(); lookup = async () => addresses;
+    await assert.rejects(safeFetchProviderRequest('https://company.test/v1', { method: 'POST', body: payload }), /private/);
+    assert.equal(calls.length, 0);
+  }
+  for (const redirect of [301, 302, 303, 307, 308]) for (const destination of ['/other', 'https://other.test/steal', 'http://company.test/downgrade', 'https://127.0.0.1/private']) {
+    reset(); status = redirect; headers.location = destination;
+    await assert.rejects(safeFetchProviderRequest('https://company.test/v1', { method: 'POST', body: payload, redirect: 'follow' }), /REDIRECT_REJECTED/);
+    assert.equal(calls.length, 1, 'no redirect target receives the request or credentials');
+  }
+  reset();
+  status = 302;
+  await assert.rejects(safeFetchProviderRequest('https://company.test/v1'), /REDIRECT_REJECTED/, 'redirect status without Location is still rejected');
+  reset();
+  await assert.rejects(safeFetchProviderRequest('https://company.test/v1', { method: 'POST', body: new FormData() }), /Unsupported provider request body/);
+  assert.equal(calls.length, 0);
+  await assert.rejects(safeFetchProviderRequest('https://company.test/v1', { method: 'POST', body: 'x'.repeat(2 * 1024 * 1024 + 1) }), /body limit/);
   reset(); headers = { 'content-type': 'application/json' };
   respond = incoming => incoming.end(Buffer.concat([Buffer.from('{"data":[{"id":"'), Buffer.from([255]), Buffer.from('"}]}')]));
   const malformed = await readProviderResponse(await safeFetchOutboundUrl('https://company.test/models'));

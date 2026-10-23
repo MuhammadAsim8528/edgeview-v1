@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { installAiTransportFixture } from './fixtures/ai_transport';
+
+const restoreAiTransport = installAiTransportFixture(['ai.test', 'api.groq.com']);
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-v1-test-'));
 process.env.EDGEVIEW_CONFIG = path.join(temp, 'config.json');
@@ -82,3 +85,4 @@ assert.ok(mixedRun.queries.includes('Mixed Records Example Kenya first'), 'actua
 assert.ok(mixedRun.results.some(result => result.provider === 'hunter' && result.snippet === 'public@mixedrecordsexample.test' && result.metadata.extra === 'retain'), 'one malformed email record cannot erase its valid siblings or unknown metadata');
 assert.ok(mixedRun.raw_records.some(record => record.provider === 'hunter' && record.failure?.name === 'ProviderSchemaError'), 'malformed Hunter sibling is explicitly recorded');
 console.log('PASS EdgeView V1 requirement-driven tests');
+restoreAiTransport();

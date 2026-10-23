@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { installAiTransportFixture } from './fixtures/ai_transport';
+
+const restoreAiTransport = installAiTransportFixture(['api.groq.com']);
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-model-origin-'));
 process.env.EDGEVIEW_CONFIG = path.join(root, 'config.json');
@@ -28,8 +31,13 @@ try {
   await fetchProviderModels('groq', 'synthetic-key-one-ABCDEF');
   assert.equal(requests, 2, 'identical full credential should reuse cache');
   await GroqProvider.listModels('synthetic-groq');
+  fs.writeFileSync(process.env.EDGEVIEW_CONFIG, JSON.stringify({ nvidia_api_key: 'synthetic-custom-origin-key', nvidia_base_url: 'https://custom-provider.test/v1' }));
+  const beforeDefault = requests;
+  await assert.rejects(NvidiaProvider.listModels('synthetic-custom-origin-key'), /configured provider origin/, 'guard must check actual default transport URL, not a different configured URL');
+  assert.equal(requests, beforeDefault);
   console.log('PASS saved credential origin binding, distinct cache keys, timeout and redirect policy.');
 } finally {
+  restoreAiTransport();
   globalThis.fetch = savedFetch;
   delete process.env.EDGEVIEW_CONFIG;
   fs.rmSync(root, { recursive: true, force: true });

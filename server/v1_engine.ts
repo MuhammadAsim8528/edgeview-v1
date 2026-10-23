@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAppSettings } from './settings';
 import { getProjectRoot } from './db_paths';
-import { isSafeExternalUrl, safeFetchOutboundText } from './url_safety';
+import { isSafeExternalUrl, safeFetchOutboundText, safeFetchProviderRequest } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
 import { readProviderResponse, validateProviderEnvelope, providerSchemaError } from './provider_response';
@@ -369,7 +369,7 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
   };
   const configuredProviders = [
     ...(settings.groq_enabled && settings.groq_api_key ? [{ name: 'groq', url: 'https://api.groq.com/openai/v1/chat/completions', key: settings.groq_api_key, model: settings.groq_model }] : []),
-    ...(settings.nvidia_enabled && settings.nvidia_api_key ? [{ name: 'nvidia', url: `${settings.nvidia_base_url || 'https://integrate.api.nvidia.com/v1'}/chat/completions`, key: settings.nvidia_api_key, model: settings.nvidia_model }] : []),
+    ...(settings.nvidia_enabled && settings.nvidia_api_key ? [{ name: 'nvidia', url: `${(settings.nvidia_base_url || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '')}/chat/completions`, key: settings.nvidia_api_key, model: settings.nvidia_model }] : []),
   ];
   const providers = orderAiProviders(configuredProviders, settings.primary_ai_provider);
   if (!providers.length) {
@@ -384,10 +384,11 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
     try {
       const aiPayload: Record<string, unknown> = { model: provider.model, temperature: 0.1, max_tokens: 500, messages: [{ role: 'system', content: 'Output only the requested JSON. Do not explain or show reasoning.' }, { role: 'user', content: JSON.stringify(request) }] };
       if (provider.name === 'nvidia') aiPayload.chat_template_kwargs = { thinking: false };
-      const response = await boundedFetch(provider.url, {
+      const response = await safeFetchProviderRequest(provider.url, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` },
-        body: JSON.stringify(aiPayload),
-      }, provider.name === 'nvidia' ? 8_000 : 12_000);
+        body: JSON.stringify(aiPayload), maxBytes: 8 * 1024 * 1024,
+        timeoutMs: provider.name === 'nvidia' ? 8_000 : 12_000,
+      });
       const { body, failure: bodyFailure } = await readProviderResponse(response);
       const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
       run.raw_records.push(raw);
@@ -743,7 +744,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
   const settings = getAppSettings();
   const providers = orderAiProviders([
     ...(settings.groq_enabled && settings.groq_api_key ? [{ name: 'groq-extraction', url: 'https://api.groq.com/openai/v1/chat/completions', key: settings.groq_api_key, model: settings.groq_model }] : []),
-    ...(settings.nvidia_enabled && settings.nvidia_api_key ? [{ name: 'nvidia-extraction', url: `${settings.nvidia_base_url || 'https://integrate.api.nvidia.com/v1'}/chat/completions`, key: settings.nvidia_api_key, model: settings.nvidia_model }] : []),
+    ...(settings.nvidia_enabled && settings.nvidia_api_key ? [{ name: 'nvidia-extraction', url: `${(settings.nvidia_base_url || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '')}/chat/completions`, key: settings.nvidia_api_key, model: settings.nvidia_model }] : []),
   ], settings.primary_ai_provider);
   if (!providers.length) return;
   // Two evidence batches at most keeps interactive latency bounded while still
@@ -760,7 +761,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
       if (!providerAvailable(run, provider.name, `evidence batch ${batchIndex + 1}`)) continue;
       const started = Date.now(); const requestedAt = now();
       try {
-        const response = await boundedFetch(provider.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` }, body: JSON.stringify({ model: provider.model, temperature: 0, max_tokens: 2200, messages: [{ role: 'system', content: 'You are a strict evidence extractor. Output JSON only.' }, { role: 'user', content: JSON.stringify(request) }], ...(provider.name.startsWith('nvidia') ? { chat_template_kwargs: { thinking: false } } : {}) }) }, 20_000);
+        const response = await safeFetchProviderRequest(provider.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` }, body: JSON.stringify({ model: provider.model, temperature: 0, max_tokens: 2200, messages: [{ role: 'system', content: 'You are a strict evidence extractor. Output JSON only.' }, { role: 'user', content: JSON.stringify(request) }], ...(provider.name.startsWith('nvidia') ? { chat_template_kwargs: { thinking: false } } : {}) }), timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024 });
         const { body, failure: bodyFailure } = await readProviderResponse(response);
         const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
         run.raw_records.push(raw);

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { testHunterKey, testSerperKey } from '../settings';
 import { GroqProvider } from '../ai_providers';
+import { installAiTransportFixture } from './fixtures/ai_transport';
+
+const restoreAiTransport = installAiTransportFixture(['api.groq.com']);
 
 for (const test of [testHunterKey, testSerperKey]) {
   for (const payload of [{}, { error: { message: 'controlled error' } }]) {
@@ -40,3 +43,4 @@ for (const test of [testHunterKey, testSerperKey, (key: string) => GroqProvider.
 global.fetch = (async () => Response.json({ data: [{ id: 'synthetic-model' }] }, { status: 201 })) as typeof fetch;
 assert.equal((await GroqProvider.testConnection('synthetic-diagnostic-key')).httpStatus, 201, 'do not invent 200 after any successful request');
 console.log('PASS diagnostic transport status survives errors and non-200 success; network failures stay unknown');
+restoreAiTransport();

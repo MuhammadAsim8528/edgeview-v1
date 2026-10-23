@@ -1,6 +1,6 @@
 import { getAppSettings, resolveApiKey } from './settings';
 import { assertSafeHeaderValue } from './utils/header_encoder';
-import { isSafeExternalUrl, safeFetchOutboundUrl } from './url_safety';
+import { isSafeExternalUrl, safeFetchProviderRequest } from './url_safety';
 import { createHash } from 'node:crypto';
 import { readProviderResponse, providerSchemaError } from './provider_response';
 
@@ -63,17 +63,18 @@ export const NvidiaProvider: AIProvider = {
       throw new Error('NVIDIA API Key is missing or empty');
     }
     const cleanKey = apiKey.trim();
-    assertSavedCredentialOrigin(cleanKey, baseUrl);
     assertSafeHeaderValue(`Bearer ${cleanKey}`, 'NVIDIA API key');
 
     const endpoint = (baseUrl?.trim() || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
+    assertSavedCredentialOrigin(cleanKey, endpoint);
     if (!isSafeExternalUrl(endpoint)) {
       throw new Error('Blocked: NVIDIA base URL is not a safe external http(s) address (SSRF guard)');
     }
-    const res = await safeFetchOutboundUrl(`${endpoint}/models`, {
+    const res = await safeFetchProviderRequest(`${endpoint}/models`, {
       method: 'GET',
       redirect: 'error',
       signal: AbortSignal.timeout(20_000),
+      maxBytes: 1024 * 1024,
       headers: {
         'Authorization': `Bearer ${cleanKey}`,
         'Accept': 'application/json',
@@ -167,10 +168,11 @@ export const GroqProvider: AIProvider = {
     assertSafeHeaderValue(`Bearer ${cleanKey}`, 'Groq API key');
     const endpoint = 'https://api.groq.com/openai/v1/models';
 
-    const res = await fetch(endpoint, {
+    const res = await safeFetchProviderRequest(endpoint, {
       method: 'GET',
       redirect: 'error',
       signal: AbortSignal.timeout(20_000),
+      maxBytes: 1024 * 1024,
       headers: {
         'Authorization': `Bearer ${cleanKey}`,
         'Accept': 'application/json',
