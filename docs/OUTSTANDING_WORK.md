@@ -1,5 +1,20 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Working-tree cleanup slice D — run-cache truncation removed — 2026-10-23
+
+Reviewer verdict: do not ship current cache truncation. Removed, not redesigned:
+`MAX_V1_RUN_CACHE_ENTRIES`/`trimRunCaches()` never entered git and are now
+absent from the working tree entirely. The original concern understated the
+defect: `listV1RunIdentityHeaders()` rewrote identity-index.jsonl from the
+truncated in-memory array, which would have permanently dropped discovery
+history past 5000 entries — worse than a RAM bound. Run caches are again
+whole-process indexes over the immutable per-run files, matching pre-cleanup
+behavior. Unbounded-growth risk is accepted until a redesign that bounds memory
+without losing discovery is independently reviewed. Verification: grep confirms
+absence across the repo; typecheck and focused v1_requirements, v1_blob_storage
+and v1_atomic_persistence tests pass. No commit contains D hunks; the upcoming
+slice B commit on server/v1_engine.ts is the reviewable proof of absence.
+
 ## Delimited-text allocation boundary — 2026-10-23
 
 CSV/TSV/TXT and analogous text NVL now reject fields beyond 512 columns during
