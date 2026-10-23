@@ -72,6 +72,22 @@ try {
   assert.equal((selected.match(/class="card-title"/g) || []).length, 1);
   assert.ok(!selected.includes('&lt;img src=x'), 'selection excludes unrelated contacts');
   assert.ok(!(await (await post({ company_ids: [] })).text()).includes('class="card-title"'));
+  await seed([
+    { id: 'fresh', company_name: 'Fresh', type: 'Importer', country: 'Kenya' },
+    { id: 'details', company_name: 'Details', type: 'Importer', country: 'Kenya', edgeview_v1_run_id: 'r1', website: 'https://company.test' },
+    { id: 'weak', company_name: 'Weak', type: 'Importer', country: 'Kenya', edgeview_v1_run_id: 'r2' },
+    { id: 'excluded', company_name: 'Excluded', type: 'Exporter', country: 'Pakistan' },
+    { id: 'historical-exporter', company_name: 'Historical exporter', type: 'Exporter', country: 'Pakistan', edgeview_v1_run_id: 'r3', email: 'office@company.test' },
+  ]);
+  const summary = await (await fetch(`${base}/api/summary`, { signal: AbortSignal.timeout(10_000) })).json();
+  assert.equal(summary.total_companies, 5);
+  assert.equal(summary.excluded_exporters, 2, 'historically researched Pakistan exporter remains excluded without deleting its record');
+  assert.equal(summary.researched_companies, 2);
+  assert.equal(summary.contacts_found, 1);
+  assert.equal(summary.unresolved_after_research, 1);
+  assert.equal(summary.not_researched, 1);
+  assert.equal(summary.research_scope, 3);
+  assert.equal((await (await post({})).text()).match(/class="card-title"/g)?.length, 5, 'scope exclusion does not erase exportable history');
   await seed([{ id: 'invalid', company_name: null }, { id: 'invalid2', company_name: {} }]);
   const failed = await post({});
   assert.equal(failed.status, 500);

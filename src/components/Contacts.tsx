@@ -35,6 +35,7 @@ import { safeFetchJson } from '../utils/safeFetch';
 import { normalizeCountryName } from '../utils/countryNormalizer';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
+import { contactResearchCategory, matchesResearchFilter } from '../../shared/contact_research_scope';
 
 interface ContactsProps {
   contacts: CompanyContact[];
@@ -63,12 +64,11 @@ export const Contacts: React.FC<ContactsProps> = ({
   refreshData,
 }) => {
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('edgeview_contacts_search') || '');
-  // A completed research run must remain visible even when no candidate was
-  // strong enough to promote into the concise trusted profile. Migrate the old
-  // ENRICHED-only default so existing browsers immediately show the full scope.
+  // Show every researched company by default, but preserve an explicitly saved
+  // filter. Reapplying an ENRICHED migration on every mount erased user choice.
   const [filterType, setFilterType] = useState<string>(() => {
     const saved = localStorage.getItem('edgeview_contacts_filter');
-    return !saved || saved === 'ENRICHED' ? 'RESEARCHED' : saved;
+    return saved || 'RESEARCHED';
   });
   const [fetchingDetailsId, setFetchingDetailsId] = useState<string | null>(null);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
@@ -120,14 +120,6 @@ export const Contacts: React.FC<ContactsProps> = ({
       const website = (c as any).website ? 1 : 0;
       return emails * 4 + phones * 3 + leaders * 2 + addresses * 2 + website;
     };
-    const isEnrichedContact = (c: CompanyContact) => Boolean(
-      c.edgeview_v1_run_id && (
-        c.email || c.phone || (c.emails_list?.length || 0) > 0 ||
-        (c.phones_list?.length || 0) > 0 || (c.contact_persons?.length || 0) > 0 ||
-        (c as any).address || ((c as any).addresses?.length || 0) > 0 || (c as any).website
-      )
-    );
-
     return contacts.filter((c) => {
       const searchableContacts = (c.contact_persons || []).map((person) => `${person.name} ${person.designation || ''}`).join(' ');
       const matchesSearch =
@@ -138,17 +130,7 @@ export const Contacts: React.FC<ContactsProps> = ({
         (c.emails_list || []).join(' ').toLowerCase().includes(searchTerm.toLowerCase()) ||
         searchableContacts.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const isEnriched = isEnrichedContact(c);
-
-      const matchesType =
-        filterType === 'ALL' ||
-        (filterType === 'EXPORTER' && ['EXPORTER', 'BOTH'].includes(c.type.toUpperCase())) ||
-        (filterType === 'IMPORTER' && ['IMPORTER', 'BOTH'].includes(c.type.toUpperCase())) ||
-        (filterType === 'RESEARCHED' && Boolean(c.edgeview_v1_run_id)) ||
-        (filterType === 'ENRICHED' && isEnriched) ||
-        (filterType === 'UNRESOLVED' && Boolean(c.edgeview_v1_run_id) && !isEnriched) ||
-        (filterType === 'UNRESEARCHED' && !c.edgeview_v1_run_id);
-      return matchesSearch && matchesType;
+      return matchesSearch && matchesResearchFilter(c, filterType);
     }).sort((a, b) => {
       const qualityWeight = (value?: string) => value === 'COMPLETE' ? 3 : value === 'PARTIAL' ? 2 : value === 'NOT_FOUND' ? 0 : 1;
       return qualityWeight(b.quality_status) - qualityWeight(a.quality_status)
@@ -208,8 +190,12 @@ export const Contacts: React.FC<ContactsProps> = ({
   };
 
   const handleRetryFailed = () => {
+    // Keep this action aligned with /api/summary's unresolved_after_research
+    // contract: only previously researched records with no retained public
+    // information qualify. Excluded Pakistan exporters and untouched records
+    // must never be swept into a bulk retry merely because they lack email/phone.
     const failedIds = contacts
-      .filter(c => c.quality_status === 'FAILED' || c.quality_status === 'NOT_FOUND' || (!c.email && !c.phone))
+      .filter(c => contactResearchCategory(c) === 'UNRESOLVED')
       .map(c => c.id);
 
     if (failedIds.length === 0) {
@@ -399,7 +385,7 @@ export const Contacts: React.FC<ContactsProps> = ({
             {[
               ['ALL', 'All companies'], ['IMPORTER', 'Importers'], ['RESEARCHED', 'Researched'],
               ['ENRICHED', 'Contact details found'], ['UNRESOLVED', 'Needs deeper research'],
-              ['UNRESEARCHED', 'Not researched'], ['EXPORTER', 'Exporters'],
+              ['UNRESEARCHED', 'Not researched'], ['EXCLUDED', 'Excluded exporters'], ['EXPORTER', 'All exporters'],
             ].map(([t, label]) => (
               <button
                 key={t}

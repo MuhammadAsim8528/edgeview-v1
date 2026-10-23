@@ -49,6 +49,7 @@ import { readBuildIdentity } from './shared/build_identity.mjs';
 import { createShutdownController } from './server/shutdown';
 import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
 import { requiresOperationalDatabase } from './server/storage_mutation_guard';
+import { contactResearchCategory } from './shared/contact_research_scope';
 
 const app = express();
 let closing = false;
@@ -1662,22 +1663,13 @@ app.get('/api/summary', async (req, res) => {
   let excludedExporters = 0;
 
   for (const c of contacts) {
-    const researched = Boolean((c as any).edgeview_v1_run_id);
-    const hasInfo = Boolean(
-      c.email || c.phone || (c as any).address || (c as any).website ||
-      ((c as any).emails_list?.length || 0) > 0 ||
-      ((c as any).phones_list?.length || 0) > 0 ||
-      ((c as any).addresses?.length || 0) > 0 ||
-      ((c as any).contact_persons?.length || 0) > 0
-    );
-    if (researched) {
+    const category = contactResearchCategory(c);
+    if (category === 'ENRICHED' || category === 'UNRESOLVED') {
       researchedCompanies++;
-      if (hasInfo) contactsFound++;
+      if (category === 'ENRICHED') contactsFound++;
       else unresolvedAfterResearch++;
     } else {
-      const isExcludedPakistanExporter = String(c.type || '').toLowerCase() === 'exporter'
-        && String(c.country || '').trim().toLowerCase() === 'pakistan';
-      if (isExcludedPakistanExporter) excludedExporters++;
+      if (category === 'EXCLUDED') excludedExporters++;
       else notResearched++;
     }
   }
