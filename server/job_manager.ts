@@ -278,6 +278,14 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
       ...[...`${html} ${text}`.matchAll(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi)].map(match => match[0]),
     ];
   });
+  // Search snippets can contain exact contact facts from reputable partner,
+  // regulator, or directory pages even when those pages are outside the
+  // company's own domain. Admit only email-shaped values attributable to the
+  // already-resolved official domain; this preserves useful exact evidence
+  // without letting third-party addresses contaminate the company profile.
+  const searchSnippetEmails = searchEvidence.flatMap(result =>
+    [...String(result.snippet || '').matchAll(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi)].map(match => match[0])
+  );
   const phones = contactPages.flatMap(result => {
     const html = String(result.html || '');
     const text = String(result.text || '');
@@ -289,7 +297,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     .map(value => value.replace(/\s+/g, ' ').trim())
     .filter((value, index, all) => validPhone(value) && isCountryCompatiblePhone(value, String(run.country || '')) && all.findIndex(other => other.replace(/\D/g, '') === value.replace(/\D/g, '')) === index)
     .slice(0, 10);
-  const emails = [...hunterEmails, ...pageEmails]
+  const emails = [...hunterEmails, ...pageEmails, ...searchSnippetEmails]
     .map(value => value.trim().toLowerCase().replace(/[.,;:]+$/, ''))
     .filter((value, index, all) => attributableEmail(value, officialDomain) && all.indexOf(value) === index)
     .slice(0, 50);
