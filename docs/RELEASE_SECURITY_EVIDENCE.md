@@ -20,6 +20,11 @@ execution. A branch file is not evidence that updates/alerts are enabled.
 
 ## Hosted security availability
 
+Later authenticated REST read succeeded through the existing Git credential
+manager; see CI_EVIDENCE_2026-10-23.md. Inventory hosted success is now observed
+for275fc01, but main release checks fail the dependency audit. Security feature
+availability remains unproven because the metadata field returned null.
+
 Git access succeeded, but connector get_repo returned404 for this private repo.
 CodeQL entitlement, secret-scanning/push-protection and repository enabled state
 are NOT VERIFIED. Do not silently add a failing CodeQL upload or mark an absent
