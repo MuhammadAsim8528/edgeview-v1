@@ -127,7 +127,8 @@ app.use((req, res, next) => {
   const origin = String(req.headers.origin || '').toLowerCase();
   const allowedHosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`]);
   const allowedOrigins = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, `http://[::1]:${PORT}`]);
-  if (host && !allowedHosts.has(host)) return res.status(403).json({ error: 'Local EdgeView host required.' });
+  const hostCount = req.rawHeaders.filter((_value, index) => index % 2 === 0 && req.rawHeaders[index].toLowerCase() === 'host').length;
+  if (hostCount !== 1 || !allowedHosts.has(host)) return res.status(403).json({ error: 'Local EdgeView host required.' });
   if (origin && !allowedOrigins.has(origin)) return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');

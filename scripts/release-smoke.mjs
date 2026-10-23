@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
+import net from 'node:net';
 import { unusedTestPort } from './test-server-port.mjs';
 
 const port = Number(process.env.EDGEVIEW_RELEASE_TEST_PORT || await unusedTestPort());
@@ -58,6 +59,19 @@ async function waitForHealth() {
   throw new Error(`release server did not become healthy: ${stderr.slice(-1000)}`);
 }
 
+// Raw sockets are necessary: fetch automatically inserts a Host header.
+async function rawLocalRequest(headers, version = '1.1', target = '/api/health', method = 'GET') {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(port, '127.0.0.1');
+    let response = '';
+    socket.setTimeout(5000, () => socket.destroy(new Error('Raw HTTP response timed out')));
+    socket.on('error', reject);
+    socket.on('data', chunk => { response += chunk.toString(); });
+    socket.on('end', () => resolve(response));
+    socket.on('connect', () => socket.write(`${method} ${target} HTTP/${version}\r\n${headers}Connection: close\r\n\r\n`));
+  });
+}
+
 try {
   const healthResponse = await waitForHealth();
   const health = await healthResponse.json();
@@ -75,6 +89,24 @@ try {
 
   const badOrigin = await fetch(`${base}/api/health`, { headers: { Origin: 'https://evil.example' } });
   assert.equal(badOrigin.status, 403);
+
+  for (const version of ['1.0', '1.1']) {
+    for (const headers of ['', 'Host: \r\n']) {
+      assert.match(await rawLocalRequest(headers, version), /^HTTP\/1\.1 (?:400|403)\b/, 'missing/empty Host must never reach health');
+    }
+  }
+  assert.match(await rawLocalRequest('', '1.0', `${base}/api/health`), /^HTTP\/1\.1 403\b/, 'absolute-form target cannot substitute for Host');
+  assert.match(await rawLocalRequest('', '1.0', '*', 'OPTIONS'), /^HTTP\/1\.1 403\b/, 'asterisk target cannot bypass global guard');
+  for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `LOCALHOST:${port}`, `[::1]:${port}`]) {
+    assert.match(await rawLocalRequest(`Host: ${host}\r\n`), /^HTTP\/1\.1 200\b/, `allowed Host ${host}`);
+  }
+  for (const host of ['evil.example', `127.0.0.1:${port + 1}`, `localhost.evil.example:${port}`, `localhost:${port}@evil.example`]) {
+    assert.match(await rawLocalRequest(`Host: ${host}\r\n`), /^HTTP\/1\.1 403\b/, 'foreign Host must fail');
+  }
+  assert.match(await rawLocalRequest(`Host: localhost:${port}\r\nOrigin: null\r\n`), /^HTTP\/1\.1 403\b/);
+  for (const hosts of [`Host: localhost:${port}\r\nhOsT: evil.example\r\n`, `Host: evil.example\r\nHost: localhost:${port}\r\n`]) {
+    assert.match(await rawLocalRequest(hosts), /^HTTP\/1\.1 (?:400|403)\b/, 'duplicate Host must not be interpreted by first-value wins');
+  }
 
   const sampleSeed = await fetch(`${base}/api/sample-data/seed`, { method: 'POST' });
   assert.equal(sampleSeed.status, 404, 'sample-data mutation must be unavailable in release mode');

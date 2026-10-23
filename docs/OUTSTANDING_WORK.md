@@ -1,5 +1,27 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Missing/ambiguous Host rejection — 2026-10-23
+
+Raw HTTP against the previous compiled app reproduced missing Host acceptance
+(HTTP 200). First global middleware now requires exactly one raw Host header
+and an exact allowed local authority; optional absent Origin remains supported.
+Independent security review found no blocking bypass/regression. This closes
+an admission-policy gap, not demonstrated browser credential theft.
+
+Expanded production release smoke exercises HTTP/1.0 and 1.1 absent/empty Host,
+duplicate mixed-case header names in both orders, absolute-form and OPTIONS
+asterisk targets, allowed local authorities, foreign authorities and null Origin.
+Typecheck/lint/V1 suite/build/release smoke passed. These are isolated compiled
+server checks, not live browser QA. Default loopback binding is source-inspected;
+the existing HOST environment override remains and was not changed here.
+
+Supported Windows and browser QA initialization both retried and failed before
+session enumeration with `failed to write kernel assets: The system cannot find
+the path specified. (os error 3)`. No permission UI appeared. Passive live health
+still reports PID 30112, frozen workspace, commit f96a6da and build
+2143be7901f9d1806144f63311d99255e1be624d7fc61e2d272ca274b2e5a973:
+recent branch fixes are not yet deployed there. Do not label this live QA PASS.
+
 ## Upload filename boundary — 2026-10-23
 
 Reproduced bare `csv` acceptance on all four multipart aliases before changing
