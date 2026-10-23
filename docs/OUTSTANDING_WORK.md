@@ -1,5 +1,28 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Sole-writer handoff and package QA — 2026-10-23
+
+Qoder retired by owner instruction. Active source authority remains the
+chatgpt/release-reconciliation-20261023 branch in edgeview-chatgpt. Frozen Qoder
+workspace remains read-only at ef1c074 with eleven modified and eleven untracked
+files; none bulk-imported. Earlier parallel-ownership notes below are historical.
+
+e2ddbb4 adds isolated developer-package QA. Exact tested source and limitations
+are recorded in ISOLATED_PACKAGE_QA.md. Manifest (143 files), staged/extracted
+unchanged-launch checks and private-state filename exclusion passed. Customer
+distribution remains OPEN: 113 development files, installed Node/npm required.
+
+Vite dependency remediation candidate raises the npm minimum to ^6.4.4 and lock
+to 6.4.5. Clean npm ci completed; installed bytes now report 6.4.5. Before clean
+installation, npm metadata misleadingly reported the new version while actual
+package bytes remained 6.4.3; initial checks/build are not upgrade evidence.
+After clean installation: installed/lock regression, high-threshold production
+audit, typecheck, lint, V1 tests, production build, isolated release smoke and
+build-recovery test passed. Audit still reports two MODERATE ExcelJS/UUID entries;
+no force downgrade applied. Historical bun.lock remains stale and is NOT an
+approved/reverified installation path. No live deployment/browser/clean-machine
+acceptance is implied. Telemetry privacy failures and other release gates remain.
+
 ## Parallel release reconciliation branch — 2026-10-23
 
 Exclusive worktree edgeview-chatgpt; branch

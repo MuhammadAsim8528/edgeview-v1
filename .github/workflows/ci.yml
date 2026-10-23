@@ -29,6 +29,7 @@ jobs:
       - run: npm run lint
       - run: node scripts/audit-git-secrets.mjs
       - run: npm audit --omit=dev --audit-level=high
+      - run: node scripts/vite-install-boundary.test.mjs
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/build-metadata.test.mjs
       - run: node scripts/local-load-smoke.test.mjs
