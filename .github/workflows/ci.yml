@@ -52,6 +52,7 @@ jobs:
       - run: node --import tsx server/tests/fatal_errors.test.ts
       - run: node --import tsx server/tests/shutdown.test.ts
       - run: node --import tsx server/tests/sqlite_initialization_safety.test.ts
+      - run: node --import tsx server/tests/migration_backup_retention.test.ts
       - run: node --import tsx server/tests/storage_mutation_guard.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/outbound_retrieval_safety.test.ts

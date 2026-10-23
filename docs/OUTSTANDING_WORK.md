@@ -1,5 +1,32 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Migration recovery retention reconciled — 2026-10-23
+
+Frozen Qoder pruning was reimplemented, not copied: it ran before migration
+success, hard-coded `edgeview.db` and followed links. The active branch previously
+had no pruning. New retention runs only when this initialization created a
+backup AND the migrated database was durably written, reopened, integrity-checked
+and schema-checked. Keep immediate recovery plus two newest other exact numeric
+backup names for the actual DB basename (timestamp/name deterministic ties).
+Current-version restart does not prune. A failed schema/write/reopen attempt
+does not delete any recovery image. After a later successful migration, older
+failed-attempt images may be pruned: filenames do not permanently classify them.
+
+The helper skips linked ancestors, junctions, hard-linked/nonregular entries,
+malformed/unrelated names; rechecks file identity before unlink. Cleanup failures
+are counted/warned without failing a successful migration. This is not protection
+against a malicious concurrent Windows-account filesystem writer or power-loss
+certification.
+
+New `migration_backup_retention.test.ts` runs actual sql.js migration/reopen with
+alternate metacharacter basename, preserved legacy row/bytes and more than three
+backups, plus schema failure, controlled ENOSPC write failure, reopen denial,
+current-schema restart, ties, junction/hardlink boundaries and deletion denial.
+Passed alongside existing initialization safety test, typecheck/lint/V1 suite,
+build and production release smoke. CI explicitly runs the new regression.
+No production database was changed. Full restore transactionality, crash/power
+recovery, installer rollback and clean-Windows verification remain open.
+
 ## Shared export admission budget — 2026-10-23
 
 The prior compiled app allowed repeated GET export generation outside the

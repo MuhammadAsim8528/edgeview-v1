@@ -2,6 +2,7 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import { getSqlitePath, isTestProcess } from './db_paths';
+import { pruneMigrationBackups } from './migration_backup_retention';
 
 export interface DatabaseWrapper {
   exec(sql: string): Promise<void>;
@@ -201,8 +202,9 @@ export async function getDb(): Promise<DatabaseWrapper> {
     if (existingSchemaVersion > CURRENT_SCHEMA_VERSION) {
       throw new Error(`Database schema ${existingSchemaVersion} is newer than this EdgeView build (${CURRENT_SCHEMA_VERSION}). Refusing an unsafe downgrade.`);
     }
+    let migrationBackup: string | undefined;
     if (existingSchemaVersion < CURRENT_SCHEMA_VERSION && fs.existsSync(DB_PATH)) {
-      const migrationBackup = `${DB_PATH}.pre-migration-v${existingSchemaVersion}-${Date.now()}.bak`;
+      migrationBackup = `${DB_PATH}.pre-migration-v${existingSchemaVersion}-${Date.now()}.bak`;
       fs.copyFileSync(DB_PATH, migrationBackup, fs.constants.COPYFILE_EXCL);
       console.log(`Created pre-migration database backup: ${migrationBackup}`);
     }
@@ -425,6 +427,18 @@ export async function getDb(): Promise<DatabaseWrapper> {
 
     initializing = false;
     saveToDisk();
+    if (migrationBackup) {
+      // A successful write alone is insufficient authority to delete recovery.
+      const reopened = new SQL.Database(fs.readFileSync(DB_PATH));
+      try {
+        if (reopened.exec('PRAGMA integrity_check;')[0]?.values?.[0]?.[0] !== 'ok'
+          || Number(reopened.exec('PRAGMA user_version;')[0]?.values?.[0]?.[0]) !== CURRENT_SCHEMA_VERSION) {
+          throw new Error('Migrated database failed on-disk acceptance; recovery backups retained.');
+        }
+      } finally { reopened.close(); }
+      const retention = pruneMigrationBackups(DB_PATH, migrationBackup);
+      if (retention.errors || retention.skipped) console.warn('Migration backup retention incomplete', retention);
+    }
     dbInstance = wrapper;
     return wrapper;
   })().catch(error => { operationalStatus = 'degraded'; throw error; });
