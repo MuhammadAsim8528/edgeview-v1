@@ -204,6 +204,40 @@ try {
     assert.equal(response.status, 400, 'invalid export or stale selection must not produce a wider download');
   }
 
+  // Download handlers must share one bounded budget, including Express aliases.
+  const csvPath = `/api/export/csv/${encodeURIComponent(uploadedId)}`;
+  const ordinaryDownload = await fetch(`${base}${csvPath}`);
+  assert.equal(ordinaryDownload.status, 200);
+  assert.match(ordinaryDownload.headers.get('content-disposition') || '', /attachment/);
+  await ordinaryDownload.arrayBuffer();
+  const statsDownload = await fetch(`${base}/api/stats//importers/Alpha/export?${fileScope}`);
+  assert.equal(statsDownload.status, 200, 'ordinary stats mount alias remains supported');
+  assert.match(statsDownload.headers.get('content-disposition') || '', /attachment/);
+  await statsDownload.arrayBuffer();
+  let exportThrottled = false;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const download = await fetch(`${base}${csvPath}`);
+    await download.arrayBuffer();
+    if (download.status === 429) { exportThrottled = true; break; }
+    assert.equal(download.status, 200);
+  }
+  assert.equal(exportThrottled, true, 'GET exports must exhaust a bounded budget');
+  for (const route of [csvPath, `${csvPath}/`, `/API/EXPORT/CSV/${encodeURIComponent(uploadedId)}`, '/api/export/history/csv', '/api/export/country/csv', '/api/export/report', '/api/export/docx', '/api/export/pdf', '/api/stats/importers/Alpha/export', '/API/STATS/IMPORTERS/%41lpha/EXPORT/', '/api/stats//importers/Alpha/export', '/API/STATS//IMPORTERS/%41lpha/EXPORT/']) {
+    const limited = await fetch(`${base}${route}`);
+    assert.equal(limited.status, 429, `shared export budget: ${route}`);
+    assert.equal((await limited.json()).code, 'LOCAL_RATE_LIMITED');
+    assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  }
+  assert.equal((await fetch(`${base}${csvPath}`, { method: 'HEAD' })).status, 429);
+  for (const route of ['/api/export', '/api/export/blocks', '/api/export/csv', '/api/export/report', '/api/export/docx', '/api/export/pdf']) {
+    const blockedPostExport = await fetch(`${base}${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    assert.equal(blockedPostExport.status, 429, route);
+    assert.equal((await blockedPostExport.json()).code, 'LOCAL_RATE_LIMITED');
+  }
+  assert.equal((await fetch(`${base}/api/export/report`, { method: 'OPTIONS' })).status, 429, 'ALL-method report generator shares budget');
+  assert.equal((await fetch(`${base}/api/health`)).status, 200, 'exports must not consume ordinary read budget');
+  assert.equal((await fetch(`${base}/api/files`)).status, 200);
+
   const deleteResponse = await fetch(`${base}/api/files/${encodeURIComponent(uploadedId)}`, { method: 'DELETE' });
   const deleteBody = await deleteResponse.json();
   assert.ok([200, 207].includes(deleteResponse.status), JSON.stringify(deleteBody));

@@ -141,6 +141,26 @@ app.use((req, res, next) => {
   next();
 });
 
+// Match with Express itself, including case/trailing-slash aliases and HEAD.
+// All formats and importer-stat downloads share one fixed process-wide budget.
+let exportWindow = { startedAt: 0, count: 0 };
+const limitExports: express.RequestHandler = (_req, res, next) => {
+  const now = Date.now();
+  if (now - exportWindow.startedAt >= 60_000) exportWindow = { startedAt: now, count: 0 };
+  if (exportWindow.count >= 24) {
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil((60_000 - (now - exportWindow.startedAt)) / 1000))));
+    return res.status(429).json({ success: false, code: 'LOCAL_RATE_LIMITED', message: 'Too many exports. Try again in a moment.', recoverable: true });
+  }
+  exportWindow.count += 1;
+  next();
+};
+app.use('/api/export', limitExports);
+// Mirror the stats router's mount boundary: it consumes a slash before its
+// child routes, including /api/stats//importers/... compatibility requests.
+const statsExportAdmission = express.Router();
+statsExportAdmission.use('/importers/:importer/export', limitExports);
+app.use('/api/stats', statsExportAdmission);
+
 const mutationWindows = new Map<string, { startedAt: number; count: number }>();
 app.use((req, res, next) => {
   const modelDiscovery = req.path === '/api/ai/models';

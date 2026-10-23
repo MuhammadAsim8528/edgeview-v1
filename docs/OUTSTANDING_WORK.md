@@ -1,5 +1,24 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Shared export admission budget — 2026-10-23
+
+The prior compiled app allowed repeated GET export generation outside the
+mutation budget; the new release regression failed on that behavior before
+implementation. All `/api/export` formats/methods and the importer-statistics
+CSV export now share a fixed 24-request/60-second process-local budget before
+generation/body parsing. Counter storage is constant-size; failed/unsupported
+requests in these export namespaces also count. Restart resets the budget.
+
+Independent review discovered an initial double-slash stats-mount bypass.
+The corrected guard mirrors the nested Express mount, and compiled-server
+tests now cover that bypass, uppercase/trailing aliases, encoded importer,
+GET/HEAD/POST/OPTIONS, shared exhaustion, structured 429/Retry-After, ordinary
+CSV/stat downloads and unaffected health/file reads. All five unified download
+formats remain checked by the same release smoke. Typecheck, lint, V1 suite,
+build and expanded release smoke passed. Timed window rollover was inspected
+in source, not exercised by waiting a real minute. This is admission throttling,
+not proof of concurrent-export memory safety or long-duration load stability.
+
 ## Missing/ambiguous Host rejection — 2026-10-23
 
 Raw HTTP against the previous compiled app reproduced missing Host acceptance
