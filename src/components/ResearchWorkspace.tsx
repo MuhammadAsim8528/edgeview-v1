@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Database, ExternalLink, FileCode2, RefreshCw, Search } from 'lucide-react';
 import { safeFetchJson } from '../utils/safeFetch';
+import { createLatestResearchRequest } from '../utils/latestResearchRequest';
+import { chooseResearchRunId, validResearchRun, validResearchSummaries } from '../utils/researchRunValidation';
 
 interface Timeline { at: string; stage: string; status: string; message: string; query?: string; provider?: string; latency_ms?: number; error?: string }
 interface Result { id: string; raw_record_id: string; query: string; provider: string; rank: number; title: string; url: string; snippet: string; text?: string; markdown?: string; html?: string; links: string[]; metadata: Record<string, unknown>; search_latency_ms: number; scrape_latency_ms?: number; status: string; error?: string }
@@ -8,41 +10,67 @@ interface RawRecord { id: string; kind: string; provider: string; request: Recor
 interface Run { id: string; company_name: string; country: string; status: string; started_at: string; queries: string[]; results: Result[]; raw_records: RawRecord[]; timeline: Timeline[] }
 interface RunSummary { id: string; company_name: string; country: string; status: string; started_at: string; query_count: number; result_count: number; raw_record_count: number; failure_count: number }
 
+function savedRunId(): string {
+  try { return localStorage.getItem('edgeview_v1_run_id') || sessionStorage.getItem('edgeview_v1_run_id') || ''; }
+  catch { return ''; } // Storage restrictions must not prevent research browsing.
+}
+
 export const ResearchWorkspace: React.FC = () => {
   const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [run, setRun] = useState<Run | null>(null);
-  const [selectedId, setSelectedId] = useState(() => localStorage.getItem('edgeview_v1_run_id') || sessionStorage.getItem('edgeview_v1_run_id') || '');
+  const [loadedRun, setRun] = useState<Run | null>(null);
+  const [selectedId, setSelectedId] = useState(savedRunId);
   const [loading, setLoading] = useState(true);
+  const [loadingRun, setLoadingRun] = useState(false);
+  const [listError, setListError] = useState('');
+  const [runError, setRunError] = useState('');
+  const [listRequest] = useState(createLatestResearchRequest);
+  const [runRequest] = useState(createLatestResearchRequest);
   const [expanded, setExpanded] = useState('');
   const load = useCallback(async () => {
     setLoading(true);
-    const { ok, data } = await safeFetchJson<{ runs: RunSummary[] }>('/api/v1/runs?limit=1000');
-    if (ok && data?.runs) {
-      setRuns(data.runs);
-      const requested = localStorage.getItem('edgeview_v1_run_id');
-      setSelectedId(current => requested && data.runs.some(r => r.id === requested) ? requested : current && data.runs.some(r => r.id === current) ? current : data.runs[0]?.id || '');
-    }
-    setLoading(false);
-  }, []);
-  useEffect(() => { void load(); }, [load]);
+    setListError('');
+    await listRequest.run(signal => safeFetchJson<{ runs: RunSummary[] }>('/api/v1/runs?limit=1000', { signal }), ({ ok, data, error }) => {
+      if (ok && data && validResearchSummaries(data.runs)) {
+        setRuns(data.runs);
+        const requested = savedRunId();
+        setSelectedId(current => chooseResearchRunId(current, requested, data.runs));
+      } else setListError(error || 'Research history could not be loaded. Please try again.');
+      setLoading(false);
+    });
+  }, [listRequest]);
+  useEffect(() => { void load(); return () => listRequest.cancel(); }, [load, listRequest]);
   useEffect(() => {
     const id = selectedId || runs[0]?.id;
-    if (!id) { setRun(null); return; }
-    void safeFetchJson<{ run: Run }>(`/api/v1/runs/${encodeURIComponent(id)}`).then(({ ok, data }) => {
-      if (ok && data?.run) setRun(data.run);
+    if (!id) { setRun(null); setLoadingRun(false); setRunError(''); return; }
+    setLoadingRun(true);
+    setRunError('');
+    setExpanded('');
+    void runRequest.run(signal => safeFetchJson<{ run: Run }>(`/api/v1/runs/${encodeURIComponent(id)}`, { signal }), ({ ok, data, error }) => {
+      const candidate = data?.run;
+      if (ok && validResearchRun(candidate, id)) setRun(candidate);
+      else setRunError(error || 'The selected research run could not be loaded. Please try again.');
+      setLoadingRun(false);
     });
-  }, [selectedId, runs]);
+    return () => runRequest.cancel();
+  }, [selectedId, runs, runRequest]);
   useEffect(() => {
-    if (selectedId) localStorage.setItem('edgeview_v1_run_id', selectedId);
+    try { if (selectedId) localStorage.setItem('edgeview_v1_run_id', selectedId); }
+    catch { /* Selection still works in memory when browser storage is denied. */ }
   }, [selectedId]);
-  if (loading) return <Empty text="Loading captured V1 runs…" />;
-  if (!run) return <Empty text="No V1 run yet. Use Fetch Details on a company with a country." />;
+  const run = loadedRun?.id === selectedId ? loadedRun : null;
+  const controls = <div className="flex flex-wrap items-center gap-2">
+    {(runs.length > 0 || selectedId) && <select aria-label="Research run" className="min-w-0 flex-1 rounded border border-[#3f3f46] bg-[#222] px-3 py-2 text-xs text-white" value={selectedId} onChange={e => setSelectedId(e.target.value)}>{selectedId && !runs.some(item => item.id === selectedId) && <option value={selectedId}>Saved research selection</option>}{runs.map(item => <option key={item.id} value={item.id}>{item.company_name} · {item.country} · {item.status} · {new Date(item.started_at).toLocaleString()}</option>)}</select>}
+    <button type="button" aria-label="Refresh research" disabled={loading} onClick={() => void load()} className="rounded border border-[#444] p-2 text-[#aaa] hover:text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" /></button>
+  </div>;
+  const notice = listError || runError ? <div role="alert" className="rounded border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{listError || runError} <button type="button" onClick={() => void load()} className="ml-2 underline">Retry research</button></div> : null;
+  if (!run) return <div className="space-y-4" aria-busy={loading || loadingRun}>{controls}{notice}<Empty text={loading || loadingRun ? 'Loading captured V1 research…' : listError || runError ? 'Research is temporarily unavailable. Your saved evidence has not been removed.' : 'No V1 run yet. Use Fetch Details on a company with a country.'} /></div>;
   const failures = run.timeline.filter(item => item.status === 'failed').length;
-  return <div className="space-y-4">
+  return <div className="space-y-4" aria-busy={loading || loadingRun}>
+    {controls}{notice}
+    {(loading || loadingRun) && <p role="status" className="text-sm text-[#9ca3af]">Refreshing saved research…</p>}
     <header className="rounded-xl border border-[#333] bg-[#171717] p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-[11px] uppercase tracking-[0.22em] text-emerald-400">EdgeView V1 · Lossless Retrieval</div><h2 className="mt-1 text-xl font-semibold text-white">{run.company_name}</h2><p className="text-sm text-[#9ca3af]">{run.country} · {run.id}</p></div><div className="flex items-center gap-2"><Badge status={run.status} /><button onClick={() => void load()} className="rounded border border-[#444] p-2 text-[#aaa] hover:text-white"><RefreshCw className="h-4 w-4" /></button></div></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-[11px] uppercase tracking-[0.22em] text-emerald-400">EdgeView V1 · Lossless Retrieval</div><h2 className="mt-1 text-xl font-semibold text-white">{run.company_name}</h2><p className="text-sm text-[#9ca3af]">{run.country} · {run.id}</p></div><Badge status={run.status} /></div>
       <div className="mt-4 grid gap-2 sm:grid-cols-4"><Metric label="Queries" value={run.queries.length} /><Metric label="Results" value={run.results.length} /><Metric label="Raw records" value={run.raw_records.length} /><Metric label="Failures retained" value={failures} /></div>
-      {runs.length > 1 && <select className="mt-4 w-full rounded border border-[#3f3f46] bg-[#222] px-3 py-2 text-xs text-white" value={run.id} onChange={e => setSelectedId(e.target.value)}>{runs.map(item => <option key={item.id} value={item.id}>{item.company_name} · {item.country} · {item.status} · {new Date(item.started_at).toLocaleString()}</option>)}</select>}
     </header>
     <Panel icon={<Search className="h-4 w-4" />} title="Identity-anchored queries">{run.queries.map((query, i) => <div key={query} className="rounded border border-[#333] bg-[#202020] p-3 text-xs text-[#e4e4e7]"><span className="mr-2 font-mono text-emerald-400">{i + 1}</span>{query}</div>)}</Panel>
     <Panel icon={<Database className="h-4 w-4" />} title="All normalized provider results">

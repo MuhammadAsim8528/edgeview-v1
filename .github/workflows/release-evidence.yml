@@ -21,6 +21,7 @@ jobs:
       - run: node scripts/collect-license-texts.test.mjs
       - run: node scripts/verify-release-evidence.test.mjs
       - run: node scripts/probe-telemetry-privacy.test.mjs
+      - run: node --experimental-strip-types server/tests/latest_research_request.test.ts
       - name: Collect lock metadata without installing or running dependencies
         run: |
           mkdir -p evidence

@@ -29,7 +29,10 @@ certify deployed behavior:
 Live GET health now reports PID30112, build commit f96a6da and buildId2143be79…;
 newer source fixes are not certified deployed. Computer Use still fails during
 kernel initialization before app selection. See LIVE_RELEASE_DRIFT_2026-10-23.md.
-ResearchWorkspace async selection/error UX requires focused follow-up. All A–K,
+ResearchWorkspace async selection/error UX now has a branch source fix and
+focused request/initial-markup regressions; check/lint/V1/build/isolated release
+smoke passed. See RESEARCH_READ_RECOVERY.md. Actual rendered interaction,
+integration, live restart and package verification remain unverified. All A–K,
 real-company UI truthsets, clean Windows, updater, monitoring account delivery,
 private data separation and uncle deployment gates remain open. NOT READY.
 

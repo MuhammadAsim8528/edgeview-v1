@@ -1,0 +1,24 @@
+name: Research read contracts (not browser QA)
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  research-read-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: node --import tsx server/tests/latest_research_request.test.ts
+      - name: Initial static markup only, no browser or effect execution
+        run: node --import tsx server/tests/research_workspace_presentation.test.tsx
