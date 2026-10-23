@@ -33,6 +33,7 @@ import {
 } from './server/settings';
 import { processExportRequest, transformFullDatasetRecords, FULL_DATASET_COLUMNS, generateCsvData, generateXlsxWorkbook, contactReportColumns, flattenContactReportRows } from './server/export_manager';
 import { buildContactReport } from './server/contact_report_model';
+import { buildContactBlocksHtml } from './server/export_blocks';
 import { ExportValidationError } from './server/export_validation';
 import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/utils/header_encoder';
 import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
@@ -1803,91 +1804,12 @@ app.post('/api/export/blocks', (req, res) => {
     // Sort by name
     contacts.sort((a, b) => a.company_name.localeCompare(b.company_name));
 
-    const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>EdgeView Contact Block Export</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f3f4f6;
-      color: #111827;
-      margin: 0;
-      padding: 32px;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-      gap: 24px;
-    }
-    .card {
-      background: #ffffff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    .card-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-top: 0;
-      margin-bottom: 8px;
-    }
-    .card-meta {
-      font-size: 0.875rem;
-      color: #6b7280;
-      margin-bottom: 16px;
-    }
-    .field {
-      margin-bottom: 12px;
-      font-size: 0.95rem;
-    }
-    .label {
-      font-weight: 600;
-      color: #374151;
-      display: inline-block;
-      min-width: 80px;
-    }
-    .empty {
-      color: #9ca3af;
-      font-style: italic;
-    }
-  </style>
-</head>
-<body>
-  <h1>EdgeView Exported Company Profiles</h1>
-  <div class="grid">
-    ${contacts.map(c => {
-      const cAny = c as any;
-      return `
-      <div class="card">
-        <h2 class="card-title">${c.company_name}</h2>
-        <div class="card-meta">Added: ${new Date(cAny.first_seen || c.last_updated || Date.now()).toLocaleDateString()}</div>
-        <div class="field"><span class="label">Industry:</span> ${cAny.industry || '<span class="empty">N/A</span>'}</div>
-        <div class="field"><span class="label">Website:</span> ${cAny.website ? `<a href="${cAny.website}" target="_blank">${cAny.website}</a>` : '<span class="empty">N/A</span>'}</div>
-        <div class="field"><span class="label">Email:</span> ${c.email || '<span class="empty">N/A</span>'}</div>
-        <div class="field"><span class="label">Phone:</span> ${c.phone || '<span class="empty">N/A</span>'}</div>
-        <div class="field"><span class="label">Address:</span> ${cAny.address || '<span class="empty">N/A</span>'}</div>
-        <div class="field"><span class="label">LinkedIn:</span> ${c.linkedin ? `<a href="${c.linkedin}" target="_blank">View Profile</a>` : '<span class="empty">N/A</span>'}</div>
-      </div>
-    `;
-    }).join('')}
-  </div>
-</body>
-</html>
-    `;
-
     res.setHeader('Content-Type', 'text/html');
     res.setHeader('Content-Disposition', getSafeContentDisposition('edgeview_blocks.html'));
-    res.send(htmlContent.trim());
+    res.send(buildContactBlocksHtml(contacts).trim());
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to export blocks' });
+    console.error('Contact block export failed:', err);
+    res.status(500).json({ success: false, code: 'EXPORT_BLOCKS_FAILED', message: 'Failed to export contact blocks.', recoverable: true });
   }
 });
 
