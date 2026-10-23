@@ -33,6 +33,7 @@ jobs:
       - run: node --import tsx server/tests/export_blocks_html_safety.test.ts
       - run: node --import tsx server/tests/export_blocks_endpoint.test.ts
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
+      - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/build-metadata.test.mjs
       - run: node scripts/local-load-smoke.test.mjs

@@ -625,13 +625,22 @@ async function scrapeApifyFallback(run: V1Run, result: V1Result): Promise<boolea
   }
 }
 
-async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12_000): Promise<void> {
-  const provider = 'direct-http'; const request = { url: result.url, max_bytes: 2 * 1024 * 1024 };
+const DEFAULT_DIRECT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
+const OFFICIAL_DIRECT_PAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12_000, officialDomain?: string): Promise<void> {
+  const provider = 'direct-http'; const request = {
+    url: result.url,
+    max_bytes: officialDomain ? OFFICIAL_DIRECT_PAGE_MAX_BYTES : DEFAULT_DIRECT_PAGE_MAX_BYTES,
+    ...(officialDomain ? { max_bytes_domain: officialDomain } : {}),
+  };
   const started = Date.now(); const requestedAt = now();
+  let responseRecorded = false;
   try {
     const { response, text } = await safeFetchOutboundText(result.url, {
       timeoutMs,
       maxBytes: request.max_bytes,
+      maxBytesDomain: officialDomain,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -641,7 +650,8 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
     const headers = Object.fromEntries(response.headers.entries());
     const payload = { status: response.status, headers, body: text };
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, ...(response.ok ? { response: payload } : { response: payload, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(payload) };
-    run.raw_records.push(raw); result.raw_record_id = `${result.raw_record_id},${raw.id}`;
+    run.raw_records.push(raw); responseRecorded = true;
+    result.raw_record_id = [result.raw_record_id, raw.id].filter(Boolean).join(',');
     if (!response.ok) throw new Error(`Direct retrieval returned HTTP ${response.status}`);
     result.html = text;
     result.text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -653,7 +663,11 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
     run.timeline.push({ at: now(), stage: 'scrape', status: 'success', provider, query: result.query, latency_ms: raw.latency_ms, message: `Captured bounded HTML fallback for ${result.url}` });
   } catch (error) {
     const failure = safeError(error);
-    if (!run.raw_records.some(r => r.kind === 'scrape' && r.provider === provider && (r.request as any).url === result.url)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+    if (!responseRecorded) {
+      const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) };
+      run.raw_records.push(raw);
+      result.raw_record_id = [result.raw_record_id, raw.id].filter(Boolean).join(',');
+    }
     if (result.provider === 'direct-http') result.status = 'failed';
     result.error = result.error
       ? `${result.error}; direct retrieval: ${failure.message}`
@@ -698,7 +712,7 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
     // conflicting scrape payloads while preserving the complete HTTP response
     // (or structured failure) for every attempted page.
     run.results.push(result);
-    await scrapeDirectFallback(run, result, 10_000);
+    await scrapeDirectFallback(run, result, 10_000, domain);
     return result;
   });
 }

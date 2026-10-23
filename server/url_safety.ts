@@ -160,12 +160,13 @@ export function appendBoundedResponseChunk(chunks: Buffer[], chunk: Buffer, byte
 /** Fetches a public text page while bounding redirects, total time, and decoded body bytes. */
 export async function safeFetchOutboundText(
   urlStr: string,
-  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number } = {},
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string } = {},
 ): Promise<SafeOutboundTextResult> {
   const {
     timeoutMs = 8_000,
     maxBytes = DEFAULT_EXTERNAL_PAGE_MAX_BYTES,
     maxRedirects = 5,
+    maxBytesDomain,
     ...requestOptions
   } = options;
   const method = String(requestOptions.method || 'GET').toUpperCase();
@@ -173,6 +174,13 @@ export async function safeFetchOutboundText(
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120_000
     || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024
     || !Number.isSafeInteger(maxRedirects) || maxRedirects < 0 || maxRedirects > 10) throw new Error('Invalid retrieval bounds');
+  // An official-site allowance is not transferable to a different host through
+  // a redirect. DNS and address validation still apply independently per hop.
+  if (maxBytesDomain !== undefined) {
+    const scope = new URL(`https://${maxBytesDomain}`);
+    if (!maxBytesDomain || scope.hostname !== maxBytesDomain || scope.port || scope.pathname !== '/' || scope.search || scope.hash
+      || !isSafeExternalUrl(scope.href)) throw new Error('Invalid retrieval domain scope');
+  }
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort(new Error('RETRIEVAL_ABORTED'));
   if (requestOptions.signal?.aborted) abortFromCaller();
@@ -195,6 +203,8 @@ export async function safeFetchOutboundText(
     ensureActive();
     const parsed = new URL(currentUrl);
     const host = stripBrackets(parsed.hostname).replace(/\.$/, '');
+    const inScope = maxBytesDomain === undefined || host === maxBytesDomain || host.endsWith(`.${maxBytesDomain}`);
+    const bodyLimit = inScope ? maxBytes : Math.min(maxBytes, DEFAULT_EXTERNAL_PAGE_MAX_BYTES);
     const targetPort = parsed.port || (parsed.protocol === 'https:' ? 443 : 80);
 
     return new Promise<SafeOutboundTextResult>((resolve, reject) => {
@@ -236,7 +246,7 @@ export async function safeFetchOutboundText(
           return;
         }
         const declaredLength = Number(incoming.headers['content-length'] || 0);
-        if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+        if (Number.isFinite(declaredLength) && declaredLength > bodyLimit) {
           incoming.destroy();
           reject(new Error('RETRIEVAL_BODY_LIMIT_EXCEEDED'));
           return;
@@ -247,7 +257,7 @@ export async function safeFetchOutboundText(
         incoming.on('data', (chunk: Buffer | string) => {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
           try {
-            bytesRead = appendBoundedResponseChunk(chunks, buffer, bytesRead, maxBytes);
+            bytesRead = appendBoundedResponseChunk(chunks, buffer, bytesRead, bodyLimit);
           } catch (error: any) {
             incoming.destroy(error);
           }
