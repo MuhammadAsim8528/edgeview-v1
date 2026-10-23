@@ -42,7 +42,7 @@ import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummar
 import { persistV1ContactOverlay, projectHistoricalContactFields, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
-import { hasRecentProviderObservation, isRecentProviderOperation } from './shared/provider_telemetry';
+import { hasRecentProviderObservation, isRecentProviderOperation, projectV1ProviderUsage } from './shared/provider_telemetry';
 import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
 import { createShutdownController } from './server/shutdown';
@@ -1072,7 +1072,7 @@ app.get('/api/enrich/jobs', async (req, res) => {
       completed_companies: r.completed_companies,
       current_company: r.current_company,
       current_stage: r.current_stage,
-      resource_usage: JSON.parse(r.resource_usage || '{}'),
+      resource_usage: projectV1ProviderUsage(JSON.parse(r.resource_usage || '{}')),
       created_at: r.created_at
     }));
     res.json({ success: true, jobs });
@@ -1115,7 +1115,7 @@ app.get('/api/enrich/job/active', async (req, res) => {
       completed_companies: row.completed_companies,
       current_company: row.current_company,
       current_stage: row.current_stage,
-      resource_usage: JSON.parse(row.resource_usage || '{}'),
+      resource_usage: projectV1ProviderUsage(JSON.parse(row.resource_usage || '{}')),
       created_at: row.created_at
     }});
   } catch (err: any) {
@@ -1172,6 +1172,7 @@ app.get('/api/enrich/job/:id/progress', async (req, res) => {
         durationMs: s.durationMs,
         error: s.error,
         metrics: s.metrics || {},
+        resourceUsage: projectV1ProviderUsage(s.resourceUsage),
       }));
     
     const remainingCount = Math.max(0, job.total_companies - job.completed_companies);
@@ -1189,7 +1190,7 @@ app.get('/api/enrich/job/:id/progress', async (req, res) => {
       processing: processing.length,
       current_company: job.current_company,
       current_stage: job.current_stage,
-      resource_usage: job.resource_usage,
+      resource_usage: projectV1ProviderUsage(job.resource_usage),
       recent_results: recent,
       projections: statsAndProjections,
       updated_at: job.updated_at,
@@ -1239,8 +1240,10 @@ app.get('/api/governor/stats', async (req, res) => {
     const active = await getLatestActiveJob();
     res.json({
       success: true,
-      stats: active?.resource_usage || { serper: 0, hunter: 0, nvidia: 0, groq: 0 },
-      limits: { serperMax: 48000, hunterMax: null, nvidiaMax: null, groqMax: null }
+      stats: active ? projectV1ProviderUsage(active.resource_usage) : null,
+      usageScope: 'latest_active_job',
+      jobId: active?.id || null,
+      limits: { serperMax: null, hunterMax: null, nvidiaMax: null, groqMax: null }
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

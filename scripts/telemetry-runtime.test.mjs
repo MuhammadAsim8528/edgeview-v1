@@ -44,6 +44,27 @@ try {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.ok(ready, output);
+  const usageBeforeJob = await (await fetch(`${base}/api/governor/stats`)).json();
+  assert.equal(usageBeforeJob.stats, null, 'no job must not invent observed zero calls');
+  assert.ok(Object.values(usageBeforeJob.limits).every(value => value === null), 'account quotas are not measured by local counters');
+  const createdResponse = await fetch(`${base}/api/enrich/jobs`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_ids: ['synthetic-unresolved-job-contract'], mode: 'importer' }),
+  });
+  assert.equal(createdResponse.status, 200);
+  const createdJob = await createdResponse.json();
+  const activeSummary = (await (await fetch(`${base}/api/enrich/job/active`)).json()).job;
+  assert.equal(activeSummary.id, createdJob.jobId);
+  assert.equal(activeSummary.total_companies, 1);
+  assert.equal(Object.hasOwn(activeSummary, 'company_states'), false, 'active endpoint remains a bounded summary, not full company payload');
+  const progress = (await (await fetch(`${base}/api/enrich/job/${createdJob.jobId}/progress`)).json()).progress;
+  assert.equal(progress.recent_results.length, 1);
+  assert.deepEqual(progress.recent_results[0].resourceUsage, { serper: 0, hunter: 0, nvidia: 0, groq: 0 });
+  const jobUsage = await (await fetch(`${base}/api/governor/stats`)).json();
+  assert.equal(jobUsage.jobId, createdJob.jobId);
+  assert.equal(jobUsage.usageScope, 'latest_active_job');
+  assert.equal(Object.hasOwn(jobUsage.stats, 'firecrawl'), false);
+  assert.equal((await fetch(`${base}/api/enrich/job/${createdJob.jobId}/stop`, { method: 'POST' })).status, 200);
   const resourceSnapshot = (await (await fetch(`${base}/api/health`)).json()).resources;
   assert.ok(resourceSnapshot.rssBytes > 0);
   assert.ok(resourceSnapshot.heapUsedBytes > 0);

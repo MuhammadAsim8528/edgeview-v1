@@ -119,6 +119,7 @@ export function fetchRuntimeState(): Promise<RuntimeState> {
       if (controller.signal.aborted && !timedOut) return globalState;
       if (ok && validRuntimePayload(data)) {
         globalState = {
+          usageScope: data.usageScope ?? null,
           resources: data.resources, jobs: data.jobs, enrichment: data.enrichment, providers: data.providers,
           capabilities: data.capabilities || DEFAULT_STATE.capabilities, logs: data.logs || [],
         };

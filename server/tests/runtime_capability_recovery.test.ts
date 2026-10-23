@@ -3,6 +3,7 @@ import { fetchRuntimeState } from '../../src/hooks/useEdgeViewRuntimeState';
 
 const originalFetch = globalThis.fetch;
 const snapshot = {
+  usageScope: 'persisted_completed_provider_calls',
   success: true, resources: { serper: 42, hunter: 0, nvidia: 0, groq: 0, directHttp: 0, pagesAnalyzed: 0, cacheHits: 0, cacheMisses: 0 },
   jobs: { active: 0, completed: 0, failed: 0, partial: 0 },
   enrichment: { status: 'IDLE', currentCompany: null, completedCompanies: 0, totalCompanies: 0, quality: { complete: 0, partial: 0, notFound: 0, failed: 0, pending: 0 } },
@@ -20,12 +21,14 @@ try {
   const [initial, duplicate] = await Promise.all([first, second]);
   assert.equal(initial, duplicate);
   assert.equal(initial.capabilities.company_enrichment.available, true);
+  assert.equal(initial.usageScope, 'persisted_completed_provider_calls', 'validated scope must reach the UI state');
   globalThis.fetch = (async () => { throw new Error('Controlled offline fixture'); }) as typeof fetch;
   const offline = await fetchRuntimeState();
   assert.equal(offline.capabilities.company_enrichment.available, false);
   assert.equal(offline.capabilities.company_enrichment.status, 'UNAVAILABLE');
   assert.match(offline.capabilities.company_enrichment.reason, /Cannot reach/);
   assert.equal(offline.resources.serper, 42, 'offline status must not erase previously loaded data');
+  assert.equal(offline.usageScope, 'persisted_completed_provider_calls');
   globalThis.fetch = (async () => new Response(JSON.stringify({ success: true }))) as typeof fetch;
   const malformed = await fetchRuntimeState();
   assert.equal(malformed.capabilities.company_enrichment.available, false);

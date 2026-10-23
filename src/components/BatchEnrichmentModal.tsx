@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CompanyContact } from '../types';
+import { normalizeBatchJobSnapshot, observedBatchUsage, type BatchUsage, type ResearchJob, type CompanyResearchState } from '../utils/batchSnapshot';
+import { formatObservedCount } from '../utils/telemetryFormat';
 import { 
   Bot, Sparkles, Building2, CheckSquare, Square, X, RefreshCw, 
   Play, Pause, Sliders, AlertTriangle, Activity, CheckCircle2, 
@@ -11,61 +13,6 @@ interface BatchEnrichmentModalProps {
   onClose: () => void;
   contacts: CompanyContact[];
   refreshData?: () => void;
-}
-
-interface GovernorLimits {
-  serperMax: number;
-  firecrawlMax: number;
-  nvidiaMax: number;
-  groqMax: number;
-}
-
-interface GovernorUsage {
-  serper: number;
-  firecrawl: number;
-  nvidia: number;
-  groq: number;
-}
-
-interface CompanyResearchState {
-  id: string;
-  name: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  stage: string;
-  error?: string;
-  durationMs?: number;
-  resourceUsage: {
-    serper: number;
-    firecrawl: number;
-    nvidia: number;
-    groq: number;
-  };
-  metrics?: {
-    emailsFound: number;
-    phonesFound: number;
-    socialsFound: number;
-    leadershipFound: boolean;
-    websiteFound: boolean;
-  };
-}
-
-interface ResearchJob {
-  id: string;
-  status: 'PENDING' | 'DISCOVERING' | 'CRAWLING' | 'EXTRACTING' | 'VERIFYING' | 'COMPLETED' | 'FAILED' | 'PAUSED' | 'RESOURCE_LIMITED' | 'STOPPED';
-  importer_exporter_mode: 'importer' | 'exporter';
-  total_companies: number;
-  completed_companies: number;
-  current_company: string;
-  current_stage: string;
-  company_ids: string[];
-  company_states: Record<string, CompanyResearchState>;
-  resource_usage: {
-    serper: number;
-    firecrawl: number;
-    nvidia: number;
-    groq: number;
-  };
-  error_message?: string;
 }
 
 export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
@@ -84,14 +31,16 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   const [historicalJobs, setHistoricalJobs] = useState<any[]>([]);
   
   // Governor
-  const [govStats, setGovStats] = useState<GovernorUsage>({ serper: 0, firecrawl: 0, nvidia: 0, groq: 0 });
-  const [govLimits, setGovLimits] = useState<GovernorLimits>({ serperMax: 500, firecrawlMax: 200, nvidiaMax: 1000, groqMax: 1000 });
+  const [govStats, setGovStats] = useState<BatchUsage>(() => observedBatchUsage(null));
   
   // View states
   const [showGovPanel, setShowGovPanel] = useState(true);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRequestRef = useRef<AbortController | null>(null);
+  const openRef = useRef(isOpen);
+  openRef.current = isOpen;
 
   // Filter contacts
   const filteredContacts = contacts.filter((c) => {
@@ -102,64 +51,73 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   });
 
   // Load Governor Info
-  const fetchGovernorInfo = async () => {
+  const fetchGovernorInfo = async (signal?: AbortSignal) => {
     try {
-      const res = await fetch('/api/governor/stats');
+      const res = await fetch('/api/governor/stats', { signal });
       if (res.ok) {
         const data = await res.json();
-        if (data.success) {
-          setGovStats(data.stats);
-          setGovLimits(data.limits);
+        if (data.success && !signal?.aborted && openRef.current) {
+          setGovStats(observedBatchUsage(data.stats));
         }
       }
     } catch (err) {
-      console.error('Failed to fetch governor stats', err);
+      if (!signal?.aborted) console.error('Failed to fetch provider usage', err);
     }
   };
 
   // Load History of Jobs
-  const fetchHistoricalJobs = async () => {
+  const fetchHistoricalJobs = async (signal?: AbortSignal) => {
     try {
-      const res = await fetch('/api/enrich/jobs');
+      const res = await fetch('/api/enrich/jobs', { signal });
       if (res.ok) {
         const data = await res.json();
-        if (data.success) {
+        if (data.success && !signal?.aborted && openRef.current) {
           setHistoricalJobs(data.jobs);
         }
       }
     } catch (err) {
-      console.error('Failed to fetch jobs history', err);
+      if (!signal?.aborted) console.error('Failed to fetch jobs history', err);
     }
   };
 
-  const reattachActiveJob = async () => {
+  const reattachActiveJob = async (signal: AbortSignal) => {
     try {
-      const res = await fetch('/api/enrich/job/active');
+      const res = await fetch('/api/enrich/job/active', { signal });
       if (!res.ok) return false;
       const data = await res.json();
-      if (!data.success || !data.job?.id) return false;
-      setJobData(data.job);
-      setReportMode(data.job.importer_exporter_mode === 'exporter' ? 'exporter' : 'importer');
-      startPolling(data.job.id);
+      const summary = data.success ? normalizeBatchJobSnapshot(data.job) : null;
+      if (!summary || signal.aborted || !openRef.current) return false;
+      // The active endpoint is intentionally a bounded summary. Hydrate the
+      // complete job once before rendering so refresh does not present an empty
+      // company table and then replace it with only the latest five results.
+      const fullRes = await fetch(`/api/enrich/job/${encodeURIComponent(summary.id)}`, { signal });
+      if (!fullRes.ok) return false;
+      const fullData = await fullRes.json();
+      const job = fullData.success ? normalizeBatchJobSnapshot(fullData.job) : null;
+      if (!job || signal.aborted || !openRef.current) return false;
+      setJobData(job);
+      setReportMode(job.importer_exporter_mode);
+      startPolling(job.id);
       return true;
     } catch (err) {
-      console.error('Failed to restore active research job', err);
+      if (!signal.aborted) console.error('Failed to restore active research job', err);
       return false;
     }
   };
 
   // Initial load
   useEffect(() => {
+    const controller = new AbortController();
     if (isOpen) {
-      fetchGovernorInfo();
-      fetchHistoricalJobs();
-      void reattachActiveJob().then((restored) => {
-        if (!restored) setSelectedIds(new Set());
+      fetchGovernorInfo(controller.signal);
+      fetchHistoricalJobs(controller.signal);
+      void reattachActiveJob(controller.signal).then((restored) => {
+        if (!controller.signal.aborted && !restored) setSelectedIds(new Set());
       });
     } else {
       stopPolling();
     }
-    return () => stopPolling();
+    return () => { controller.abort(); stopPolling(); };
   }, [isOpen]);
 
   // Toggle selection
@@ -247,34 +205,40 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   // Start polling
   const startPolling = (jobId: string) => {
     stopPolling();
+    if (!openRef.current) return;
+    const controller = new AbortController();
+    pollRequestRef.current = controller;
+    let busy = false;
     setActiveJobId(jobId);
     
-    pollIntervalRef.current = setInterval(async () => {
+    const poll = async () => {
+      if (busy || controller.signal.aborted) return;
+      busy = true;
       try {
-        const res = await fetch(`/api/enrich/job/${jobId}/progress`);
+        const res = await fetch(`/api/enrich/job/${encodeURIComponent(jobId)}/progress`, { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
-          if (data.success) {
+          if (data.success && !controller.signal.aborted) {
             const progress = data.progress;
-            const recentStates = Object.fromEntries((progress.recent_results || []).map((item: any, index: number) => [
-              `${item.name}-${index}`,
-              {
-                id: `${item.name}-${index}`,
-                name: item.name,
-                status: item.status,
-                stage: item.stage,
-                error: item.error,
-                durationMs: item.durationMs,
-                resourceUsage: { serper: 0, firecrawl: 0, nvidia: 0, groq: 0 },
-                metrics: item.metrics,
-              },
-            ]));
-            setJobData(previous => ({
-              ...(previous || {} as ResearchJob),
-              ...progress,
-              company_ids: previous?.company_ids || [],
-              company_states: recentStates,
-            }));
+            setJobData(previous => {
+              const priorStates = previous?.company_states || {};
+              const recentStates = Object.fromEntries((Array.isArray(progress.recent_results) ? progress.recent_results : [])
+                .filter((item: any) => item && typeof item.name === 'string')
+                .map((item: any, index: number) => {
+                  const existing = Object.entries(priorStates).find(([, state]) => state.name === item.name);
+                  const id = existing?.[0] || `recent-${index}-${item.name}`;
+                  return [id, { ...(existing?.[1] || {}), id, name: item.name, status: item.status, stage: item.stage,
+                    error: item.error, durationMs: item.durationMs, resourceUsage: observedBatchUsage(item.resourceUsage), metrics: item.metrics }];
+                }));
+              return normalizeBatchJobSnapshot({
+                ...(previous || {} as ResearchJob),
+                ...progress,
+                company_ids: previous?.company_ids || [],
+                // Progress is intentionally bounded. Preserve full hydration
+                // and merge the observed updates onto their existing rows.
+                company_states: { ...priorStates, ...recentStates },
+              }) || previous;
+            });
             
             // Check if job finished or hit limit
             const status = progress.status;
@@ -286,14 +250,18 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
           }
         }
         // Also refresh governor metrics
-        fetchGovernorInfo();
+        if (!controller.signal.aborted) await fetchGovernorInfo(controller.signal);
       } catch (err) {
-        console.error('Polling error', err);
-      }
-    }, 3000);
+        if (!controller.signal.aborted) console.error('Polling error', err);
+      } finally { busy = false; }
+    };
+    void poll();
+    pollIntervalRef.current = setInterval(poll, 3000);
   };
 
   const stopPolling = () => {
+    pollRequestRef.current?.abort();
+    pollRequestRef.current = null;
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -345,7 +313,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
         if (resJob.ok) {
           const data = await resJob.json();
           if (data.success) {
-            setJobData(data.job);
+            setJobData(previous => normalizeBatchJobSnapshot(data.job) || previous);
           }
         }
         if (refreshData) refreshData();
@@ -372,12 +340,6 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   };
 
   if (!isOpen) return null;
-
-  // Compute percentages for Governor progress bars
-  const percentSerper = Math.min(100, Math.round((govStats.serper / govLimits.serperMax) * 100));
-  const percentFirecrawl = Math.min(100, Math.round((govStats.firecrawl / govLimits.firecrawlMax) * 100));
-  const percentNvidia = Math.min(100, Math.round((govStats.nvidia / govLimits.nvidiaMax) * 100));
-  const percentGroq = Math.min(100, Math.round((govStats.groq / govLimits.groqMax) * 100));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
@@ -477,7 +439,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
 
                 {/* Real-time individual worker table logs */}
                 <div className="space-y-2">
-                  <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Company Traversal State Registry</span>
+                  <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Recent Company Activity</span>
                   <div className="border border-[#2d2d2d] rounded-lg overflow-hidden max-h-[220px] overflow-y-auto bg-[#0c0c0c] custom-scrollbar">
                     <table className="w-full text-[11px] text-left">
                       <thead className="bg-[#181818] text-gray-400 uppercase text-[9px] tracking-wider border-b border-[#2d2d2d] sticky top-0">
@@ -514,7 +476,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                               )}
                             </td>
                             <td className="p-2 text-right font-mono text-[10px] text-gray-400">
-                              🔍{st.resourceUsage.serper} | 🕷️{st.resourceUsage.firecrawl} | 🤖{st.resourceUsage.nvidia + st.resourceUsage.groq}
+                              Serper {formatObservedCount(st.resourceUsage.serper)} | Hunter {formatObservedCount(st.resourceUsage.hunter)}
                             </td>
                           </tr>
                         ))}
@@ -661,11 +623,8 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                   </div>
 
                   {selectedIds.size > 0 && (
-                    <div className="pt-1.5 border-t border-[#2d2d2d] grid grid-cols-4 gap-2 text-[9px] font-mono text-gray-400">
-                      <div>🔍 Serper: <span className="text-white font-bold">~{Math.ceil(selectedIds.size * 1.5)} calls</span></div>
-                      <div>🕷️ Firecrawl: <span className="text-white font-bold">~{Math.ceil(selectedIds.size * 2.0)} pages</span></div>
-                      <div>🤖 NVIDIA/Groq: <span className="text-white font-bold">~{Math.ceil(selectedIds.size * 2.5)} calls</span></div>
-                      <div>⏱️ ETA: <span className="text-[#34d399] font-bold">~{Math.ceil((selectedIds.size * 12) / 60) || 1} min</span></div>
+                    <div className="pt-1.5 border-t border-[#2d2d2d] text-[10px] text-gray-400">
+                      Provider usage depends on enabled services, available evidence and retries. Account quota and completion time are not known in advance.
                     </div>
                   )}
                 </div>
@@ -740,71 +699,22 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
               >
                 <span className="flex items-center space-x-1.5">
                   <Sliders className="w-4 h-4 text-amber-500" />
-                  <span>V1 LIVE PROVIDER USAGE</span>
+                  <span>LATEST ACTIVE JOB USAGE</span>
                 </span>
                 {showGovPanel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
 
               {showGovPanel && (
                 <div className="p-3.5 space-y-4">
-                  {/* Progress bars of current consumption against hard limit budgets */}
+                  {/* Observed local calls, not guessed provider account quotas. */}
                   <div className="space-y-3 text-xs">
-                    
-                    {/* Serper */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-300 font-medium">🔍 Google Search (Serper)</span>
-                        <span className="font-mono text-gray-400">{govStats.serper} / {govLimits.serperMax}</span>
+                    {(['serper', 'hunter', 'nvidia', 'groq'] as const).map(provider => (
+                      <div key={provider} className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-300 font-medium">{provider === 'nvidia' ? 'NVIDIA NIM' : provider === 'groq' ? 'Groq' : provider === 'hunter' ? 'Hunter' : 'Serper'}</span>
+                        <span className="font-mono text-gray-400">{formatObservedCount(govStats[provider])} calls</span>
                       </div>
-                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-1.5 rounded-full transition-all duration-300 ${percentSerper >= 90 ? 'bg-rose-500' : percentSerper >= 75 ? 'bg-amber-500' : 'bg-amber-400'}`}
-                          style={{ width: `${percentSerper}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Firecrawl */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-300 font-medium">🕷️ Web Scraping (Firecrawl)</span>
-                        <span className="font-mono text-gray-400">{govStats.firecrawl} / {govLimits.firecrawlMax}</span>
-                      </div>
-                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-1.5 rounded-full transition-all duration-300 ${percentFirecrawl >= 90 ? 'bg-rose-500' : percentFirecrawl >= 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                          style={{ width: `${percentFirecrawl}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* NVIDIA */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-300 font-medium">🤖 NVIDIA LLM (Nemotron)</span>
-                        <span className="font-mono text-gray-400">{govStats.nvidia} / {govLimits.nvidiaMax}</span>
-                      </div>
-                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-1.5 rounded-full transition-all duration-300 ${percentNvidia >= 90 ? 'bg-rose-500' : percentNvidia >= 75 ? 'bg-amber-500' : 'bg-sky-500'}`}
-                          style={{ width: `${percentNvidia}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* GROQ */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-300 font-medium">🤖 Groq LLM (Llama 3.3)</span>
-                        <span className="font-mono text-gray-400">{govStats.groq} / {govLimits.groqMax}</span>
-                      </div>
-                      <div className="w-full bg-[#2a2a2a] h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-1.5 rounded-full transition-all duration-300 ${percentGroq >= 90 ? 'bg-rose-500' : percentGroq >= 75 ? 'bg-amber-500' : 'bg-sky-500'}`}
-                          style={{ width: `${percentGroq}%` }}
-                        ></div>
-                      </div>
-                    </div>
+                    ))}
+                    <p className="text-[10px] text-gray-500">Local job counts, not account balances. No active job or unreported usage stays unknown.</p>
 
                   </div>
 
@@ -881,7 +791,6 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
         <div className="px-6 py-4 border-t border-[#2d2d2d] bg-[#181818] rounded-b-xl flex justify-end">
           <button
             onClick={onClose}
-            disabled={jobData?.status === 'PENDING' || jobData?.status === 'DISCOVERING'}
             className="px-5 py-2 rounded-lg text-xs font-semibold text-white bg-[#2d2d2d] hover:bg-[#3d3d3d] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Close Pipeline Dashboard

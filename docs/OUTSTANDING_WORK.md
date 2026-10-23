@@ -267,11 +267,11 @@ in the local Codex Security workbench; source review is not visual acceptance.
 - [ ] Fix/retire unsafe legacy HTML block export and stats CSV quote handling.
 - [ ] Prevent nonloopback HOST exposure and export filename path traversal.
 - [ ] Resolve backup effective-path overrides and previous-config completeness.
-- [ ] Batch dashboard: hydrate complete job before rendering company_states;
+- [x] Batch dashboard: adapt summary/full job before rendering company_states;
   remove Firecrawl/obsolete-model labels and unknown-limit arithmetic.
 - [ ] Enable metadata-only paginated dataset export controls without requiring
   empty local row arrays to be populated.
-- [ ] Preserve usageScope when the runtime hook publishes validated state.
+- [x] Preserve usageScope when the runtime hook publishes validated state.
 - [ ] Diagnose occasional saved-config DPAPI open failure. One standalone read
   failed; synthetic DPAPI roundtrip and subsequent actual config read succeeded.
   Configuration was not replaced; do not fall back to plaintext or reset keys.
@@ -287,3 +287,32 @@ was attempted. Supported browser documentation retry failed before navigation:
 `failed to write kernel assets: The system cannot find the path specified.
 (os error 3)`. No permission dialog or visual QA occurred. Full UI/research,
 clean-machine, current hosted CI and remaining A–K gates are still open.
+
+### 2026-10-23 batch dashboard/runtime contract follow-up
+
+Batch summary restoration now provides safe empty collections until the bounded
+progress poll arrives. Polling starts immediately, coalesces overlapping polls,
+aborts on close/reselection, and cannot restart from an obsolete restoration.
+Closing the dashboard does not stop the persisted backend job. Retired-provider
+labels, fixed model names, invented account limits and guessed ETAs were removed.
+Backend job-list/summary/progress/usage responses share a four-provider projection;
+historical stored counters are not deleted. Per-company progress now carries its
+actual resource counts; absent values remain unknown. The runtime hook retains
+the backend's usageScope.
+
+Passed after these changes: npm run check; batch_snapshot (including static React
+markup, not visual QA); runtime_capability_recovery; production build;
+telemetry-runtime against an isolated compiled backend (including job creation,
+summary/progress/stop and no guessed quota); production release smoke.
+The first extended runtime test correctly failed on leaked legacy counters, which
+were fixed at the shared API projection rather than hidden in the test.
+
+Verification setup initially lacked development dependencies. Clean npm ci hit a
+Windows-locked Rollup native file; in-place npm install restored the locked tree
+with scripts disabled and no package-lock change. It reported a leftover locked
+cleanup directory; no forced deletion or unrelated process termination was used.
+
+Port 3901 now belongs to PID 30112, not the previously observed PID. Its loaded
+build and new UI behavior are not certified by these isolated checks. Supported
+browser retry on this date still failed with the kernel-assets os error 3 before
+navigation. Visual QA and the remaining security/product gates stay open.

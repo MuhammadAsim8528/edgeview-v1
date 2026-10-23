@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { normalizeBatchJobSnapshot, observedBatchUsage } from '../../src/utils/batchSnapshot';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { BatchEnrichmentModal } from '../../src/components/BatchEnrichmentModal';
+// Matches the active-job API's intentionally lightweight contract (no states).
+const summary = { id: 'job-example', status: 'DISCOVERING', importer_exporter_mode: 'importer', total_companies: 1700, completed_companies: 12, resource_usage: { serper: 40, hunter: 2, nvidia: 9, groq: 3 } };
+const restored = normalizeBatchJobSnapshot(summary)!;
+assert.ok(restored);
+assert.deepEqual(Object.values(restored.company_states), []);
+assert.deepEqual(restored.company_ids, []);
+assert.equal(restored.total_companies, 1700);
+assert.equal(restored.resource_usage.hunter, 2);
+assert.deepEqual(observedBatchUsage({ serper: 0, hunter: -1, nvidia: NaN, groq: '4', firecrawl: 100 }), { serper: 0, hunter: null, nvidia: null, groq: null });
+const full = normalizeBatchJobSnapshot({ ...summary, company_states: { first: { name: 'Example', status: 'completed' }, bad: null } })!;
+assert.equal(Object.values(full.company_states).length, 1);
+assert.equal(full.company_states.first.id, 'first');
+assert.equal(full.company_states.first.resourceUsage.serper, null, 'absent counts are not invented zero');
+for (const value of [null, [], {}, { ...summary, total_companies: -1 }, { ...summary, status: 'invented' }]) assert.equal(normalizeBatchJobSnapshot(value), null);
+const markup = renderToStaticMarkup(React.createElement(BatchEnrichmentModal, { isOpen: true, onClose: () => {}, contacts: [] }));
+assert.ok(markup.includes('Hunter') && markup.includes('NVIDIA NIM'));
+assert.ok(markup.includes('Unknown'));
+assert.ok(!/Firecrawl|Llama 3\.3|Nemotron|NaN|undefined|48000/.test(markup));
+assert.equal(renderToStaticMarkup(React.createElement(BatchEnrichmentModal, { isOpen: false, onClose: () => {}, contacts: [] })), '');
+console.log('PASS active summary/full job adaptation, safe render collections and observed provider counts');
