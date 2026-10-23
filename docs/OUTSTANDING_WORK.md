@@ -19,6 +19,24 @@ JavaScript host failed before app enumeration with: `failed to write kernel
 assets: The system cannot find the path specified. (os error 3)`. No permission UI
 or screenshot was returned; no bypass/alternate-port approach was attempted.
 
+## Paginated export increment — 2026-10-23
+
+Filtered export now uses server result count rather than the empty metadata row
+array and explicitly collects every matching page with the active search,
+country/importer/product/date filters, grouping and sort. Collector-owned paging
+bounds override caller parameters. Country reports load each selected source
+instead of substituting unrelated cached rows; page failure stops before opening
+the export modal. Full-file export also stops visibly on fetch failure. Busy
+states prevent repeat submission during collection. React review kept this work
+in click handlers (no automatic fetch effects or new polling).
+
+Focused paging tests exercise 1,503 matching rows, preserved Unicode/filter/sort
+parameters, paging overrides, failed/empty/changing responses and unchanged caller
+options. Typecheck/lint/V1/build/release smoke passed. Actual button clicks,
+large-dataset browser memory and rendered downloads remain unverified because
+Computer Use initialization fails before app enumeration. No enrichment/provider
+calls or production records were changed by these export tests.
+
 ## Continuation directive intake (sections 0–28)
 
 The 096e1b20 and e3289d42 continuation attachments are additive and equivalent

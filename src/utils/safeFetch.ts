@@ -10,11 +10,15 @@ export interface SafeFetchResult<T = any> {
 }
 
 /** Export-only collector: bounded sequential pages, never a partial success. */
-export async function fetchAllFileRows(fileId: string, signal?: AbortSignal): Promise<SafeFetchResult<{ rows: any[]; total_count: number }>> {
+export async function fetchAllFileRows(fileId: string, signal?: AbortSignal, filters: Record<string, string> = {}): Promise<SafeFetchResult<{ rows: any[]; total_count: number }>> {
   const rows: any[] = [];
   let total: number | undefined;
   while (total === undefined || rows.length < total) {
-    const page = await safeFetchJson<any>(`/api/files/${encodeURIComponent(fileId)}/data?limit=1000&offset=${rows.length}`, { signal });
+    const params = new URLSearchParams(filters);
+    // Paging bounds are owned by the collector, never by caller filters.
+    params.set('limit', '1000');
+    params.set('offset', String(rows.length));
+    const page = await safeFetchJson<any>(`/api/files/${encodeURIComponent(fileId)}/data?${params}`, { signal });
     if (!page.ok) return { ...page, data: null };
     const next = page.data?.rows;
     const count = page.data?.total_count;

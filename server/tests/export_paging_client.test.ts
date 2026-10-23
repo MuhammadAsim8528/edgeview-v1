@@ -24,4 +24,19 @@ global.fetch = (async () => Response.json({ rows: [{ id: calls }], total_count: 
 assert.equal((await fetchAllFileRows('fixture')).ok, false, 'changing totals abort instead of mixing dataset snapshots');
 global.fetch = (async () => Response.json({ rows: [], total_count: 0 })) as typeof fetch;
 assert.deepEqual((await fetchAllFileRows('fixture')).data, { rows: [], total_count: 0 });
+calls = 0;
+const filters = { search: '薬品 & trade', country: 'Sri Lanka', importer: 'Fixture Ltd', group_shipments: 'true', sort_by: 'IMPORTER', sort_dir: 'desc', limit: '999999', offset: '300' };
+global.fetch = (async input => {
+  const url = new URL(String(input), 'http://fixture.local');
+  for (const [key, value] of Object.entries(filters)) {
+    if (key !== 'limit' && key !== 'offset') assert.equal(url.searchParams.get(key), value);
+  }
+  assert.equal(url.searchParams.get('limit'), '1000');
+  assert.equal(url.searchParams.get('offset'), String(calls * 1000));
+  calls++;
+  return Response.json({ rows: rows.slice((calls - 1) * 1000, calls * 1000), total_count: rows.length });
+}) as typeof fetch;
+assert.deepEqual((await fetchAllFileRows('fixture', undefined, filters)).data?.rows, rows);
+assert.equal(calls, 2, 'filtered exports retrieve every matching page, not the displayed page');
+assert.equal(filters.offset, '300', 'caller filter object is not mutated');
 console.log('PASS bounded export paging retains all rows and rejects partial/changing responses');

@@ -879,15 +879,36 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   };
 
   // Export Filtered View via Global Export Manager
-  const handleExportFilteredCSV = () => {
-    if (sortedRows.length === 0) return;
+  const [isExportingFiltered, setIsExportingFiltered] = useState(false);
+  const handleExportFilteredCSV = async () => {
+    if (isExportingFiltered || effectiveTotalCount === 0) return;
+    let exportRows = sortedRows;
+    if (isServerSide && file) {
+      setIsExportingFiltered(true);
+      try {
+        const result = await fetchAllFileRows(file.id, undefined, {
+          group_shipments: String(isGrouped), search: debouncedSearch,
+          product: productFilter, country: countryFilter, importer: importerFilter,
+          start_date: startDate, end_date: endDate,
+          ...(sortColumn ? { sort_by: sortColumn, sort_dir: sortDirection } : {}),
+        });
+        if (!result.ok || !result.data) {
+          window.alert(result.error || 'Could not load the complete filtered export. Try again.');
+          return;
+        }
+        exportRows = result.data.rows;
+      } finally {
+        setIsExportingFiltered(false);
+      }
+    }
+    if (exportRows.length === 0) return;
 
     if (onOpenExport) {
       const baseName = file?.name?.replace(/\.[^/.]+$/, '') || 'shipment_data';
       onOpenExport({
         dataset: 'files',
         title: `${file?.name || 'File Data'} (Filtered)`,
-        records: sortedRows,
+        records: exportRows,
         columns: displayColumns.map((col) => ({ key: col.key, header: col.label })),
         filenamePrefix: `EdgeView_${baseName}_Filtered`,
       });
@@ -897,7 +918,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
     const headers = displayColumns.map((col) => col.label);
     const csvRows = [headers.join(',')];
 
-    sortedRows.forEach((row) => {
+    exportRows.forEach((row) => {
       const values = displayColumns.map((col) => {
         let val = getCellValue(row, col, fileColumns);
         if (col.key === 'date') {
@@ -1094,12 +1115,12 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           <button
             onClick={handleExportFilteredCSV}
             id="export-filtered-btn"
-            disabled={sortedRows.length === 0}
+            disabled={isExportingFiltered || isDataLoading || effectiveTotalCount === 0}
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-[#10b981] hover:bg-[#10b981]/80 disabled:opacity-50 text-white font-semibold text-xs shadow-xs transition-colors"
             title="Export currently filtered and grouped view to UTF-8 CSV"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export Filtered</span>
+            <span>{isExportingFiltered ? 'Preparing export…' : 'Export Filtered'}</span>
           </button>
 
           {/* Export Full Original CSV Button */}
@@ -1112,12 +1133,16 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 // complete dataset from the server so the export is not empty.
                 if (exportRecords.length === 0) {
                   try {
-                    const { ok, data } = await fetchAllFileRows(file.id);
-                    if (ok && data) {
-                      exportRecords = data.rows;
+                    const result = await fetchAllFileRows(file.id);
+                    if (!result.ok || !result.data) {
+                      window.alert(result.error || 'Could not load the complete dataset for export. Try again.');
+                      return;
                     }
+                    exportRecords = result.data.rows;
                   } catch (err) {
                     console.warn('Failed to load full dataset for export:', err);
+                    window.alert('Could not load the complete dataset for export. Try again.');
+                    return;
                   }
                 }
                 onOpenExport({
