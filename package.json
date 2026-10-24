@@ -23,6 +23,7 @@
     "check": "npm run typecheck && npm run lint && npm run test:v1"
   },
   "dependencies": {
+    "@sentry/node": "^11.9.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "compression": "^1.8.1",
@@ -37,6 +38,7 @@
     "motion": "^12.23.24",
     "multer": "^2.5.0",
     "pdfkit": "^0.19.1",
+    "posthog-node": "^5.57.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",

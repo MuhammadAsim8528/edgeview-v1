@@ -10,6 +10,16 @@ export interface RuntimeCapability {
   remediation?: string;
 }
 
+export interface MonitoringVendorState {
+  configured: boolean;
+  enabled: boolean;
+  state: 'DISABLED' | 'NOT_CONFIGURED' | 'CONFIGURED_UNVERIFIED' | 'TRANSPORT_OK' | 'ERROR';
+  last_attempt_at: string | null;
+  last_transport_success_at: string | null;
+  dashboard_verified: boolean;
+  error_code: string | null;
+}
+
 export interface RuntimeState {
   usageScope?: 'persisted_completed_provider_calls' | null;
   resources: {
@@ -49,6 +59,13 @@ export interface RuntimeState {
     hunter: { configured: boolean; reachable: boolean; status: string; message: string };
   };
   capabilities: Record<string, RuntimeCapability>;
+  monitoring: {
+    enabled: boolean;
+    privacy_boundary: string;
+    replay: string;
+    sentry: MonitoringVendorState;
+    posthog: MonitoringVendorState;
+  };
   logs: any[];
 }
 
@@ -66,6 +83,13 @@ const DEFAULT_STATE: RuntimeState = {
   capabilities: {
     company_enrichment: { id: 'company_enrichment', available: false, status: 'CHECKING', reason: 'Checking research capability...', dependencies: ['serper'] },
     batch_enrichment: { id: 'batch_enrichment', available: false, status: 'CHECKING', reason: 'Checking research capability...', dependencies: ['serper'] },
+  },
+  monitoring: {
+    enabled: false,
+    privacy_boundary: 'strict_allowlist_projection',
+    replay: 'OFF',
+    sentry: { configured: false, enabled: false, state: 'DISABLED', last_attempt_at: null, last_transport_success_at: null, dashboard_verified: false, error_code: null },
+    posthog: { configured: false, enabled: false, state: 'DISABLED', last_attempt_at: null, last_transport_success_at: null, dashboard_verified: false, error_code: null },
   },
   logs: [],
 };
@@ -90,7 +114,7 @@ function validRuntimePayload(value: unknown): value is RuntimeState & { success:
   if (data.usageScope !== undefined && data.usageScope !== null && data.usageScope !== 'persisted_completed_provider_calls') return false;
   if (data.success !== true || !counts(data.resources, DEFAULT_STATE.resources, Object.keys(DEFAULT_STATE.resources)) || !counts(data.jobs, DEFAULT_STATE.jobs)
     || !data.enrichment || typeof data.enrichment !== 'object' || !data.providers || typeof data.providers !== 'object'
-    || !data.capabilities || typeof data.capabilities !== 'object' || !Array.isArray(data.logs)) return false;
+    || !data.capabilities || typeof data.capabilities !== 'object' || !data.monitoring || typeof data.monitoring !== 'object' || !Array.isArray(data.logs)) return false;
   const enrichment = data.enrichment as Record<string, unknown>;
   if (!counts(enrichment.quality, DEFAULT_STATE.enrichment.quality) || typeof enrichment.status !== 'string'
     || !counts(enrichment, { completedCompanies: 0, totalCompanies: 0 })) return false;
@@ -99,6 +123,19 @@ function validRuntimePayload(value: unknown): value is RuntimeState & { success:
     const provider = providers[key] as Record<string, unknown> | undefined;
     return provider && typeof provider.configured === 'boolean' && typeof provider.reachable === 'boolean' && typeof provider.status === 'string';
   })) return false;
+  const monitoring = data.monitoring as Record<string, unknown>;
+  const validMonitoringVendor = (value: unknown) => {
+    if (!value || typeof value !== 'object') return false;
+    const vendor = value as Record<string, unknown>;
+    return typeof vendor.configured === 'boolean' && typeof vendor.enabled === 'boolean'
+      && ['DISABLED','NOT_CONFIGURED','CONFIGURED_UNVERIFIED','TRANSPORT_OK','ERROR'].includes(String(vendor.state))
+      && (vendor.last_attempt_at === null || typeof vendor.last_attempt_at === 'string')
+      && (vendor.last_transport_success_at === null || typeof vendor.last_transport_success_at === 'string')
+      && typeof vendor.dashboard_verified === 'boolean'
+      && (vendor.error_code === null || typeof vendor.error_code === 'string');
+  };
+  if (typeof monitoring.enabled !== 'boolean' || typeof monitoring.privacy_boundary !== 'string' || typeof monitoring.replay !== 'string'
+    || !validMonitoringVendor(monitoring.sentry) || !validMonitoringVendor(monitoring.posthog)) return false;
   const capabilities = data.capabilities as Record<string, unknown>;
   return ['company_enrichment','batch_enrichment'].every(key => {
     const capability = capabilities[key] as Record<string, unknown> | undefined;
@@ -121,7 +158,9 @@ export function fetchRuntimeState(): Promise<RuntimeState> {
         globalState = {
           usageScope: data.usageScope ?? null,
           resources: data.resources, jobs: data.jobs, enrichment: data.enrichment, providers: data.providers,
-          capabilities: data.capabilities || DEFAULT_STATE.capabilities, logs: data.logs || [],
+          capabilities: data.capabilities || DEFAULT_STATE.capabilities,
+          monitoring: data.monitoring || DEFAULT_STATE.monitoring,
+          logs: data.logs || [],
         };
       } else {
         const reason = timedOut ? 'Backend status timed out. EdgeView will retry automatically.'

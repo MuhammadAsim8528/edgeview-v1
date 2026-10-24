@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { projectMonitoringEvent } from '../../shared/monitoring_privacy';
 
 const identity = { version: '1.0.0-beta.2', build_id: 'a'.repeat(64), channel: 'beta', installation_id: 'a5ac169c-5820-4f77-b50d-678e2f243237' };
+const rcIdentity = { ...identity, version: '1.0.0-rc.2' };
+assert.equal(projectMonitoringEvent('app_started', {}, rcIdentity)?.version, '1.0.0-rc.2', 'release-candidate versions must be monitorable');
 const markers = ['SYNTHETIC_COMPANY', 'contact@example.test', '+94112345678', 'SYNTHETIC_EVIDENCE', 'SYNTHETIC_PROMPT', 'synthetic-user', 'nvapi-' + 'Q'.repeat(64), 'gsk_' + 'R'.repeat(64)];
 const secret = markers.join(' ');
 const input: any = {

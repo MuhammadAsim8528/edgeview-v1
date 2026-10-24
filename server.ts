@@ -52,12 +52,18 @@ import { createShutdownController } from './server/shutdown';
 import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
 import { requiresOperationalDatabase } from './server/storage_mutation_guard';
 import { contactResearchCategory } from './shared/contact_research_scope';
+import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring } from './server/monitoring';
 
 const app = express();
 let closing = false;
 const sampleResources = createResourceSampler(getProjectRoot());
 // Capture identity once: rebuilding files must not relabel an older live process.
 const runningBuild = readBuildIdentity(getProjectRoot());
+const monitoringChannel: 'stable' | 'beta' | 'canary' = runningBuild.available && /-canary\./.test(runningBuild.version)
+  ? 'canary' : runningBuild.available && /-(?:rc|beta)\./.test(runningBuild.version) ? 'beta' : 'stable';
+if (runningBuild.available) {
+  initMonitoring({ version: runningBuild.version, build_id: runningBuild.buildId, channel: monitoringChannel, installation_id: getInstallationId() });
+}
 const PORT = Number(process.env.PORT) || 3000;
 // Production/static mode is the safe default. Vite middleware must be opted
 // into explicitly so a launcher or service missing NODE_ENV cannot serve an
@@ -304,6 +310,7 @@ app.get('/api/health', (req, res) => {
       runtime_mode: useViteDevServer ? 'development' : 'production',
     },
     database,
+    monitoring: getMonitoringStatus(),
     providers: {
       nvidia: providerStatus(Boolean(settings.nvidia_api_key?.trim()), settings.nvidia_enabled),
       groq: providerStatus(Boolean(settings.groq_api_key?.trim()), settings.groq_enabled),
@@ -311,6 +318,21 @@ app.get('/api/health', (req, res) => {
       hunter: providerStatus(Boolean(settings.hunter_api_key?.trim()), settings.hunter_enabled),
     },
   });
+});
+
+app.get('/api/monitoring/status', (_req, res) => {
+  res.json({ success: true, monitoring: getMonitoringStatus() });
+});
+
+app.post('/api/monitoring/test', async (_req, res) => {
+  const resources = sampleResources();
+  const result = await captureMonitoringEvent('doctor_run', {
+    stage: 'diagnostics', outcome: 'success',
+    rss_bytes: resources.rssBytes ?? undefined,
+    heap_used_bytes: resources.heapUsedBytes ?? undefined,
+    cpu_percent: resources.cpuPercent ?? undefined,
+  }, true);
+  res.json({ success: result.projected && (result.sentry || result.posthog), delivery: result, monitoring: getMonitoringStatus() });
 });
 
 // Stats Router
@@ -1632,6 +1654,7 @@ app.get('/api/runtime/state', async (req, res) => {
       enrichment,
       providers,
       capabilities,
+      monitoring: getMonitoringStatus(),
       logs,
     };
     runtimeStateCache = { at: Date.now(), payload };
@@ -2445,6 +2468,7 @@ const globalErrorHandler: express.ErrorRequestHandler = (err, req, res, next) =>
   console.error('Express server error handler caught exception:', err);
   res.setHeader('Content-Type', 'application/json');
   const status = err.status || err.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
+  if (status >= 500) void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', error_code: 'UNEXPECTED_ERROR', http_status: status });
   const disclose = status < 500 || process.env.NODE_ENV === 'development';
   return res.status(status).json({
     success: false,
@@ -2469,7 +2493,12 @@ async function startServer() {
       const httpDrain = httpServer ? new Promise<void>(resolve => httpServer!.close(() => resolve())) : Promise.resolve();
       await Promise.all([httpDrain, stopJobsForShutdown()]);
     },
-    flush: async () => { await flushInitializedDatabase(); await closeFrontend?.(); },
+    flush: async () => {
+      await captureMonitoringEvent('app_closed', { stage: 'shutdown', outcome: 'success' }, true);
+      await shutdownMonitoring();
+      await flushInitializedDatabase();
+      await closeFrontend?.();
+    },
     report: message => console.warn(message),
     finish: code => process.exit(code),
   });
@@ -2592,6 +2621,7 @@ async function startServer() {
 
   const HOST = process.env.HOST || '127.0.0.1';
   const server = app.listen(PORT, HOST, () => {
+    void captureMonitoringEvent('app_started', { stage: 'startup', outcome: 'success' });
     console.log(`Pharma AI EdgeView backend listening on http://${HOST}:${PORT}`);
     console.log(JSON.stringify({
       event: 'startup_contract', pid: process.pid, projectRoot: getProjectRoot(),

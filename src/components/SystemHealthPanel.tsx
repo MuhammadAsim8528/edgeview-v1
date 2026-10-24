@@ -40,6 +40,8 @@ export const SystemHealthPanel: React.FC = () => {
   const [healthReport, setHealthReport] = useState<Record<string, ProviderHealth>>({});
   const [healthError, setHealthError] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  const [isTestingMonitoring, setIsTestingMonitoring] = useState(false);
+  const [monitoringError, setMonitoringError] = useState<string | null>(null);
   const healthRequest = useRef<AbortController | null>(null);
   const testRequest = useRef<AbortController | null>(null);
 
@@ -95,6 +97,22 @@ export const SystemHealthPanel: React.FC = () => {
     } finally {
       if (testRequest.current === controller) testRequest.current = null;
       if (!controller.signal.aborted) setIsTesting(false);
+    }
+  };
+
+  const testMonitoring = async () => {
+    setIsTestingMonitoring(true);
+    setMonitoringError(null);
+    try {
+      const { ok, data, error } = await safeFetchJson<any>('/api/monitoring/test', { method: 'POST' });
+      if (!ok || !data?.success) {
+        setMonitoringError(error || 'Monitoring delivery is disabled, unconfigured, or failed.');
+      }
+      await refresh();
+    } catch {
+      setMonitoringError('Monitoring delivery test could not be completed.');
+    } finally {
+      setIsTestingMonitoring(false);
     }
   };
 
@@ -205,6 +223,11 @@ export const SystemHealthPanel: React.FC = () => {
   const { cacheHits, cacheMisses } = runtimeState.resources;
   const totalQueries = typeof cacheHits === 'number' && typeof cacheMisses === 'number' ? cacheHits + cacheMisses : null;
   const cacheHitRate = formatObservedRate(cacheHits, totalQueries);
+  const monitoringBadge = (state: string) => state === 'TRANSPORT_OK'
+    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
+    : state === 'ERROR' ? 'bg-rose-950/60 text-rose-400 border-rose-800/40'
+      : state === 'CONFIGURED_UNVERIFIED' ? 'bg-amber-950/60 text-amber-400 border-amber-800/40'
+        : 'bg-gray-800 text-gray-400 border-gray-700';
 
   return (
     <div className="bg-[#262626] rounded-xl border border-[#333333] p-5 space-y-5">
@@ -234,6 +257,42 @@ export const SystemHealthPanel: React.FC = () => {
 
       {/* The V1 critical path intentionally exposes only approved providers. */}
       <RuntimeResourcesPanel />
+
+      <section className="rounded-xl border border-[#333333] bg-[#1a1a1a] p-4 space-y-3" aria-label="Remote monitoring status">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 className="text-xs font-semibold text-white">Remote monitoring</h4>
+            <p className="text-[11px] text-gray-400">Strict allowlist only · Replay {runtimeState.monitoring.replay} · Dashboard visibility is never inferred from configuration.</p>
+          </div>
+          <button
+            onClick={testMonitoring}
+            disabled={isTestingMonitoring || !runtimeState.monitoring.enabled}
+            className="px-3 py-1.5 rounded-lg border border-[#3a3a3a] bg-[#242424] text-xs text-white disabled:opacity-40 hover:border-gray-500"
+          >
+            {isTestingMonitoring ? 'Testing delivery...' : 'Test monitoring delivery'}
+          </button>
+        </div>
+        {monitoringError && <div role="alert" className="rounded border border-rose-800 bg-rose-950/40 p-2 text-xs text-rose-200">{monitoringError}</div>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {(['sentry','posthog'] as const).map(vendor => {
+            const item = runtimeState.monitoring[vendor];
+            return <div key={vendor} className="rounded-lg border border-[#333333] bg-[#202020] p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-white">{vendor === 'sentry' ? 'Sentry' : 'PostHog'}</span>
+                <span className={`px-2 py-0.5 rounded border text-[9px] font-bold ${monitoringBadge(item.state)}`}>{item.state}</span>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-gray-400">
+                <dt>Configured</dt><dd className="text-right text-gray-200">{item.configured ? 'Yes' : 'No'}</dd>
+                <dt>Enabled</dt><dd className="text-right text-gray-200">{item.enabled ? 'Yes' : 'No'}</dd>
+                <dt>Transport</dt><dd className="text-right text-gray-200">{item.last_transport_success_at ? new Date(item.last_transport_success_at).toLocaleString() : 'Not verified'}</dd>
+                <dt>Dashboard</dt><dd className="text-right text-gray-200">{item.dashboard_verified ? 'Verified' : 'NOT VERIFIED'}</dd>
+              </dl>
+              {item.error_code && <p className="text-[10px] text-rose-300">Error: {item.error_code}</p>}
+            </div>;
+          })}
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.keys(healthReport).length > 0 ? (
           Object.entries(healthReport)

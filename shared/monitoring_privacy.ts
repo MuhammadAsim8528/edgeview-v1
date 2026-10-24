@@ -39,7 +39,7 @@ const NUMBERS: Record<string, number> = {
   heap_used_bytes: 1024 ** 4, cpu_percent: 25_600,
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const VERSION = /^(?:0|[1-9]\d{0,3})\.(?:0|[1-9]\d{0,3})\.(?:0|[1-9]\d{0,3})(?:-(?:beta|canary)\.[1-9]\d{0,4})?$/;
+const VERSION = /^(?:0|[1-9]\d{0,3})\.(?:0|[1-9]\d{0,3})\.(?:0|[1-9]\d{0,3})(?:-(?:rc|beta|canary)\.[1-9]\d{0,4})?$/;
 type Primitive = string | number;
 export type SafeMonitoringEvent = Readonly<Record<string, Primitive>>;
 
