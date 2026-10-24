@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
+import { buildExportRequest } from '../utils/exportRequest';
 import {
   FileText,
   FileSpreadsheet,
@@ -22,6 +23,8 @@ export interface GlobalExportPayload {
   selectedRows?: any[];
   filters?: Record<string, any>;
   filenamePrefix?: string;
+  sourceFileId?: string;
+  recordCount?: number;
 }
 
 export type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'all';
@@ -47,7 +50,7 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
 
   if (!isOpen || !payload) return null;
 
-  const totalRecords = payload.records ? payload.records.length : 0;
+  const totalRecords = payload.recordCount ?? payload.records.length;
   const selectedCount = payload.selectedRows ? payload.selectedRows.length : 0;
   const effectiveCount = selectedCount > 0 ? selectedCount : totalRecords;
 
@@ -63,17 +66,7 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
       setExportProgress(40);
       setExportStep(`Processing ${effectiveCount} record${effectiveCount === 1 ? '' : 's'} for ${selectedFormat.toUpperCase()} export...`);
 
-      const requestBody = {
-        dataset: payload.dataset,
-        title: payload.title,
-        records: payload.records,
-        columns: payload.columns,
-        selectedRows: payload.selectedRows,
-        filters: payload.filters,
-        filenamePrefix: payload.filenamePrefix || 'EdgeView_Export',
-        format: selectedFormat,
-        report_type: payload.dataset === 'contacts' ? reportType : undefined,
-      };
+      const request = buildExportRequest(payload, selectedFormat, reportType);
 
       setExportProgress(65);
       setExportStep(
@@ -82,12 +75,12 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
           : `Compiling ${selectedFormat.toUpperCase()} document payload...`
       );
 
-      const response = await fetch('/api/export', {
+      const response = await fetch(request.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(request.body),
       });
 
       setExportProgress(85);

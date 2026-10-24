@@ -1,5 +1,34 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Full stored-file export round-trip fixed — 2026-10-24
+
+QA reference 948bcfe identified a useful server-owned export direction but was
+not cherry-picked wholesale with its interdependent UI/scope changes. This branch
+now wires FileViewer Export Full -> GlobalExportModal -> compact request builder
+-> POST /api/export/file/:fileId -> exact db.files rows -> existing export manager.
+No full-row prefetch or re-post through the browser; the 5 MB JSON limit stays.
+
+Unlike the reference candidate, this endpoint enforces files-only authority and
+rejects any client rows, selections, filters or unknown override fields. Missing
+or empty files do not fall back to global data. Client selection/filter mixtures
+fail visibly rather than silently exporting a wider file. Existing contacts and
+filtered export request semantics remain unchanged. New route shares the export
+admission budget and uses safe filename headers/validation and sanitized errors.
+
+`stored_file_export.test.ts` uses an owned isolated actual server and synthetic
+17,612-row file whose JSON exceeds 5 MiB, plus a separate sentinel file. Request
+under 1 KiB produces all 17,612 CSV rows including the last, never the sentinel.
+Oversized legacy request still gets413. Tests cover override rejection, missing
+file, all five formats on a small file, generic contact selection compatibility
+and actual modal initial markup showing the server record count without rows.
+This is source/API/initial-render evidence, NOT a browser click/download proof.
+
+Focused test, typecheck/lint/V1 suite, build and production release smoke passed.
+No runtime/data changes on Qoder's original workspace or live installation.
+Report column formatting stays the existing canonical full-dataset format;
+lossless original-file backup/all-original-column export is not claimed. Browser
+verification, very-large export concurrency/memory and live deployment remain open.
+
 ## Recovered work and privacy projection — 2026-10-24
 
 Reopened available Advice 7/8 chats and compared the earlier reconciliation

@@ -1123,32 +1123,17 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             <span>{isExportingFiltered ? 'Preparing export…' : 'Export Filtered'}</span>
           </button>
 
-          {/* Export Full Original CSV Button */}
+          {/* Export all stored rows through the server-owned report pipeline. */}
           <button
-            onClick={async () => {
+            onClick={() => {
               if (file && onOpenExport) {
                 const baseName = file.name.replace(/\.[^/.]+$/, '');
-                let exportRecords = file.rows || [];
-                // In server-side pagination mode, file.rows is empty; fetch the
-                // complete dataset from the server so the export is not empty.
-                if (exportRecords.length === 0) {
-                  try {
-                    const result = await fetchAllFileRows(file.id);
-                    if (!result.ok || !result.data) {
-                      window.alert(result.error || 'Could not load the complete dataset for export. Try again.');
-                      return;
-                    }
-                    exportRecords = result.data.rows;
-                  } catch (err) {
-                    console.warn('Failed to load full dataset for export:', err);
-                    window.alert('Could not load the complete dataset for export. Try again.');
-                    return;
-                  }
-                }
                 onOpenExport({
                   dataset: 'files',
                   title: `${file.name} (Full Dataset)`,
-                  records: exportRecords,
+                  records: [],
+                  sourceFileId: file.id,
+                  recordCount: file.summary?.total_rows ?? file.rows?.length ?? 0,
                   filenamePrefix: `EdgeView_${baseName}_Full`,
                 });
               } else {
@@ -1157,7 +1142,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             }}
             id="export-csv-btn"
             className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333] hover:bg-[#262626] text-[#e5e7eb] font-medium text-xs shadow-xs transition-colors cursor-pointer"
-            title="Export complete original raw dataset"
+            title="Export all stored rows in the selected report format"
           >
             <Download className="w-3.5 h-3.5 text-[#9ca3af]" />
             <span>Export Full</span>

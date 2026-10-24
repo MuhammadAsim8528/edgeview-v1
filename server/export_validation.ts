@@ -3,6 +3,16 @@ export class ExportValidationError extends Error {
 }
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
+/** Full-file export takes its rows exclusively from the authoritative store. */
+export function resolveStoredFileExport(input: unknown, rows: any[]) {
+  if (!record(input)) throw new ExportValidationError('Export payload must be an object.');
+  if (input.dataset !== undefined && input.dataset !== 'files') throw new ExportValidationError('Stored-file export requires the files dataset.');
+  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
+  const payload = { dataset: 'files', records: rows, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format };
+  validateExportRequest(payload);
+  return payload;
+}
+
 export function validateExportFilenamePart(value: unknown): void {
   if (value === undefined) return;
   // Check both platforms' separators and Windows drive/ADS/device syntax even
