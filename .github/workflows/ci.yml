@@ -125,6 +125,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  browser-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck:e2e
+      - run: npm run build
+      - run: npx playwright install chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EdgeView-synthetic-browser-evidence
+          path: .test-cache/e2e-artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
   docker-qa:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -135,7 +157,7 @@ jobs:
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [verify, docker-qa]
+    needs: [verify, docker-qa, browser-e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: write
