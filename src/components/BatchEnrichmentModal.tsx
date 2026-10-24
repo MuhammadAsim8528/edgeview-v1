@@ -145,6 +145,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
 
   const selectAllImporters = () => {
     setFilterType('importers');
+    setReportMode('importer');
     const importers = contacts.filter(c => {
       const type = (c.type || '').toLowerCase();
       return type.includes('importer') || type === 'both';
@@ -154,6 +155,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
 
   const selectAllExporters = () => {
     setFilterType('exporters');
+    setReportMode('exporter');
     const exporters = contacts.filter(c => {
       const type = (c.type || '').toLowerCase();
       return type.includes('exporter') || type === 'both';
@@ -168,6 +170,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
 
   const selectSelectedImporters = () => {
     setFilterType('importers');
+    setReportMode('importer');
     const currentImporters = Array.from(selectedIds).filter(id => {
       const c = contacts.find(co => co.id === id);
       const type = (c?.type || '').toLowerCase();
@@ -186,6 +189,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
 
   const selectSelectedExporters = () => {
     setFilterType('exporters');
+    setReportMode('exporter');
     const currentExporters = Array.from(selectedIds).filter(id => {
       const c = contacts.find(co => co.id === id);
       const type = (c?.type || '').toLowerCase();

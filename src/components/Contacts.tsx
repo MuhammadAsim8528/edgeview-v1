@@ -81,9 +81,9 @@ export const Contacts: React.FC<ContactsProps> = ({
   const researchReason = researchCapability?.reason || 'Checking company research capability...';
   const researchRemediation = researchCapability?.remediation || '';
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('edgeview_contacts_selected') || '[]'); } catch { return []; }
-  });
+  // Batch selections are intentionally session-local. Persisting a large checked
+  // set across reloads can leave a destructive/expensive bulk action silently armed.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'directory'>(() => localStorage.getItem('edgeview_contacts_view') === 'directory' ? 'directory' : 'table');
   const [directoryData, setDirectoryData] = useState<IntlDirectory | null>(null);
   const [directoryLoading, setDirectoryLoading] = useState<boolean>(false);
@@ -107,7 +107,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   useEffect(() => { localStorage.setItem('edgeview_contacts_search', searchTerm); }, [searchTerm]);
   useEffect(() => { localStorage.setItem('edgeview_contacts_filter', filterType); }, [filterType]);
-  useEffect(() => { localStorage.setItem('edgeview_contacts_selected', JSON.stringify(selectedIds)); }, [selectedIds]);
+  useEffect(() => { localStorage.removeItem('edgeview_contacts_selected'); }, []);
   useEffect(() => { localStorage.setItem('edgeview_contacts_view', viewMode); }, [viewMode]);
   useEffect(() => { localStorage.setItem('edgeview_contacts_page', String(currentPage)); }, [currentPage]);
   useEffect(() => { localStorage.setItem('edgeview_contacts_page_size', String(pageSize)); }, [pageSize]);
@@ -289,6 +289,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       title: 'Company Contact Directory',
                       records: filteredContacts,
                       filenamePrefix: 'EdgeView_Contact_Directory',
+                      defaultReportType: filterType === 'EXPORTER' ? 'exporter' : filterType === 'IMPORTER' ? 'importer' : 'both',
                     });
                   } else {
                     setIsExportModalOpen(true);
@@ -349,6 +350,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       records: selectedRecords.length > 0 ? selectedRecords : filteredContacts,
                       selectedRows: selectedIds,
                       filenamePrefix: 'EdgeView_Selected_Contacts',
+                      defaultReportType: filterType === 'EXPORTER' ? 'exporter' : filterType === 'IMPORTER' ? 'importer' : 'both',
                     });
                   } else {
                     setIsExportModalOpen(true);

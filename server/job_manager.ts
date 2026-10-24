@@ -294,9 +294,18 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const phones = contactPages.flatMap(result => {
     const html = String(result.html || '');
     const text = String(result.text || '');
+    const explicitInternationalPhones = [...text.matchAll(/\+\d[\d\s().-]{7,}\d/g)].map(match => {
+      const value = match[0];
+      const start = Math.max(0, (match.index || 0) - 24);
+      const prefix = text.slice(start, match.index || 0);
+      // Keep an explicit fax number out of the ordinary phone list while still
+      // admitting current phone/cell/mobile numbers published by the official site.
+      return /fax\s*[:.\-]?\s*$/i.test(prefix) ? '' : value;
+    }).filter(Boolean);
     return [
       ...[...html.matchAll(/tel:([^"'<>]+)/gi)].map(match => safeDecodeUriComponent(match[1].split('?')[0])),
-      ...[...text.matchAll(/(?:phone|telephone|tel|mobile|whatsapp|call us)\s*[:.\-]?\s*(\+?\d[\d\s().-]{7,}\d)/gi)].map(match => match[1]),
+      ...[...text.matchAll(/(?:phone|telephone|tel|mobile|cell|whatsapp|call us)\s*[:.\-]?\s*(\+?\d[\d\s().-]{7,}\d)/gi)].map(match => match[1]),
+      ...explicitInternationalPhones,
     ];
   })
     .map(value => value.replace(/\s+/g, ' ').trim())
