@@ -1820,28 +1820,8 @@ function sanitizeCSVCell(val: any): string {
 // Export an authoritative uploaded file without round-tripping every row through
 // the browser JSON body. This keeps large exports bounded by the server's own
 // persisted dataset rather than Express request-size limits.
-app.post('/api/export/file/:fileId', async (req, res) => {
-  try {
-    const file = db.getFileById(req.params.fileId);
-    if (!file || !Array.isArray(file.rows) || file.rows.length === 0) {
-      return res.status(404).json({ error: 'No data to export for this file' });
-    }
-    const payload = { ...req.body, dataset: req.body?.dataset || 'files', records: file.rows };
-    const { buffer, contentType, filename, failedFormats } = await processExportRequest(payload);
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', getSafeContentDisposition(filename || 'export'));
-    if (failedFormats && failedFormats.length > 0) {
-      res.setHeader('X-Export-Failed-Formats', getSafeAsciiHeaderValue(failedFormats));
-    }
-    return res.send(buffer);
-  } catch (err: any) {
-    console.error('File Export Error:', err);
-    if (err instanceof ExportValidationError) return res.status(400).json({ error: err.message, code: 'INVALID_EXPORT_REQUEST' });
-    return res.status(500).json({ error: err?.message || 'Failed to process file export request' });
-  }
-});
-
-// Unified Global Export Manager Endpoint
+// A single validated handler is authoritative; duplicate route definitions can
+// silently shadow stricter validation in Express.
 app.post('/api/export/file/:fileId', async (req, res) => {
   try {
     const file = db.getFileById(req.params.fileId);

@@ -9,6 +9,7 @@ import {
   findFileByHash,
   deleteFileFromHistory,
 } from '../sqlite_persistence';
+import { captureMonitoringEvent, classifyMonitoringError } from '../monitoring';
 
 export const uploadRouter = express.Router();
 
@@ -84,6 +85,7 @@ function uploadFileHandler(req: express.Request, res: express.Response, next: ex
 // File Upload Handler Route
 async function handleUpload(req: express.Request, res: express.Response) {
   res.setHeader('Content-Type', 'application/json');
+  const monitoringStartedAt = Date.now();
 
   try {
     // 1. Validate File Existence
@@ -108,6 +110,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
 
     // 3. Validate File Extension
     if (!validateUploadFileName(originalName)) return unsupportedFile(res);
+    void captureMonitoringEvent('dataset_import_started', { stage: 'import', outcome: 'started' });
 
     const buffer = req.file.buffer;
     const fileHash = computeFileHash(buffer);
@@ -118,6 +121,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
       if (existingFile) {
         db.files.set(existingFile.id, existingFile);
         db.syncCompaniesFromFiles();
+        void captureMonitoringEvent('dataset_import_completed', { stage: 'import', outcome: 'skipped', duration_ms: Date.now() - monitoringStartedAt });
         return res.status(200).json({
           success: true,
           data: existingFile,
@@ -142,6 +146,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
       }
     } catch (parseErr: any) {
       console.warn('File parsing rejected:', parseErr);
+      void captureMonitoringEvent('dataset_import_failed', { stage: 'import', outcome: 'failed', duration_ms: Date.now() - monitoringStartedAt });
       return res.status(422).json({
         success: false,
         error: 'The uploaded file could not be parsed safely. Verify the file format and try again.',
@@ -235,6 +240,9 @@ async function handleUpload(req: express.Request, res: express.Response) {
         }
       }
       const code = dbErr?.code === 'DISK_FULL' ? 'DISK_FULL' : 'PERSISTENCE_WRITE_FAILED';
+      const duration_ms = Date.now() - monitoringStartedAt;
+      void captureMonitoringEvent('dataset_import_failed', { stage: 'import', outcome: 'failed', duration_ms });
+      void captureMonitoringEvent('runtime_error', { stage: 'storage', outcome: 'failed', duration_ms, error_code: code });
       return res.status(507).json({
         success: false,
         code,
@@ -266,6 +274,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
       rows: [], // Omit raw rows array from HTTP payload; client queries /api/files/:id/data for paginated view
     };
 
+    void captureMonitoringEvent('dataset_import_completed', { stage: 'import', outcome: 'success', duration_ms: Date.now() - monitoringStartedAt });
     return res.status(201).json({
       success: true,
       message: 'File uploaded and parsed successfully',
@@ -275,6 +284,9 @@ async function handleUpload(req: express.Request, res: express.Response) {
     });
   } catch (err: any) {
     console.error('File upload route error:', err);
+    const duration_ms = Date.now() - monitoringStartedAt;
+    void captureMonitoringEvent('dataset_import_failed', { stage: 'import', outcome: 'failed', duration_ms });
+    void captureMonitoringEvent('runtime_error', { stage: 'import', outcome: 'failed', duration_ms, error_code: classifyMonitoringError(err) });
     return res.status(500).json({
       success: false,
       error: err?.message || 'An unexpected error occurred while processing the file upload.',

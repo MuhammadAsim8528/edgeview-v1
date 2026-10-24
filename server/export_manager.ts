@@ -21,6 +21,7 @@ import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
 import { generateDocxReportStream, generateGenericDocxReportStream, generateInternationalImporterDirectoryDocx } from './docx_stream';
 import { generatePdfReport, generateInternationalImporterDirectoryPdf } from './pdf_report';
 import { TradeRelationshipResolver } from './trade_relationship_resolver';
+import { captureMonitoringEvent, classifyMonitoringError } from './monitoring';
 import { buildContactReport, getReportColumnLabels, type ContactReport } from './contact_report_model';
 import {
   getInternationalImporterDirectory,
@@ -260,11 +261,11 @@ export function transformFullDatasetRecords(records: any[]): Record<string, stri
     };
 
     const rawDate = getVal('BE_DATE', 'BE_DATE_1', 'be_date', 'BE_DT', 'shipment_date', 'SHIP_DATE', 'Date', 'date');
-    const rawImporter = getVal('IMPORTER', 'importer', 'importer_name', 'BUYER_NAME', 'Customer_Name', 'BUYER', 'CONSIGNEE', 'Importer');
+    const rawImporter = getVal('IMPORTER', 'importer', 'importer_name', 'IMPORTER_NAME', 'Importer Name', 'BUYER_NAME', 'Customer_Name', 'BUYER', 'CONSIGNEE', 'Importer');
     const rawCountry = getVal('COUNTRY', 'country', 'ORIGIN', 'origin', 'country_name', 'Country');
-    const rawExporter = getVal('EXPORTER', 'exporter', 'exporter_name', 'SUPPLIER_NAME', 'Supplier_Name', 'SELLER', 'SUPPLIER', 'Exporter');
+    const rawExporter = getVal('EXPORTER', 'exporter', 'exporter_name', 'EXPORTER_NAME', 'Exporter Name', 'SUPPLIER_NAME', 'Supplier_Name', 'SELLER', 'SUPPLIER', 'Exporter');
     const rawItem = getVal('ITEM', 'item', 'product_name', 'Drug_Class', 'CAT_NUMBER', 'goods_description', 'Item');
-    const rawTotFc = getVal('TOT_FC', 'tot_fc', 'total_cost_usd', 'VAL_USD', 'Invoice_Value', 'Total Value (USD)', 'Total FC (USD)', 'total_fc_usd');
+    const rawTotFc = getVal('TOT_FC', 'tot_fc', 'total_cost_usd', 'VAL_USD', 'VALUE_USD', 'Value USD', 'Invoice_Value', 'Total Value (USD)', 'Total FC (USD)', 'total_fc_usd');
 
     return {
       'Date': formatDatasetDate(rawDate, r),
@@ -1218,11 +1219,18 @@ export async function processExportRequest(payload: NormalizedExportPayload): Pr
   filename: string;
   failedFormats?: string[];
 }> {
-  validateExportRequest(payload);
-  const isContactDataset = payload.dataset === 'contacts' || payload.dataset === 'outreach';
-  if (isContactDataset) {
-    return processContactExport(payload);
-  } else {
-    return processFullDatasetExport(payload);
+  const startedAt = Date.now();
+  void captureMonitoringEvent('export_started', { stage: 'export', outcome: 'started' });
+  try {
+    validateExportRequest(payload);
+    const isContactDataset = payload.dataset === 'contacts' || payload.dataset === 'outreach';
+    const result = isContactDataset ? await processContactExport(payload) : await processFullDatasetExport(payload);
+    void captureMonitoringEvent('export_completed', { stage: 'export', outcome: 'success', duration_ms: Date.now() - startedAt });
+    return result;
+  } catch (error) {
+    const duration_ms = Date.now() - startedAt;
+    void captureMonitoringEvent('export_failed', { stage: 'export', outcome: 'failed', duration_ms });
+    void captureMonitoringEvent('runtime_error', { stage: 'export', outcome: 'failed', duration_ms, error_code: classifyMonitoringError(error) });
+    throw error;
   }
 }

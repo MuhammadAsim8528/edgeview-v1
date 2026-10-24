@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { gunzipSync } from 'node:zlib';
 
-const requests: Array<{ url: string; body: string; headers: http.IncomingHttpHeaders }> = [];
+const requests: Array<{ url: string; body: Buffer; headers: http.IncomingHttpHeaders }> = [];
 const server = http.createServer((req, res) => {
   const chunks: Buffer[] = [];
   req.on('data', chunk => chunks.push(Buffer.from(chunk)));
   req.on('end', () => {
-    requests.push({ url: req.url || '', body: Buffer.concat(chunks).toString('utf8'), headers: req.headers });
+    requests.push({ url: req.url || '', body: Buffer.concat(chunks), headers: req.headers });
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end('{}');
@@ -63,7 +64,10 @@ await new Promise(resolve => setTimeout(resolve, 100));
 server.close();
 
 assert.ok(requests.length >= 2, `expected both vendor transports, got ${requests.length}`);
-const combined = requests.map(entry => `${entry.url}\n${JSON.stringify(entry.headers)}\n${entry.body}`).join('\n');
+const combined = requests.map(entry => {
+  const body = entry.headers['content-encoding'] === 'gzip' ? gunzipSync(entry.body).toString('utf8') : entry.body.toString('utf8');
+  return `${entry.url}\n${JSON.stringify(entry.headers)}\n${body}`;
+}).join('\n');
 for (const marker of markers) assert.ok(!combined.includes(marker), `private marker escaped monitoring boundary: ${marker.slice(0, 24)}`);
 assert.ok(!combined.includes('C:\\Users\\'), 'local filesystem path escaped monitoring boundary');
 assert.ok(combined.includes(identity.installation_id), 'pseudonymous installation id should support correlation');
