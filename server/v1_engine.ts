@@ -879,6 +879,35 @@ export function getV1Run(runId: string): V1Run | null {
   return hydrateV1RunFromStorage(persisted, dataDir) as V1Run;
 }
 
+/** Activity-only projection: never hydrate raw/provider/page evidence blobs. */
+export function listV1ActivityEvents(limit = 500): Array<V1TimelineEvent & { run_id: string; company_name: string }> {
+  const maximum = Number.isFinite(limit) ? Math.max(1, Math.min(1000, Math.trunc(limit))) : 500;
+  const events: Array<V1TimelineEvent & { run_id: string; company_name: string }> = [];
+  const newest = (a: V1TimelineEvent, b: V1TimelineEvent) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0);
+  for (const header of listV1RunSummaries(20)) {
+    try {
+      if (!/^[a-z0-9-]+$/i.test(header.id)) throw new Error('Invalid stored run identity');
+      const stored = JSON.parse(fs.readFileSync(runPath(header.id), 'utf8'));
+      if (stored.id !== header.id || !Array.isArray(stored.timeline)) throw new Error('Invalid stored run timeline');
+      for (const event of stored.timeline) {
+        if (!event || typeof event.at !== 'string' || typeof event.stage !== 'string' || typeof event.status !== 'string' || typeof event.message !== 'string') throw new Error('Invalid stored event');
+        events.push({ at: event.at, stage: event.stage, status: event.status, message: event.message,
+          ...(typeof event.provider === 'string' ? { provider: event.provider } : {}),
+          ...(typeof event.query === 'string' ? { query: event.query } : {}),
+          ...(typeof event.error === 'string' ? { error: event.error } : {}),
+          ...(Number.isFinite(event.latency_ms) ? { latency_ms: event.latency_ms } : {}),
+          run_id: header.id, company_name: header.company_name });
+        if (events.length >= maximum * 2) { events.sort(newest); events.length = maximum; }
+      }
+    } catch {
+      // This is a current read failure, not an invented historical provider event.
+      events.push({ at: now(), stage: 'storage', status: 'failed', message: 'Stored research timeline could not be read.',
+        error: 'RUN_TIMELINE_READ_FAILED', run_id: header.id, company_name: header.company_name });
+    }
+  }
+  return events.sort(newest).slice(0, maximum);
+}
+
 export function listV1Runs(): V1Run[] {
   if (!fs.existsSync(dataDir)) return [];
   return fs.readdirSync(dataDir).filter(name => /^run-[a-z0-9-]+\.json$/i.test(name)).map(name => {
