@@ -6,7 +6,8 @@ discarding the existing release work. Canonical task state: docs/OUTSTANDING_WOR
 
 ## Actual architecture and runtime
 
-- Root: C:\Users\asimh\antigravity\Pharma-AI-File-Viewer-2026-08-13-3b80f.
+- Root: the EdgeView project root, which is the folder this deliverable is unpacked into;
+  the build machine's absolute developer path is withheld from a shipped document.
 - Frontend entry: src/main.tsx → App.tsx; React 19, TypeScript, Tailwind, Vite.
 - Backend entry: server.ts → compiled dist/server.cjs; Node 24 and Express.
 - Launcher: EdgeView.bat, dependency recovery and build-if-needed scripts; opens

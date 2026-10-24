@@ -1,8 +1,9 @@
 # EdgeView V1 deployment verification
 
-Verified on 2026-10-11 in the real installation:
+Verified on 2026-10-11 in the real installation.
 
-`C:\Users\asimh\antigravity\Pharma-AI-File-Viewer-2026-08-13-3b80f`
+The installation was the EdgeView project root on the machine that produced this
+verification; the absolute developer path is withheld from a shipped document.
 
 ## Result
 
