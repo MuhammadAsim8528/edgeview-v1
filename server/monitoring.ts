@@ -99,17 +99,23 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
           integrations: [],
           tracesSampleRate: 0,
           beforeSend(event) {
-            return {
-              event_id: event.event_id,
-              timestamp: event.timestamp,
-              platform: 'node',
-              level: event.level,
-              message: event.message,
-              release: event.release,
-              environment: event.environment,
-              tags: event.tags,
-              extra: event.extra,
-            };
+            // Preserve the SDK's concrete ErrorEvent shape for compatibility, but
+            // remove every field outside EdgeView's strict projected envelope.
+            // captureMonitoringEvent only supplies message/tags/numeric extra, yet
+            // this second boundary prevents SDK-added request/user/context data
+            // from escaping if defaults change in a future SDK release.
+            delete event.breadcrumbs;
+            delete event.contexts;
+            delete event.request;
+            delete event.user;
+            delete event.exception;
+            delete event.transaction;
+            delete event.modules;
+            delete event.server_name;
+            delete event.fingerprint;
+            delete event.sdk;
+            event.platform = 'node';
+            return event;
           },
         });
         sentryInitialized = true;
