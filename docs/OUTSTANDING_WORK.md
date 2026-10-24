@@ -1,5 +1,25 @@
 # EdgeView completion ledger — 2026-10-20
 
+## File page failure/loading/count truth — 2026-10-24
+
+FileViewer now associates each server page with its exact file/filter/sort/page
+request and retry generation. A changed request cannot render the previous
+page's rows; obsolete requests are aborted and cannot replace current state.
+Loading, failed and genuinely empty pages are distinct. A 30-second deadline
+ends stalled loads and a Retry page action is available. Failed responses do not
+expose arbitrary server error text. Both pagination labels use the effective
+server count rather than sorted browser-local rows (previously zero).
+
+The page boundary validates rows, exact page length/count and filter options;
+an incomplete 200 response is a visible failure, not an empty-success fallback.
+PASS: file_page_loading synthetic malformed/partial/500/offline/timeout/abort
+cases and initial static FileViewer loading markup; stored_file_export now also
+loads actual API page two (rows 25–49 of 17,612) through the new loader; full
+check/build/release smoke. Initial typecheck caught union-narrowing/test promise
+typing mistakes; corrected and rerun. No real browser interactions verified.
+Remaining: rendered retry/navigation race QA, refresh/scroll persistence,
+country totals/accessibility, full UI inventory and other release gates.
+
 ## Official-page phone recall corrected — 2026-10-24
 
 Reimplemented the useful phone-recall portion of QA reference f527fe1, without

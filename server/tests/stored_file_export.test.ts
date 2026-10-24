@@ -9,6 +9,7 @@ import { buildExportRequest } from '../../src/utils/exportRequest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GlobalExportModal } from '../../src/components/GlobalExportModal';
+import { loadFilePage } from '../../src/utils/filePage';
 
 const count = 17612;
 const sourcePayload = { dataset: 'files', title: 'Synthetic full file', records: [], sourceFileId: 'large-synthetic', recordCount: count };
@@ -56,6 +57,14 @@ try {
   assert.ok(ready, 'owned isolated actual server must start');
   const seeded = once(child, 'message', { signal: AbortSignal.timeout(30_000) }); child.send(count);
   assert.ok((await seeded)[0].jsonBytes > 5 * 1024 * 1024, 'fixture must exceed the unchanged JSON limit');
+  const secondPage = await loadFilePage(`${base}/api/files/large-synthetic/data?limit=25&offset=25&group_shipments=false`, 25, 25, new AbortController().signal);
+  assert.ok(secondPage.ok);
+  if (secondPage.ok) {
+    assert.equal(secondPage.total, count);
+    assert.equal(secondPage.rows.length, 25);
+    assert.equal(secondPage.rows[0].Importer, 'Synthetic Importer 25');
+    assert.equal(secondPage.rows[24].Importer, 'Synthetic Importer 49');
+  }
   const oversized = await post('/api/export', { dataset: 'files', format: 'csv', records: [], padding: 'x'.repeat(5 * 1024 * 1024) });
   assert.equal(oversized.status, 413, 'do not raise request limit to conceal the round-trip bug');
   const response = await post(request.url, request.body);
