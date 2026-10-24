@@ -135,6 +135,20 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
   }
 }
 
+export function classifyMonitoringError(error: unknown): string {
+  const message = String((error as any)?.message ?? error ?? '').toLowerCase();
+  const code = String((error as any)?.code ?? '').toLowerCase();
+  if (code === 'enospc' || /no space left|disk.{0,12}full|storage.{0,12}full/.test(message)) return 'DISK_FULL';
+  if (/\b(?:401|403)\b|unauthor|forbidden|credential|api[ _-]?key|auth(?:entication)?/.test(message)) return 'PROVIDER_AUTH_FAILED';
+  if (/\b429\b|rate[ _-]?limit|quota/.test(message)) return 'PROVIDER_RATE_LIMITED';
+  if (/timeout|timed out|aborted?/.test(message)) return 'PROVIDER_TIMEOUT';
+  if (/schema|invalid.{0,20}response|malformed|json.{0,12}(?:parse|invalid)/.test(message)) return 'PROVIDER_SCHEMA_INVALID';
+  if (/sqlite|database/.test(message)) return 'DATABASE_UNAVAILABLE';
+  if (/persist|write.{0,12}fail/.test(message)) return 'PERSISTENCE_WRITE_FAILED';
+  if (/fetch failed|econn|enotfound|socket|network|dns|unavailable/.test(message)) return 'PROVIDER_UNAVAILABLE';
+  return 'UNEXPECTED_ERROR';
+}
+
 export function getMonitoringStatus() {
   return {
     enabled: monitoringEnabled,

@@ -53,7 +53,7 @@ assert.equal(projected.provider, undefined); assert.equal(projected.error_code, 
 assert.equal(projected.message, 'Unexpected EdgeView error');
 for (const code of ['constructor', '__proto__', 'toString']) assert.equal(projectMonitoringEvent('runtime_error', { error_code: code }, identity)!.error_code, 'UNEXPECTED_ERROR');
 assert.equal(projectMonitoringEvent('operation_timing', { http_status: 200.5 }, identity)!.http_status, undefined);
-for (const [key, maximum] of Object.entries({ duration_ms: 3600000, http_status: 599, rss_bytes: 1024 ** 4, heap_used_bytes: 1024 ** 4, cpu_percent: 25600 })) {
+for (const [key, maximum] of Object.entries({ duration_ms: 3600000, http_status: 599, rss_bytes: 1024 ** 4, heap_used_bytes: 1024 ** 4, disk_free_bytes: 1024 ** 5, uptime_seconds: 315576000, cpu_percent: 25600 })) {
   assert.equal(projectMonitoringEvent('resource_sample', { [key]: maximum }, identity)![key], maximum);
   assert.equal(projectMonitoringEvent('resource_sample', { [key]: maximum + 1 }, identity)![key], undefined);
 }

@@ -52,7 +52,7 @@ import { createShutdownController } from './server/shutdown';
 import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
 import { requiresOperationalDatabase } from './server/storage_mutation_guard';
 import { contactResearchCategory } from './shared/contact_research_scope';
-import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring } from './server/monitoring';
+import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring, classifyMonitoringError } from './server/monitoring';
 
 const app = express();
 let closing = false;
@@ -330,6 +330,8 @@ app.post('/api/monitoring/test', async (_req, res) => {
     stage: 'diagnostics', outcome: 'success',
     rss_bytes: resources.rssBytes ?? undefined,
     heap_used_bytes: resources.heapUsedBytes ?? undefined,
+    disk_free_bytes: resources.diskAvailableBytes ?? undefined,
+    uptime_seconds: resources.uptimeSeconds ?? undefined,
     cpu_percent: resources.cpuPercent ?? undefined,
   }, true);
   res.json({ success: result.projected && (result.sentry || result.posthog), delivery: result, monitoring: getMonitoringStatus() });
@@ -866,6 +868,7 @@ app.post('/api/settings/test', async (req, res) => {
 // EdgeView V1: exact company + country -> AI query generation -> deterministic
 // provider retrieval, immutable raw capture, normalization and display.
 app.post('/api/enrich/company', async (req, res) => {
+  const monitoringStartedAt = Date.now();
   try {
     const { company_name, id, forceFetch, country, entity_key } = req.body;
     let cleanCompany: string;
@@ -892,7 +895,16 @@ app.post('/api/enrich/company', async (req, res) => {
     if (!resolvedCountry) return res.status(400).json({ success: false, error: 'Country is required for identity-anchored V1 enrichment.' });
     const capability = buildV1Capabilities().company_enrichment;
     if (!capability.available) return unavailableCapabilityResponse(res, capability);
+    void captureMonitoringEvent('research_started', { stage: 'run', outcome: 'started' });
     const run = await runV1Enrichment(cleanCompany, resolvedCountry);
+    const monitoringDuration = Date.now() - monitoringStartedAt;
+    if (run.status === 'FAILED') {
+      const failure = run.timeline.find(event => event.error)?.error || 'V1 enrichment failed';
+      void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed', duration_ms: monitoringDuration });
+      void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', duration_ms: monitoringDuration, error_code: classifyMonitoringError(failure) });
+    } else {
+      void captureMonitoringEvent('research_completed', { stage: 'run', outcome: 'success', duration_ms: monitoringDuration });
+    }
     if (ctxContact) {
       const projected = projectHistoricalContactFields(run);
       Object.assign(ctxContact, projected, {
@@ -923,6 +935,9 @@ app.post('/api/enrich/company', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Error in /api/enrich/company:', err);
+    const duration_ms = Date.now() - monitoringStartedAt;
+    void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed', duration_ms });
+    void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', duration_ms, error_code: classifyMonitoringError(err) });
     res.status(400).json({ success: false, error: err?.message || 'Failed to enrich company details' });
   }
 });
@@ -938,6 +953,7 @@ app.get('/api/v1/runs/:id', (req, res) => {
 });
 
 app.post('/api/enrich/batch', async (req, res) => {
+  const monitoringStartedAt = Date.now();
   try {
     const { company_ids, forceFetch } = req.body;
     if (!Array.isArray(company_ids) || company_ids.length === 0) {
@@ -946,6 +962,7 @@ app.post('/api/enrich/batch', async (req, res) => {
 
     const capability = buildV1Capabilities().batch_enrichment;
     if (!capability.available) return unavailableCapabilityResponse(res, capability);
+    void captureMonitoringEvent('research_started', { stage: 'run', outcome: 'started' });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1008,7 +1025,12 @@ app.post('/api/enrich/batch', async (req, res) => {
           const qStatus = run.status === 'COMPLETED' ? 'COMPLETE' : run.status === 'PARTIAL' ? 'PARTIAL' : 'FAILED';
           if (qStatus === 'COMPLETE') summaryStats.completed++;
           else if (qStatus === 'PARTIAL') summaryStats.partial++;
-          else summaryStats.failed++;
+          else {
+            summaryStats.failed++;
+            const failure = run.timeline.find(event => event.error)?.error || 'V1 enrichment failed';
+            void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed' });
+            void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', error_code: classifyMonitoringError(failure) });
+          }
 
           const statusBadge = qStatus === 'COMPLETE' ? '✅ Complete' : qStatus === 'PARTIAL' ? '⚡ Partial' : '⚠️ Not Found';
           const statusText = `${statusBadge}: ${contact.company_name}`;
@@ -1027,6 +1049,8 @@ app.post('/api/enrich/batch', async (req, res) => {
         } catch (err: any) {
           processedCount++;
           summaryStats.failed++;
+          void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed' });
+          void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', error_code: classifyMonitoringError(err) });
           sendEvent('progress', {
             processed: processedCount,
             total: totalCount,
@@ -1049,10 +1073,14 @@ app.post('/api/enrich/batch', async (req, res) => {
     };
 
     await executeWithLimit(3, company_ids);
+    void captureMonitoringEvent('research_completed', { stage: 'run', outcome: 'success', duration_ms: Date.now() - monitoringStartedAt });
     sendEvent('done', { message: 'Batch enrichment complete', summary: summaryStats });
     res.end();
   } catch (err: any) {
     console.error('Error in /api/enrich/batch:', err);
+    const duration_ms = Date.now() - monitoringStartedAt;
+    void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed', duration_ms });
+    void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', duration_ms, error_code: classifyMonitoringError(err) });
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to start batch enrichment' });
     } else {
@@ -2487,6 +2515,7 @@ async function startServer() {
   let lockHandle: number | null = null;
   let httpServer: ReturnType<typeof app.listen> | undefined;
   let closeFrontend: (() => Promise<void>) | undefined;
+  let monitoringResourceTimer: NodeJS.Timeout | undefined;
   const shutdown = createShutdownController({
     stopIntake: () => { closing = true; },
     drain: async () => {
@@ -2494,6 +2523,7 @@ async function startServer() {
       await Promise.all([httpDrain, stopJobsForShutdown()]);
     },
     flush: async () => {
+      if (monitoringResourceTimer) clearInterval(monitoringResourceTimer);
       await captureMonitoringEvent('app_closed', { stage: 'shutdown', outcome: 'success' }, true);
       await shutdownMonitoring();
       await flushInitializedDatabase();
@@ -2622,6 +2652,20 @@ async function startServer() {
   const HOST = process.env.HOST || '127.0.0.1';
   const server = app.listen(PORT, HOST, () => {
     void captureMonitoringEvent('app_started', { stage: 'startup', outcome: 'success' });
+    const emitResourceSample = () => {
+      const resources = sampleResources();
+      void captureMonitoringEvent('resource_sample', {
+        stage: 'diagnostics', outcome: 'success',
+        rss_bytes: resources.rssBytes ?? undefined,
+        heap_used_bytes: resources.heapUsedBytes ?? undefined,
+        disk_free_bytes: resources.diskAvailableBytes ?? undefined,
+        uptime_seconds: resources.uptimeSeconds ?? undefined,
+        cpu_percent: resources.cpuPercent ?? undefined,
+      });
+    };
+    emitResourceSample();
+    monitoringResourceTimer = setInterval(emitResourceSample, 300_000);
+    monitoringResourceTimer.unref?.();
     console.log(`Pharma AI EdgeView backend listening on http://${HOST}:${PORT}`);
     console.log(JSON.stringify({
       event: 'startup_contract', pid: process.pid, projectRoot: getProjectRoot(),
