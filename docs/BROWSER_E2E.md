@@ -65,6 +65,14 @@ These tests establish only their synthetic scenarios, not the historical
 
 ## Official setup references
 
+The Settings case changes provider toggles, primary AI provider and Groq model
+through the rendered form, verifies the actual persisted API response, restarts
+the owned backend, and checks both restored controls and backend values. It also
+checks that a disabled provider cannot be tested and a missing Groq key produces
+a visible failure, not success. No credentials or provider credits are used.
+This proves persistence for these settings, not configured-provider routing,
+real authentication, quota handling, or live installation behavior.
+
 - [Playwright web-server/environment behavior](https://playwright.dev/docs/test-webserver)
 - [Screenshots and retained traces](https://playwright.dev/docs/test-use-options)
 - [CI browser installation and worker guidance](https://playwright.dev/docs/ci)

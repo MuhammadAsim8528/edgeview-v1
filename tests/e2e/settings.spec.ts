@@ -1,0 +1,42 @@
+import { test, expect } from './fixtures';
+
+test('provider choices saved through Settings survive backend restart', async ({ page, context, runtime }, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  await page.goto('/');
+  await page.locator('#nav-tab-settings').click();
+  const serper = page.locator('form section').filter({ hasText: 'Identity-anchored web search' });
+  const hunter = page.locator('form section').filter({ hasText: 'Domain email intelligence' });
+  await expect(serper.getByRole('checkbox', { name: 'Enabled' })).toBeChecked();
+  await serper.getByRole('checkbox', { name: 'Enabled' }).uncheck();
+  await hunter.getByRole('checkbox', { name: 'Enabled' }).uncheck();
+  await page.getByRole('radio', { name: 'Groq', exact: true }).check();
+  await page.getByRole('textbox', { name: 'Groq model', exact: true }).fill('openai/gpt-oss-20b');
+  const saved = page.waitForResponse(response => response.url().endsWith('/api/settings') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save configuration', exact: true }).click();
+  expect((await saved).ok()).toBe(true);
+  await expect(page.getByText('EdgeView V1 provider settings saved. Stored keys remain hidden.', { exact: true })).toBeVisible();
+  const assertStored = async () => {
+    const response = await page.request.get('/api/settings');
+    expect(response.ok()).toBe(true);
+    expect(await response.json()).toMatchObject({ serper_enabled: false, hunter_enabled: false, primary_ai_provider: 'GROQ', groq_model: 'openai/gpt-oss-20b', has_serper_key: false, has_hunter_key: false });
+  };
+  await assertStored();
+  await page.goto('about:blank');
+  await runtime.restart();
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toBeVisible();
+  await expect(serper.getByRole('checkbox', { name: 'Enabled' })).not.toBeChecked();
+  await expect(hunter.getByRole('checkbox', { name: 'Enabled' })).not.toBeChecked();
+  await expect(serper.getByRole('button', { name: 'Test connection', exact: true })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: 'Groq', exact: true })).toBeChecked();
+  await expect(page.getByRole('textbox', { name: 'Groq model', exact: true })).toHaveValue('openai/gpt-oss-20b');
+  await assertStored();
+  const groq = page.locator('form section').filter({ hasText: 'AI fallback for query planning and extraction' });
+  await groq.getByRole('button', { name: 'Test connection', exact: true }).click();
+  await expect(groq.getByText(/API Key is empty/i)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('settings-restart.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});
