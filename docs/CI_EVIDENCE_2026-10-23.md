@@ -2,6 +2,14 @@
 
 ## Fresh verification — 2026-10-25
 
+Follow-up exact 69395357b6a45215df6eefc732da1db9b649b94a: run 40127483594
+completed/failure. Windows verify succeeded, including both new pinned scanner
+steps; docker-qa succeeded; browser-e2e failed (contact-export navigation race,
+11/12 browser cases passed); publish skipped. The downloaded browser artifact's
+error-context snapshot was inspected: Files was rendered after Contacts was
+clicked. The separate upload-navigation fix and adversarial regression address
+this; do not rewrite this failed historical run as PASS after a later fix.
+
 The older observations below are historical, not current failure claims.
 For exact commit c0bf5b7ea65d8a9ad938fec263bf2944571e5e18, GitHub REST
 reports release-check run 40125836554 completed/success: verify, browser-e2e

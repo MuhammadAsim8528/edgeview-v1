@@ -174,6 +174,8 @@ export function useAppStore() {
     try {
       setUploading(true);
       setError(null);
+      // Navigate for the user's upload action, never for its later completion.
+      setActiveTab('files');
       const formData = new FormData();
       formData.append('file', file);
 
@@ -199,7 +201,6 @@ export function useAppStore() {
         setSelectedFileId(newFile.id);
         setSelectedFile(newFile);
       }
-      setActiveTab('files');
       showToast(`Successfully uploaded ${file.name}`, 'success');
       return newFile;
     } catch (err: any) {

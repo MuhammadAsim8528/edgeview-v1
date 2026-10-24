@@ -1,5 +1,26 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Upload completion overriding newer navigation — 2026-10-25
+
+Hosted run 40127483594 on 6939535 passed Windows verify (including the actual
+pinned scanner and its controls) and Docker QA, but browser E2E failed 1/12:
+contact-export clicked Contacts then could not find All exporters. Downloaded
+CI error-context evidence showed Files rendered while Contacts retained focus.
+The entire run is FAIL, not green because the security steps passed.
+
+A deterministic isolated browser regression held the real post-upload file-list
+refresh, navigated to Contacts, then released the real response. It failed on
+the old build after upload success (17.8s): completion switched back to Files.
+The upload action now navigates at initiation, never after its asynchronous
+refreshes. No longer wait arbitrarily or weaken the existing contact assertion.
+
+Rebuilt focused browser set passed 4/4 (43.7s): delayed upload navigation and
+refresh persistence, contact export/selection, grouping/page restoration, and
+normal upload/full CSV/country/restart. Typecheck, lint, E2E typecheck and build
+passed. The preceding complete 13-case suite passed locally (4.8m), but did not
+expose this race; the new explicit negative control did. This does not claim
+all asynchronous selection/interaction races are closed or live QA completed.
+
 ## Stalled export recovery — 2026-10-25
 
 A real browser negative control reached the export dialog and remained at 65%
