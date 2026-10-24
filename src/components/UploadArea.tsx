@@ -72,11 +72,21 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   return (
     <div className={compact ? 'w-full' : 'w-full mb-6'}>
       <div
+        role="button"
+        tabIndex={uploading ? -1 : 0}
+        aria-label={compact ? 'Add or replace dataset file' : 'Upload dataset file'}
+        aria-disabled={uploading}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`${compact ? 'min-h-12 px-4 py-2 flex-row justify-between' : 'h-36 p-4 flex-col justify-center'} border-2 border-dashed rounded-xl flex items-center transition-colors cursor-pointer group ${
+        onClick={() => { if (!uploading) fileInputRef.current?.click(); }}
+        onKeyDown={(event) => {
+          if (!uploading && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        className={`${compact ? 'min-h-12 px-4 py-2 flex-row justify-between' : 'h-36 p-4 flex-col justify-center'} border-2 border-dashed rounded-xl flex items-center transition-colors cursor-pointer group focus:outline-none focus:ring-2 focus:ring-[#10b981] ${
           isDragging
             ? 'border-[#10b981] bg-[#10b981]/10'
             : 'border-[#262626] bg-[#1a1a1a] hover:border-[#10b981]'

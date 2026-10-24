@@ -1125,30 +1125,15 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
 
           {/* Export Full Original CSV Button */}
           <button
-            onClick={async () => {
+            onClick={() => {
               if (file && onOpenExport) {
                 const baseName = file.name.replace(/\.[^/.]+$/, '');
-                let exportRecords = file.rows || [];
-                // In server-side pagination mode, file.rows is empty; fetch the
-                // complete dataset from the server so the export is not empty.
-                if (exportRecords.length === 0) {
-                  try {
-                    const result = await fetchAllFileRows(file.id);
-                    if (!result.ok || !result.data) {
-                      window.alert(result.error || 'Could not load the complete dataset for export. Try again.');
-                      return;
-                    }
-                    exportRecords = result.data.rows;
-                  } catch (err) {
-                    console.warn('Failed to load full dataset for export:', err);
-                    window.alert('Could not load the complete dataset for export. Try again.');
-                    return;
-                  }
-                }
                 onOpenExport({
                   dataset: 'files',
                   title: `${file.name} (Full Dataset)`,
-                  records: exportRecords,
+                  records: file.rows || [],
+                  sourceFileId: file.id,
+                  recordCount: file.summary?.total_rows || file.rows?.length || 0,
                   filenamePrefix: `EdgeView_${baseName}_Full`,
                 });
               } else {
@@ -1498,7 +1483,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           <div className="p-3 bg-[#262626] border-t border-[#333333] flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center space-x-3 text-xs text-[#9ca3af] font-mono">
               <span>
-                Page {currentPage} of {totalPages} ({sortedRows.length.toLocaleString()} items)
+                Page {currentPage} of {totalPages}
               </span>
 
               {/* Rows Per Page Selector */}

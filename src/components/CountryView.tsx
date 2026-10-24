@@ -294,16 +294,18 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
       totalValue += r.total_value;
     });
 
+    const authoritativeSummary = selectedFile?.summary;
     return {
       totalCountries: uniqueCountries.size || countries.length,
-      // Parsed row bodies are loaded lazily for large files. The country API
-      // still supplies authoritative per-country importer counts, so avoid a
-      // misleading zero while those rows are not resident in the browser.
-      totalImporters: uniqueImporters.size || countries.reduce((sum, item) => sum + (item.importers_count || 0), 0),
-      totalExporters: uniqueExporters.size,
-      totalValue,
+      // Parsed row bodies are loaded lazily for large files. Reuse authoritative
+      // upload metadata when the browser intentionally does not hold every row.
+      totalImporters: uniqueImporters.size
+        || authoritativeSummary?.importers_count
+        || countries.reduce((sum, item) => sum + (item.importers_count || 0), 0),
+      totalExporters: uniqueExporters.size || authoritativeSummary?.exporters_count || 0,
+      totalValue: totalValue || authoritativeSummary?.total_cost_usd || 0,
     };
-  }, [clientRows, countries]);
+  }, [clientRows, countries, selectedFile]);
 
   // Export Full Hierarchical Country Summary via Global Export Manager
   const [isExporting, setIsExporting] = useState(false);
@@ -444,7 +446,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Ship className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-white mt-2">
-            {clientRows.length > 0 ? globalStats.totalExporters.toLocaleString() : '—'}
+            {globalStats.totalExporters > 0 ? globalStats.totalExporters.toLocaleString() : '-'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Unique supply partners</div>
         </div>
@@ -458,7 +460,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             className="text-2xl font-bold font-mono text-[#10b981] mt-2 truncate"
             title={formatFullCurrency(globalStats.totalValue)}
           >
-            {clientRows.length > 0 ? formatCurrency(globalStats.totalValue) : '—'}
+            {globalStats.totalValue > 0 ? formatCurrency(globalStats.totalValue) : '-'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Total valuation in USD</div>
         </div>
@@ -518,8 +520,18 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
                 <div key={c.country} className="transition-colors">
                   {/* Level 1: Country Header Item */}
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${c.country} country details`}
                     onClick={() => toggleCountry(c.country)}
-                    className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-[#242424] transition-colors select-none"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void toggleCountry(c.country);
+                      }
+                    }}
+                    className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-[#242424] transition-colors select-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#10b981]"
                   >
                     <div className="flex items-center space-x-3">
                       <div className="text-gray-400">
