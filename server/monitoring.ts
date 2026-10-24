@@ -95,7 +95,6 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
           dsn: sentryDsn,
           release: `edgeview@${nextIdentity.version}`,
           environment: nextIdentity.channel,
-          sendDefaultPii: false,
           integrations: [],
           tracesSampleRate: 0,
           beforeSend(event) {
