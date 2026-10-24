@@ -1,5 +1,21 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Rendered Settings save/restart verification — 2026-10-24
+
+PASS: isolated Chromium Settings form disabled Serper/Hunter, selected Groq,
+changed its model, saved through the real configuration endpoint, verified the
+persisted API state, restarted the owned backend, and verified restored UI and
+API values. Disabled provider connection control stayed disabled; testing Groq
+without a key displayed the real missing-key failure. No page errors. Focused
+test passed (16.1s test / 32.5s run); E2E TypeScript check passed. All five browser
+scenarios then passed together (2.0m). No product-code
+change was needed for this scenario. Screenshot: settings-restart.png in the
+local E2E results. No production data, credentials or external calls were used.
+
+This closes only the synthetic settings persistence scenario. Actual configured
+provider routing/health, real auth/quota states, live deployment, manual visual
+QA and the larger release gates remain open.
+
 ## Activity endpoints no longer hydrate evidence bodies — 2026-10-24
 
 Both /api/logs/enrichment and /api/enrich/activity-log now use a shared
