@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
 import {
@@ -22,6 +22,7 @@ import { ParsedFile } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { formatCurrency, formatFullCurrency } from '../utils/formatters';
 import { buildCountryOverview, isCountryOverview, type CountryOverview } from '../../shared/country_overview';
+import { loadCountryDetails, loadImporterDetails } from '../utils/countryDetails';
 
 interface CountryViewProps {
   files?: ParsedFile[];
@@ -74,6 +75,15 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
   const [expandedImporters, setExpandedImporters] = useState<Record<string, boolean>>({});
   const [importerDetails, setImporterDetails] = useState<Record<string, ExporterDetail[]>>({});
   const [loadingImporter, setLoadingImporter] = useState<Record<string, boolean>>({});
+  const [countryErrors, setCountryErrors] = useState<Record<string, string>>({});
+  const [importerErrors, setImporterErrors] = useState<Record<string, string>>({});
+  const pendingDetails = useRef(new Map<string, AbortController>());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    const pending = pendingDetails.current;
+    return () => { mounted.current = false; for (const controller of pending.values()) controller.abort(); pending.clear(); };
+  }, []);
 
   // Collect all rows client-side as fallback / direct engine
   const clientRows = useMemo(() => {
@@ -160,32 +170,35 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
   }, [clientRows, selectedFile, completeLocalScope, overviewRetry]);
 
   // Expand / Collapse Country
-  const toggleCountry = async (countryName: string) => {
+  const toggleCountry = async (countryName: string, retry = false) => {
     const isCurrentlyExpanded = Boolean(expandedCountries[countryName]);
-    setExpandedCountries((prev) => ({ ...prev, [countryName]: !isCurrentlyExpanded }));
+    setExpandedCountries((prev) => ({ ...prev, [countryName]: retry || !isCurrentlyExpanded }));
 
-    if (isCurrentlyExpanded) return;
+    if (isCurrentlyExpanded && !retry) return;
     if (countrySummaries[countryName] && countryImporters[countryName]) return;
-
+    const requestKey = JSON.stringify(['country', countryName]);
+    if (pendingDetails.current.has(requestKey)) return;
+    if (pendingDetails.current.size >= 4) { setCountryErrors(prev => ({ ...prev, [countryName]: 'Other details are loading. Please retry shortly.' })); return; }
+    const controller = new AbortController();
+    pendingDetails.current.set(requestKey, controller);
+    setCountryErrors(prev => ({ ...prev, [countryName]: '' }));
     setLoadingCountry((prev) => ({ ...prev, [countryName]: true }));
 
     try {
-      const fileParam = selectedFile ? `?file_id=${selectedFile.id}` : '';
-      const encodedCountry = encodeURIComponent(countryName);
-
-      const [sumRes, impRes] = await Promise.all([
-        safeFetchJson<CountrySummary>(`/api/countries/${encodedCountry}/summary${fileParam}`),
-        safeFetchJson<ImporterItem[]>(`/api/countries/${encodedCountry}/importers${fileParam}`),
-      ]);
-
-      if (sumRes.ok && sumRes.data && impRes.ok && impRes.data) {
-        setCountrySummaries((prev) => ({ ...prev, [countryName]: sumRes.data! }));
-        setCountryImporters((prev) => ({ ...prev, [countryName]: impRes.data! }));
+      const result = await loadCountryDetails(countryName, selectedFile?.id, controller.signal);
+      if (!mounted.current || controller.signal.aborted) return;
+      if (result.ok) {
+        setCountrySummaries((prev) => ({ ...prev, [countryName]: result.data.summary }));
+        setCountryImporters((prev) => ({ ...prev, [countryName]: result.data.importers }));
         setLoadingCountry((prev) => ({ ...prev, [countryName]: false }));
         return;
       }
-    } catch (err) {
-      console.warn('Country detail API fetch failed, using client fallback:', err);
+    } catch { if (!mounted.current || controller.signal.aborted) return; }
+    finally { if (pendingDetails.current.get(requestKey) === controller) pendingDetails.current.delete(requestKey); }
+    if (!completeLocalScope) {
+      setCountryErrors(prev => ({ ...prev, [countryName]: 'Country details could not be loaded. Please retry.' }));
+      setLoadingCountry(prev => ({ ...prev, [countryName]: false }));
+      return;
     }
 
     // Client-side fallback for Country summary & importers
@@ -233,30 +246,35 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
   };
 
   // Expand / Collapse Importer
-  const toggleImporter = async (countryName: string, importerName: string) => {
-    const key = `${countryName}::${importerName}`;
+  const toggleImporter = async (countryName: string, importerName: string, retry = false) => {
+    const key = JSON.stringify(['importer', countryName, importerName]);
     const isCurrentlyExpanded = Boolean(expandedImporters[key]);
 
-    setExpandedImporters((prev) => ({ ...prev, [key]: !isCurrentlyExpanded }));
+    setExpandedImporters((prev) => ({ ...prev, [key]: retry || !isCurrentlyExpanded }));
 
-    if (isCurrentlyExpanded) return;
+    if (isCurrentlyExpanded && !retry) return;
     if (importerDetails[key]) return;
-
+    if (pendingDetails.current.has(key)) return;
+    if (pendingDetails.current.size >= 4) { setImporterErrors(prev => ({ ...prev, [key]: 'Other details are loading. Please retry shortly.' })); return; }
+    const controller = new AbortController();
+    pendingDetails.current.set(key, controller);
+    setImporterErrors(prev => ({ ...prev, [key]: '' }));
     setLoadingImporter((prev) => ({ ...prev, [key]: true }));
 
     try {
-      const fileParam = selectedFile ? `?file_id=${selectedFile.id}` : '';
-      const encodedCountry = encodeURIComponent(countryName);
-      const encodedImporter = encodeURIComponent(importerName);
-
-      const { ok, data } = await safeFetchJson<ExporterDetail[]>(`/api/countries/${encodedCountry}/${encodedImporter}/details${fileParam}`);
-      if (ok && Array.isArray(data)) {
-        setImporterDetails((prev) => ({ ...prev, [key]: data }));
+      const result = await loadImporterDetails(countryName, importerName, selectedFile?.id, controller.signal);
+      if (!mounted.current || controller.signal.aborted) return;
+      if (result.ok) {
+        setImporterDetails((prev) => ({ ...prev, [key]: result.data }));
         setLoadingImporter((prev) => ({ ...prev, [key]: false }));
         return;
       }
-    } catch (err) {
-      console.warn('Importer details API fetch failed, using client fallback:', err);
+    } catch { if (!mounted.current || controller.signal.aborted) return; }
+    finally { if (pendingDetails.current.get(key) === controller) pendingDetails.current.delete(key); }
+    if (!completeLocalScope) {
+      setImporterErrors(prev => ({ ...prev, [key]: 'Importer details could not be loaded. Please retry.' }));
+      setLoadingImporter(prev => ({ ...prev, [key]: false }));
+      return;
     }
 
     // Client-side fallback for Importer Details
@@ -506,8 +524,13 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
                 <div key={c.country} className="transition-colors">
                   {/* Level 1: Country Header Item */}
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${c.country}`}
+                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void toggleCountry(c.country); } }}
                     onClick={() => toggleCountry(c.country)}
-                    className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-[#242424] transition-colors select-none"
+                    className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-[#242424] focus-visible:outline-2 focus-visible:outline-sky-400 transition-colors select-none"
                   >
                     <div className="flex items-center space-x-3">
                       <div className="text-gray-400">
@@ -540,6 +563,11 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
                         <div className="p-4 flex items-center space-x-2 text-xs text-gray-400">
                           <RefreshCw className="w-4 h-4 animate-spin text-[#10b981]" />
                           <span>Loading summary and importers list for {c.country}...</span>
+                        </div>
+                      ) : countryErrors[c.country] ? (
+                        <div role="alert" className="text-sm text-amber-200">
+                          <p>{countryErrors[c.country]}</p>
+                          <button type="button" onClick={() => toggleCountry(c.country, true)} className="mt-2 px-3 py-1.5 rounded bg-sky-700 text-white">Retry country details</button>
                         </div>
                       ) : (
                         <>
@@ -599,7 +627,7 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
                             ) : (
                               <div className="space-y-2">
                                 {importers.map((imp) => {
-                                  const impKey = `${c.country}::${imp.importer}`;
+                                  const impKey = JSON.stringify(['importer', c.country, imp.importer]);
                                   const isImpExpanded = Boolean(expandedImporters[impKey]);
                                   const details = importerDetails[impKey] || [];
                                   const isImpLoading = Boolean(loadingImporter[impKey]);
@@ -611,8 +639,13 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
                                     >
                                       {/* Level 3 Importer Card Header */}
                                       <div
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-expanded={isImpExpanded}
+                                        aria-label={`${isImpExpanded ? 'Collapse' : 'Expand'} importer ${imp.importer}`}
+                                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void toggleImporter(c.country, imp.importer); } }}
                                         onClick={() => toggleImporter(c.country, imp.importer)}
-                                        className="p-3.5 flex flex-wrap items-center justify-between cursor-pointer hover:bg-[#242424] transition-colors select-none gap-2"
+                                        className="p-3.5 flex flex-wrap items-center justify-between cursor-pointer hover:bg-[#242424] focus-visible:outline-2 focus-visible:outline-sky-400 transition-colors select-none gap-2"
                                       >
                                         <div className="flex items-center space-x-2.5 min-w-0">
                                           <div className="text-gray-400 shrink-0">
@@ -659,6 +692,11 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
                                             <div className="p-3 flex items-center space-x-2 text-xs text-gray-400">
                                               <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#10b981]" />
                                               <span>Loading exporter breakdown...</span>
+                                            </div>
+                                          ) : importerErrors[impKey] ? (
+                                            <div role="alert" className="text-sm text-amber-200">
+                                              <p>{importerErrors[impKey]}</p>
+                                              <button type="button" onClick={() => toggleImporter(c.country, imp.importer, true)} className="mt-2 px-3 py-1.5 rounded bg-sky-700 text-white">Retry importer details</button>
                                             </div>
                                           ) : details.length === 0 ? (
                                             <div className="text-xs text-gray-500 italic p-2">

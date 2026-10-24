@@ -10,6 +10,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GlobalExportModal } from '../../src/components/GlobalExportModal';
 import { loadFilePage } from '../../src/utils/filePage';
+import { loadCountryDetails, loadImporterDetails } from '../../src/utils/countryDetails';
 
 const count = 17612;
 const sourcePayload = { dataset: 'files', title: 'Synthetic full file', records: [], sourceFileId: 'large-synthetic', recordCount: count };
@@ -70,6 +71,19 @@ try {
   assert.equal((await fetch(`${base}/api/countries?overview=1&file_id=missing`)).status, 404);
   const legacyCountries = await (await fetch(`${base}/api/countries?file_id=small-synthetic`)).json();
   assert.deepEqual(legacyCountries, [{ country: 'Kenya', importers_count: 2 }], 'legacy list contract remains unchanged');
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => originalFetch(new URL(String(input), base), init);
+  try {
+    const country = await loadCountryDetails('Kenya', 'small-synthetic', new AbortController().signal);
+    assert.ok(country.ok);
+    if (country.ok) {
+      assert.equal(country.data.summary.total_export_value, 3);
+      assert.equal(country.data.importers.length, 2);
+    }
+    const importer = await loadImporterDetails('Kenya', 'Synthetic Importer 0', 'small-synthetic', new AbortController().signal);
+    assert.ok(importer.ok);
+    if (importer.ok) { assert.equal(importer.data.length, 1); assert.equal(importer.data[0].exporter, 'Synthetic Exporter'); }
+  } finally { globalThis.fetch = originalFetch; }
   const secondPage = await loadFilePage(`${base}/api/files/large-synthetic/data?limit=25&offset=25&group_shipments=false`, 25, 25, new AbortController().signal);
   assert.ok(secondPage.ok);
   if (secondPage.ok) {

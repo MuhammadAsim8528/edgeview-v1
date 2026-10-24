@@ -1,5 +1,27 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Country drill-down failure boundaries — 2026-10-24
+
+Country/importer detail loaders validate response shapes and numeric fields,
+encode scope identifiers, use a 30s deadline, and distinguish genuine empty data
+from transport/schema failure. Failed requests cannot synthesize empty/partial
+details from metadata-only browser rows. Complete scoped local copies retain
+the existing fallback. UI exposes retryable error states. At most four detail
+operations (a country operation has two HTTP calls) are in flight; duplicate
+opens share the pending operation. Unmount cancels pending work and prevents
+obsolete completion updates. Importer keys use unambiguous namespaced tuples.
+
+Country/importer headers now have button roles, focusability, Enter/Space
+activation, aria-expanded/labels and visible focus styling. These are source
+changes, NOT a claim that actual keyboard/browser behavior has been exercised.
+PASS: country_details synthetic success/encoded scope/malformed/500/offline/
+zero/empty/timeout/cancellation, actual backend country/importer loaders in the
+isolated stored_file_export fixture, npm run check, build/release smoke.
+NOT VERIFIED: real rendered retries, request-cap behavior, unmount races or
+keyboard interaction. Broader country export partial-row fallback and plain
+object country-name cache key edge cases remain for independent investigation.
+Visual QA and all other outstanding production gates remain open.
+
 ## Country overview uses its actual dataset scope — 2026-10-24
 
 The existing /api/countries route now supports overview=1, returning the list
