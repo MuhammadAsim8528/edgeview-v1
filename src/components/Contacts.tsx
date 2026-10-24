@@ -291,7 +291,6 @@ export const Contacts: React.FC<ContactsProps> = ({
                       defaultReportType: contactExportReportType(filterType),
                       records: filteredContacts,
                       filenamePrefix: 'EdgeView_Contact_Directory',
-                      defaultReportType: filterType === 'EXPORTER' ? 'exporter' : filterType === 'IMPORTER' ? 'importer' : 'both',
                     });
                   } else {
                     setIsExportModalOpen(true);
@@ -353,7 +352,6 @@ export const Contacts: React.FC<ContactsProps> = ({
                       records: selectedRecords.length > 0 ? selectedRecords : filteredContacts,
                       selectedRows: selectedIds,
                       filenamePrefix: 'EdgeView_Selected_Contacts',
-                      defaultReportType: filterType === 'EXPORTER' ? 'exporter' : filterType === 'IMPORTER' ? 'importer' : 'both',
                     });
                   } else {
                     setIsExportModalOpen(true);
