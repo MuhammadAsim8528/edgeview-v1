@@ -1,5 +1,38 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Activity-log failure truth and V1 schema mapping — 2026-10-24
+
+Trace: existing /api/logs/system returns runtime log records; existing
+/api/logs/enrichment returns immutable V1 timeline events with at/stage/status.
+The old viewer expected timestamp/step/uppercase status, and swallowed failed
+fetches into an apparent empty result. A new real-browser regression failed on
+the old compiled code because no failure message was rendered after HTTP 500.
+
+Viewer now shows loading and retryable failure separately from valid empty and
+search-no-match results. It does not expose raw server errors or invent a zero
+entry count when unavailable. Previously loaded entries can remain visibly stale.
+Requests have a 30s deadline and abort/identity cleanup on refresh, tab change and
+unmount. V1 at/stage and failed status map to timestamp/stage/ERROR; legacy
+timestamp/step remains supported. Unknown values stay explicit. Projected buffer
+is bounded at 1,000, final/rendered rows at 500 newest returned events, with bounded
+field lengths. Source events and raw research evidence are not modified.
+
+PASS: activity_log_projection uses actual V1TimelineEvent shape plus legacy,
+malformed/empty/unknown/10,000-event ordering/bounds and input preservation;
+runtime_log_security checks existing file/console/API redaction; full checks,
+production build/release smoke and four rendered E2E cases (28.4s total).
+The new browser case exercises 500 and malformed-200 errors, unknown count,
+real empty refresh recovery, tab switch and search feedback. E2E test mode does
+not install the runtime logger, so populated live/system log display is NOT
+verified. Actual V1 timeline presentation is projection-tested, not a live-company
+run or remote-support delivery test. React guidance informed bounded memoized
+search and cleanup; no new logging framework or backend authority was added.
+
+Open: enrichment log API still hydrates complete runs to extract timelines;
+this frontend bound does not fix that backend memory path. Provider-toggle
+save/restart QA, populated log/race/timeout UI cases, diagnostics architecture,
+remote monitoring delivery and all remaining release gates remain open.
+
 ## Rendered failure recovery and contact export verification — 2026-10-24
 
 Expanded isolated Playwright coverage to three cases, each with its own backend

@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { normalizeActivityLogs } from '../../src/utils/activityLogs';
+import type { V1TimelineEvent } from '../v1_engine';
+
+const event: V1TimelineEvent = Object.freeze({ at: '2026-10-24T10:00:00.000Z', stage: 'query_generation', status: 'failed', message: 'Provider unavailable', error: 'Missing configured provider' });
+const row = normalizeActivityLogs([{ ...event, run_id: 'synthetic-run', company_name: 'Synthetic Company' }], 'enrichment')![0];
+assert.equal(row.timestamp, event.at);
+assert.equal(row.subsystem, 'query_generation');
+assert.equal(row.level, 'ERROR');
+assert.equal(row.company, 'Synthetic Company');
+assert.equal(row.details, event.error);
+assert.equal(row.id, 'synthetic-run:0');
+const legacy = normalizeActivityLogs([{ id: 'legacy', timestamp: event.at, step: 'CACHE_WRITE', status: 'SUCCESS', message: 'Legacy event' }], 'enrichment')![0];
+assert.equal(legacy.subsystem, 'CACHE_WRITE'); assert.equal(legacy.level, 'SUCCESS');
+const unknown = normalizeActivityLogs([{ message: 'Unknown time/status is not fabricated' }], 'system')![0];
+assert.equal(unknown.timestamp, ''); assert.equal(unknown.level, 'UNKNOWN');
+for (const value of [null, {}, [null], [{ message: null }], [{ message: 123 }], [[]]]) assert.equal(normalizeActivityLogs(value, 'system'), null);
+assert.deepEqual(normalizeActivityLogs([], 'system'), []);
+const many = Array.from({ length: 10_000 }, (_, index) => ({ id: 'repeated-id', timestamp: new Date(Date.UTC(2026, 0, 1) + index).toISOString(), level: 'INFO', subsystem: 'API', message: `Event ${index}` }));
+const bounded = normalizeActivityLogs(many, 'system')!;
+assert.equal(bounded.length, 500);
+assert.equal(bounded[0].message, 'Event 9999');
+assert.equal(bounded.at(-1)!.message, 'Event 9500');
+assert.equal(new Set(bounded.map(value => value.id)).size, 500);
+assert.equal(many[0].message, 'Event 0', 'presentation must not mutate source events');
+assert.equal(normalizeActivityLogs([{ message: 'x'.repeat(20_000) }], 'system')![0].message.length, 4000);
+console.log('PASS actual V1 timeline/legacy projection, explicit unknown, malformed response, latest-500 bound and immutable input');
