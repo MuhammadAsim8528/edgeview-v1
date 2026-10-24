@@ -65,6 +65,35 @@ These tests establish only their synthetic scenarios, not the historical
 
 ## Official setup references
 
+The Settings accessibility case checks provider-specific credential names,
+password input types and real left/right arrow navigation of the primary AI
+radio group. It is not a complete accessibility audit or screen-reader test.
+
+The provider-health case supplies a malformed response (a null provider entry),
+checks a visible unavailable state without a crash or continuing loading
+indicator, then restores the real API and clicks Test enabled providers. All
+four providers must show Not Configured on the genuinely keyless test instance.
+This tests failure rendering and recovery, not real provider authentication.
+The stalled-metrics case waits for the UI's actual 30s deadline, checks that
+loading ends, then restores the real API and verifies a successful refresh.
+No clock mocking or real provider credentials are involved.
+The connection-check case holds individual and aggregate requests pending for
+their real 60s deadlines, verifies both controls unlock, then retries the real
+keyless API. It does not prove cancellation of backend/provider operations.
+
+The Settings case changes provider toggles, primary AI provider and Groq model
+through the rendered form, verifies the actual persisted API response, restarts
+the owned backend, and checks both restored controls and backend values. It also
+checks that a disabled provider cannot be tested and a missing Groq key produces
+a visible failure, not success. No credentials or provider credits are used.
+This proves persistence for these settings, not configured-provider routing,
+real authentication, quota handling, or live installation behavior.
+
+Settings failure cases inject a 503, malformed successful JSON and a stalled
+load. They require no writable default form, a bounded retry state, no private
+server text, and recovery through the real API without a settings write. The
+stalled case waits for the compiled UI's real deadline; it does not mock time.
+
 - [Playwright web-server/environment behavior](https://playwright.dev/docs/test-webserver)
 - [Screenshots and retained traces](https://playwright.dev/docs/test-use-options)
 - [CI browser installation and worker guidance](https://playwright.dev/docs/ci)

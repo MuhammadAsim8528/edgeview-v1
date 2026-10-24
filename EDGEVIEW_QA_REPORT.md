@@ -11,14 +11,15 @@
 - Added a deferred privacy-preserving offline HWID licensing design; no unapproved license gate was introduced.
 - Updated vulnerable transitive packages and removed SheetJS `xlsx`, which had an unfixed high-severity advisory. Excel parsing/export now uses ExcelJS; `.xls` uploads are rejected in favor of `.xlsx`, formula-leading exports are neutralized, and dedicated parser/export regressions pass. The production audit has no high or critical findings; moderate transitive advisories remain in Mammoth and ExcelJS dependency trees.
 - Expanded package exclusions to include local `.antigravity` metadata after a secret-pattern audit found that directory could contain machine-local material.
-- Rebuilt `C:\Users\asimh\outputs\EdgeView-V1-Windows.zip` and verified the live production health contract on port 3901.
+- Rebuilt the packaged `EdgeView-V1-Windows.zip` deliverable and verified the live production health contract on port 3901.
 - Live provider checks: Serper, NVIDIA NIM, and Groq verified successfully. Hunter credentials are valid but the billing-period search quota is exhausted, so Hunter was disabled without deleting its key and Serper remains the active deterministic retrieval provider.
 - Local read-load smoke: 240 requests, concurrency 12, zero failures, 656 ms p95, 3.1 s maximum, RSS 143.5 MB to 183.9 MB.
 
 Computer-use remains blocked by the saved localhost browser-control permission. The UI is visibly open in the in-app browser, but this addendum does not claim a new button-by-button automated click pass.
 
 Date: 2026-10-11  
-Installation: `C:\Users\asimh\antigravity\Pharma-AI-File-Viewer-2026-08-13-3b80f`
+Installation: the EdgeView project root on the machine that produced this report (the
+absolute developer path is deliberately not repeated in a shipped document).
 
 ## Final human-interface regression pass
 

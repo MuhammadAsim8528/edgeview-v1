@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Cpu, KeyRound, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react';
 import { safeFetchJson } from '../utils/safeFetch';
 import { SystemHealthPanel } from './SystemHealthPanel';
@@ -29,6 +29,9 @@ const initialProviders = (): Record<ProviderId, ProviderState> => ({
 export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts = [] }) => {
   const [providers, setProviders] = useState(initialProviders);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const loadRequest = useRef<AbortController | null>(null);
+  const providerRequests = useRef(new Map<ProviderId, AbortController>());
   const [saving, setSaving] = useState(false);
   const [nvidiaModel, setNvidiaModel] = useState('nvidia/nemotron-3-nano-omni-30b-a3b-reasoning');
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
@@ -48,10 +51,22 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
   };
 
   const load = async () => {
+    loadRequest.current?.abort();
+    const controller = new AbortController();
+    loadRequest.current = controller;
+    const deadline = setTimeout(() => controller.abort(), 30_000);
     setLoading(true);
-    const { ok, data, error } = await safeFetchJson<any>('/api/settings');
-    if (!ok || !data) {
-      showToast(error || 'Could not load provider settings', 'error');
+    setLoadError(false);
+    const { ok, data } = await safeFetchJson<any>('/api/settings', { signal: controller.signal });
+    clearTimeout(deadline);
+    if (loadRequest.current !== controller) return;
+    loadRequest.current = null;
+    const valid = data && !Array.isArray(data)
+      && PROVIDERS.every(({ id }) => typeof data[`${id}_enabled`] === 'boolean' && typeof data[`has_${id}_key`] === 'boolean')
+      && (data.primary_ai_provider === 'NVIDIA' || data.primary_ai_provider === 'GROQ')
+      && typeof data.nvidia_model === 'string' && typeof data.groq_model === 'string';
+    if (!ok || !valid) {
+      setLoadError(true);
       setLoading(false);
       return;
     }
@@ -67,23 +82,42 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
     setLoading(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    return () => {
+      const active = loadRequest.current;
+      loadRequest.current = null;
+      active?.abort();
+      for (const request of providerRequests.current.values()) request.abort();
+      providerRequests.current.clear();
+    };
+  }, []);
 
   const testProvider = async (id: ProviderId) => {
+    if (providerRequests.current.has(id)) return;
+    const controller = new AbortController();
+    providerRequests.current.set(id, controller);
+    const deadline = setTimeout(() => controller.abort(), 60_000);
     patchProvider(id, { testing: true, result: undefined, ok: undefined });
     const model = id === 'nvidia' ? nvidiaModel : id === 'groq' ? groqModel : undefined;
-    const { data, error } = await safeFetchJson<any>('/api/settings/test', {
+    const { ok, data, error } = await safeFetchJson<any>('/api/settings/test', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({ service: id, key: providers[id].key, model }),
     });
-    const success = Boolean(data?.success);
-    const message = data?.message || error || 'Provider test failed';
+    clearTimeout(deadline);
+    if (providerRequests.current.get(id) !== controller) return;
+    providerRequests.current.delete(id);
+    const success = !controller.signal.aborted && ok && data?.success === true;
+    const message = controller.signal.aborted ? 'Provider check timed out. You can retry.'
+      : typeof data?.message === 'string' ? data.message : error || 'Provider test failed';
     patchProvider(id, { testing: false, ok: success, result: message });
     showToast(`${PROVIDERS.find(p => p.id === id)?.name}: ${message}`, success ? 'success' : 'error');
   };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (loading || loadError || saving) return;
     setSaving(true);
     const { ok, data, error } = await safeFetchJson<any>('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -123,13 +157,13 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
     <LogsViewerPanel />
     <form onSubmit={save} className="rounded-xl border border-[#262626] bg-[#1a1a1a] p-6">
       <div className="flex items-center justify-between border-b border-[#333] pb-4"><div><h2 className="font-semibold text-white">V1 provider configuration</h2><p className="mt-1 text-xs text-gray-400">Blank key fields preserve stored credentials. Provider tests make a small live request.</p></div><span className="rounded border border-emerald-800 bg-emerald-950/40 px-2 py-1 text-[10px] text-emerald-300">Local storage</span></div>
-      {loading ? <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-400"><RefreshCw className="h-4 w-4 animate-spin" />Loading settings…</div> : <div className="mt-5 space-y-4">
-        <div className="rounded-lg border border-[#333] bg-[#222] p-4 text-xs"><div className="font-semibold text-white">Primary AI provider</div><div className="mt-3 flex gap-5">{(['NVIDIA','GROQ'] as const).map(id => <label key={id} className="flex items-center gap-2 text-gray-300"><input type="radio" checked={primaryProvider === id} onChange={() => setPrimaryProvider(id)} />{id === 'NVIDIA' ? 'NVIDIA NIM' : 'Groq'}</label>)}</div></div>
+      {loading ? <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-400"><RefreshCw className="h-4 w-4 animate-spin" />Loading settings…</div> : loadError ? <div role="alert" className="mt-5 rounded border border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-200"><p>Provider settings could not be loaded. Retry before making changes.</p><button type="button" onClick={() => void load()} className="mt-3 rounded border border-rose-700 px-3 py-2">Retry settings</button></div> : <div className="mt-5 space-y-4">
+        <div className="rounded-lg border border-[#333] bg-[#222] p-4 text-xs"><div className="font-semibold text-white">Primary AI provider</div><div role="radiogroup" aria-label="Primary AI provider" className="mt-3 flex gap-5">{(['NVIDIA','GROQ'] as const).map(id => <label key={id} className="flex items-center gap-2 text-gray-300"><input type="radio" name="primary-ai-provider" checked={primaryProvider === id} onChange={() => setPrimaryProvider(id)} />{id === 'NVIDIA' ? 'NVIDIA NIM' : 'Groq'}</label>)}</div></div>
         {PROVIDERS.map(provider => {
           const state = providers[provider.id];
           return <section key={provider.id} className="rounded-lg border border-[#333] bg-[#222] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex gap-2 text-white">{provider.icon}<div><div className="text-sm font-semibold">{provider.name}</div><div className="text-xs text-gray-400">{provider.role}</div></div></div><label className="flex items-center gap-2 text-xs text-gray-300"><input type="checkbox" checked={state.enabled} onChange={e => patchProvider(provider.id, { enabled: e.target.checked })} />Enabled</label></div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input type="password" value={state.key} onChange={e => patchProvider(provider.id, { key: e.target.value })} placeholder={state.configured ? 'Configured — enter only to replace' : 'Enter API key'} className="min-w-0 flex-1 rounded border border-[#3b3b3b] bg-[#171717] px-3 py-2 text-xs text-white" /><button type="button" disabled={state.testing || !state.enabled} onClick={() => void testProvider(provider.id)} className="rounded border border-[#444] bg-[#303030] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{state.testing ? 'Testing…' : 'Test connection'}</button></div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input type="password" aria-label={`${provider.name} API key`} value={state.key} onChange={e => patchProvider(provider.id, { key: e.target.value })} placeholder={state.configured ? 'Configured — enter only to replace' : 'Enter API key'} className="min-w-0 flex-1 rounded border border-[#3b3b3b] bg-[#171717] px-3 py-2 text-xs text-white" /><button type="button" disabled={state.testing || !state.enabled} onClick={() => void testProvider(provider.id)} className="rounded border border-[#444] bg-[#303030] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{state.testing ? 'Testing…' : 'Test connection'}</button></div>
             {(provider.id === 'nvidia' || provider.id === 'groq') && <input value={provider.id === 'nvidia' ? nvidiaModel : groqModel} onChange={e => provider.id === 'nvidia' ? setNvidiaModel(e.target.value) : setGroqModel(e.target.value)} aria-label={`${provider.name} model`} className="mt-2 w-full rounded border border-[#3b3b3b] bg-[#171717] px-3 py-2 text-xs text-white" />}
             {state.result && <div className={`mt-2 flex items-center gap-2 text-xs ${state.ok ? 'text-emerald-400' : 'text-rose-300'}`}>{state.ok && <CheckCircle2 className="h-3.5 w-3.5" />}{state.result}</div>}
           </section>;

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
 import { loadFilePage, type FilePageResult } from '../utils/filePage';
+import { readShipmentGrouping, saveShipmentGrouping } from '../utils/viewPreferences';
 import {
   Download,
   Search,
@@ -497,7 +498,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   const [viewMode, setViewMode] = useState<'table' | 'text'>('table');
 
   // Shipment Grouping and Granular Filters State
-  const [isGrouped, setIsGrouped] = useState<boolean>(true);
+  const [isGrouped, setIsGrouped] = useState<boolean>(() => readShipmentGrouping());
+  const [groupingPreferenceError, setGroupingPreferenceError] = useState(false);
   const [productFilter, setProductFilter] = useState<string>('');
   const [countryFilter, setCountryFilter] = useState<string>('');
   const [importerFilter, setImporterFilter] = useState<string>('');
@@ -709,12 +711,13 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
 
   // Debounce search input
   useEffect(() => {
+    if (searchInput === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
       setCurrentPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, debouncedSearch]);
 
   // 2. Filter Processed Data using Product, Country, Importer, Date Range, and Search
   const filteredRows = useMemo(() => {
@@ -1021,7 +1024,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           {/* Grouping Toggle Switch */}
           <button
             onClick={() => {
-              setIsGrouped((prev) => !prev);
+              const grouped = !isGrouped;
+              setIsGrouped(grouped);
+              setGroupingPreferenceError(!saveShipmentGrouping(grouped));
               setCurrentPage(1);
             }}
             className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
@@ -1030,10 +1035,12 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 : 'bg-[#1a1a1a] text-[#e5e7eb] border-[#333333] hover:bg-[#262626]'
             }`}
             title="Group multiple product rows into 1 row per shipment"
+            aria-pressed={isGrouped}
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Group Shipments {isGrouped ? 'ON' : 'OFF'}</span>
           </button>
+          {groupingPreferenceError && <span role="alert" className="text-xs text-amber-300">View preference could not be saved in this browser.</span>}
         </div>
 
         <div className="flex items-center space-x-2">
