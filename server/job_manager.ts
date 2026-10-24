@@ -322,10 +322,16 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const citedClaims = run.evidence_workspace?.accepted_claims || [];
   const citedEmails = citedClaims.filter(claim => claim.field === 'email' && claim.source_type === 'official').map(claim => claim.value.toLowerCase()).filter(value => attributableEmail(value, officialDomain));
   const citedPhones = citedClaims.filter(claim => claim.field === 'phone' && claim.source_type === 'official').map(claim => claim.value).filter(value => validPhone(value) && isCountryCompatiblePhone(value, String(run.country || '')));
+  const targetCountry = String(run.country || '').trim().toLowerCase();
+  const citedAddresses = citedClaims
+    .filter(claim => claim.field === 'address' && claim.source_type === 'official')
+    .filter(claim => String(claim.role || '').toLowerCase() !== 'country')
+    .map(claim => String(claim.value || '').trim())
+    .filter(value => value && value.toLowerCase() !== targetCountry);
   const addresses = [...new Set([
     ...structuredAddressesFromOfficialPages(officialPages),
     ...labeledAddressesFromPublicProfiles(publicProfiles),
-    ...citedClaims.filter(claim => claim.field === 'address' && claim.source_type === 'official').map(claim => claim.value),
+    ...citedAddresses,
   ])].slice(0, 10);
   const leaderMap = new Map<string, { name: string; designation: string; source_url: string; linkedin?: string }>();
   const companyName = String(run.company_name || '');
