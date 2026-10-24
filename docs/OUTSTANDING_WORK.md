@@ -1,5 +1,50 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Anonymous installation identity for diagnostics — 2026-10-24
+
+This path existed on no branch: `main` after the merge has no install identity and none of the
+other agents' worktrees contain one, so it is landed here. Telemetry stayed out of this slice
+entirely — it belongs to the other agents and three of their telemetry files already run in CI.
+
+`server/install_identity.ts` mints a random UUID v4 per installation and stores it in
+`data/installation.json`. The write is `tmp` + `wx` + `rename`, so a crash cannot leave a
+half-written identity, and a file that is unparseable or holds a value that is not a UUID v4 is
+replaced rather than propagated. `getInstallationIdentityPath()` follows the same test isolation
+as the other writable runtime files (`EDGEVIEW_TEST_DB_DIR` / `EDGEVIEW_JSON_DB` directory), so a
+test process can never mint an identity inside the real installation. `/api/health` now reports
+`health.app.installation_id`; it is random, not hardware-derived or account-linked.
+`scripts/doctor.mjs` replaced `device_identity: SKIPPED ("not yet implemented")` with a real
+check: PASS on a well-formed UUID v4, FAIL when the file exists but does not hold one (the
+operator cannot trust correlation), WARN when absent because the backend has not started yet.
+
+Evidence:
+
+- `node --import tsx server/tests/install_identity.test.ts` —
+  `PASS installation identity: creation, restart, corruption, reset and test isolation behave`.
+- `node scripts/doctor.test.mjs` —
+  `PASS doctor states, locked dependencies, offline failure, safe output and full-check orchestration`,
+  now covering all three identity states including `exitCode 1` on the corrupt file. The doctor
+  fixture id is a deliberately synthetic UUID (`00000000-0000-4000-8000-000000000001`) so it can
+  never be confused with the developer machine's real value.
+- Live probe against the rebuilt `dist/server.cjs` with an isolated environment:
+  `HEALTH IDENTITY PROBE: PASS id=ca7a475a-1716-47d4-829a-335225edcc4e` — the id appears in
+  `health.app.installation_id`, is persisted in the isolated directory, and is stable across two
+  calls.
+- Mutation matrix, with both baselines restored before each mutant so nothing compounds:
+  `shape_check_off` and `isolation_off` each fail only the identity test; `doctor_skipped` fails
+  only the doctor test. After restoring, both tests pass and both files are byte-identical to
+  baseline.
+- The developer installation was not modified. `data/installation.json` already exists in the
+  real project root (created `2026-10-23T06:40:06Z`, before this slice); the identity test reads
+  it before and after resolving the isolated path and asserts byte-for-byte equality, so the run
+  proves the isolated accessor never writes there.
+- `npx tsc --noEmit` and `npx eslint` clean on the touched files.
+
+Not claimed here: the identifier is anonymous and local-only, and nothing in this slice sends it
+anywhere — there is no diagnostic upload path wired to it. It has not been verified against a
+running browser session, only against the HTTP health endpoint.
+
+
 ## Activity endpoints no longer hydrate evidence bodies — 2026-10-24
 
 Both /api/logs/enrichment and /api/enrich/activity-log now use a shared

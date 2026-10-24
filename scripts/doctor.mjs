@@ -41,7 +41,17 @@ export async function runDoctor({ root = installation, full = false, request = f
   }
   add('secret_store', 'SKIPPED', 'No credential file values are read or exported by doctor.');
   add('python_webview', 'SKIPPED', 'Current release is Node/React in a browser, not a Python/WebView host.');
-  add('device_identity', 'SKIPPED', 'Cryptographic installation identity is not yet implemented.');
+  const identityFile = path.join(root, 'data', 'installation.json');
+  const hasIdentityFile = fs.existsSync(identityFile);
+  let identityId = null;
+  try {
+    const identity = JSON.parse(fs.readFileSync(identityFile, 'utf8'));
+    identityId = typeof identity?.installation_id === 'string' ? identity.installation_id : null;
+  } catch { identityId = null; }
+  const isUuidV4 = typeof identityId === 'string' && identityId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  if (isUuidV4) add('device_identity', 'PASS', 'Anonymous per-installation identifier is present and well formed.');
+  else if (hasIdentityFile) add('device_identity', 'FAIL', 'data/installation.json exists but does not hold a UUID v4 installation identifier.');
+  else add('device_identity', 'WARN', 'No installation identifier yet; the backend creates data/installation.json on first start.');
   add('visual_e2e', 'SKIPPED', 'Rendered browser workflows require a separate authorized UI test.');
 
   try {

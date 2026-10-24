@@ -38,6 +38,7 @@ import { buildContactBlocksHtml } from './server/export_blocks';
 import { ExportValidationError, resolveStoredFileExport } from './server/export_validation';
 import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/utils/header_encoder';
 import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
+import { getInstallationId } from './server/install_identity';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey } from './server/company_identity';
 import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
@@ -293,6 +294,9 @@ app.get('/api/health', (req, res) => {
       name: 'edgeview',
       build: runningBuild,
       pid: process.pid,
+      // Anonymous random per-installation id: correlates local diagnostics without
+      // any hardware-derived or account-linked value.
+      installation_id: getInstallationId(),
       project_root: getProjectRoot(),
       node: process.version,
       port: PORT,

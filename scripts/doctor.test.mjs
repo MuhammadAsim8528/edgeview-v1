@@ -21,6 +21,20 @@ try {
   const unhealthyDb = await runDoctor({ root, request: async () => Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'degraded', operational: { status: 'degraded' } } }) });
   assert.equal(unhealthyDb.checks.find(check => check.id === 'database').status, 'FAIL');
   assert.equal(measured.checks.find(check => check.id === 'resources').status, 'PASS');
+  // Installation identity: absent warns without failing the doctor, a valid UUID v4
+  // passes, and a corrupt file fails because the operator cannot trust correlation.
+  assert.equal(healthy.checks.find(check => check.id === 'device_identity').status, 'WARN', 'fresh install has no identity file yet');
+  const identityPath = path.join(root, 'data', 'installation.json');
+  fs.mkdirSync(path.dirname(identityPath));
+  fs.writeFileSync(identityPath, JSON.stringify({ installation_id: '00000000-0000-4000-8000-000000000001' }));
+  const withIdentity = await runDoctor({ root, request });
+  assert.equal(withIdentity.checks.find(check => check.id === 'device_identity').status, 'PASS');
+  assert.equal(withIdentity.exitCode, 0);
+  fs.writeFileSync(identityPath, JSON.stringify({ installation_id: 'hardware-derived-or-corrupt' }));
+  const badIdentity = await runDoctor({ root, request });
+  assert.equal(badIdentity.checks.find(check => check.id === 'device_identity').status, 'FAIL');
+  assert.equal(badIdentity.exitCode, 1);
+  fs.unlinkSync(identityPath);
   const commands = [];
   const full = await runDoctor({ root, request, full: true, execute: command => { commands.push(command); return { status: command === 'build' ? 1 : 0 }; } });
   assert.equal(full.exitCode, 1); assert.deepEqual(commands, ['check', 'build']);

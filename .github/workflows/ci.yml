@@ -71,6 +71,7 @@ jobs:
       - run: node scripts/model-test-outcome.test.mjs
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
+      - run: node --import tsx server/tests/install_identity.test.ts
       - name: Verify Windows user data protection primitive
         shell: pwsh
         run: |
