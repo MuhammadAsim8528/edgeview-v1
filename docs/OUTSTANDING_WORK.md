@@ -1,5 +1,39 @@
 # EdgeView completion ledger — 2026-10-20
 
+## First actual isolated rendered workflow — 2026-10-24
+
+Added pinned development-only @playwright/test 1.64.1 (Apache-2.0, Node >=20;
+CI Node 24). No application framework replacement or frontend dependency added.
+One worker, no automatic retries, strict CSP retained, failure screenshot/trace
+and console/page-error attachments, successful screenshot/build identity.
+The compiled backend uses owned temporary storage, an OS-only environment
+allowlist and a child-only HTTP(S)/fetch deny preload. Browser page traffic is
+limited to its owned test origin. PID verification precedes mutations. No real
+provider credentials, real dataset, live port-3901 server or paid run is used.
+
+PASS locally: actual Chromium UI startup/upload of synthetic 60-row CSV, page 2
+(Buyer 25), full CSV download with all 60 rows including Buyer 59, Enter/Space
+country/importer expansion and rendered supplier, tab refresh and selected-file
+persistence through a backend process restart. Successful screenshot inspected.
+This is real rendered E2E evidence, NOT manual/live installation visual QA.
+
+First run failed because the test expected HTTP 200 rather than the API's
+correct 201 Created; corrected to exact 201. Second reached all workflow steps
+but caught a connection-refused console event while we deliberately stopped the
+backend under an open polling page. The restart scenario now closes the page,
+restarts, and reopens in the same context; offline-while-open is a separate open
+test, not a whitelisted error. Rerun passed (8.0s test / 11.5s total), with no
+page/console errors. Build-ID and commit-shape assertions were added afterward.
+
+PASS: E2E typecheck, existing full check, production build/release smoke,
+production npm audit high gate (two existing moderate UUID/ExcelJS findings).
+Windows CI browser job and synthetic evidence upload are configured as an
+additional publish prerequisite; hosted result remains NOT VERIFIED until run.
+See docs/BROWSER_E2E.md for official references, isolation and remaining scope.
+Not exhaustive: settings/diagnostics, contacts/research/provider failures,
+race/cap tests, scroll/page/accordion persistence, accessibility audit, long leak
+testing, live-company truthsets, installer/update and clean-Windows gates remain.
+
 ## Country drill-down failure boundaries — 2026-10-24
 
 Country/importer detail loaders validate response shapes and numeric fields,
