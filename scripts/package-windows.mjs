@@ -9,11 +9,12 @@ const deliverables = path.resolve(root, '..', '..', 'outputs');
 const destinationStage = path.join(deliverables, 'EdgeView-V1-Windows');
 const destinationZip = path.join(deliverables, 'EdgeView-V1-Windows.zip');
 const excludedNames = new Set([
-  '.git', '.agent', '.antigravity', '.vscode', '.npm-cache', '.test-cache', 'node_modules', 'data', 'uploads', 'backups', 'logs', 'AGENTS.md',
+  '.git', '.agent', '.antigravity', '.vscode', '.npm-cache', '.test-cache', 'node_modules', 'data', 'uploads', 'backups', 'logs', 'AGENTS.md', 'docs',
   'config.json', 'edgeview.db', 'edgeview.db.lock', 'edgeview_db.json',
 ]);
 const excludedPatterns = [/^\.env(?:\.|$)/i, /^edgeview\.db(?:[-.].*)?$/i, /\.log$/i, /\.tmp$/i];
-const includedDirectories = ['assets', 'dist', 'public', 'server', 'shared', 'src', 'docs'];
+// The internal docs tree is a developer map, not operator guidance; EDGEVIEW_OPERATIONS.md ships instead.
+const includedDirectories = ['assets', 'dist', 'public', 'server', 'shared', 'src'];
 const includedFiles = [
   '.gitignore', 'EDGEVIEW_ARCHITECTURE.md', 'EDGEVIEW_ENGINEERING_AUDIT.md', 'EDGEVIEW_CONTROL_AUDIT.md', 'EDGEVIEW_LICENSING_DESIGN.md', 'EDGEVIEW_OPERATIONS.md',
   'EDGEVIEW_QA_REPORT.md', 'EDGEVIEW_SECURITY_AUDIT.md', 'EDGEVIEW_V1_VERIFICATION.md', 'EdgeView.bat', 'README.md', 'index.html',
