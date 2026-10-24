@@ -1,5 +1,46 @@
 import { test, expect } from './fixtures';
 
+test('a stalled settings load ends in a retry state rather than an indefinite spinner', async ({ page, context, runtime }) => {
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  // Keep only this request pending; the real compiled UI owns its 30s deadline.
+  await page.route('**/api/settings', () => {});
+  await page.goto('/');
+  await page.locator('#nav-tab-settings').click();
+  await expect(page.getByText('Loading settings…', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry settings', exact: true })).toBeVisible({ timeout: 40_000 });
+  await expect(page.getByText('Loading settings…', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toHaveCount(0);
+});
+
+test('failed settings load cannot expose writable defaults and retry restores the real form', async ({ page, context, runtime }) => {
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  let writes = 0;
+  page.on('request', request => { if (request.url().endsWith('/api/settings') && request.method() === 'POST') writes += 1; });
+  await page.route('**/api/settings', route => route.request().method() === 'GET'
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"SYNTHETIC_PRIVATE_CONFIG_FAILURE"}' })
+    : route.continue());
+  await page.goto('/');
+  await page.locator('#nav-tab-settings').click();
+  await expect(page.getByText('Provider settings could not be loaded. Retry before making changes.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toHaveCount(0);
+  await expect(page.getByText('SYNTHETIC_PRIVATE_CONFIG_FAILURE', { exact: true })).toHaveCount(0);
+  expect(writes).toBe(0);
+  await page.unroute('**/api/settings');
+  await page.route('**/api/settings', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  const malformed = page.waitForResponse(response => response.url().endsWith('/api/settings'));
+  await page.getByRole('button', { name: 'Retry settings', exact: true }).click();
+  await malformed;
+  await expect(page.getByRole('button', { name: 'Retry settings', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toHaveCount(0);
+  await page.unroute('**/api/settings');
+  await page.getByRole('button', { name: 'Retry settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toBeVisible();
+  await expect(page.locator('form section').filter({ hasText: 'Identity-anchored web search' }).getByRole('checkbox', { name: 'Enabled' })).toBeChecked();
+  expect(writes).toBe(0);
+});
+
 test('provider choices saved through Settings survive backend restart', async ({ page, context, runtime }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
