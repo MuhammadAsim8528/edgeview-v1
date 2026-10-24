@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
 import net from 'node:net';
+import { gzipSync, deflateSync } from 'node:zlib';
 import { unusedTestPort } from './test-server-port.mjs';
 
 const port = Number(process.env.EDGEVIEW_RELEASE_TEST_PORT || await unusedTestPort());
@@ -72,6 +73,26 @@ async function rawLocalRequest(headers, version = '1.1', target = '/api/health',
   });
 }
 
+async function stagedDeflateRequest() {
+  const first = Buffer.concat([deflateSync(Buffer.from('{"synthetic":true}')), Buffer.from([0])]);
+  const trailing = Buffer.alloc(1024, 0x58);
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(port, '127.0.0.1');
+    let response = ''; let sentTrailing = false;
+    socket.setTimeout(5000, () => socket.destroy(new Error('Staged decoder request timed out')));
+    socket.on('error', reject);
+    socket.on('data', chunk => {
+      response += chunk.toString();
+      if (!sentTrailing) { sentTrailing = true; socket.end(trailing); }
+    });
+    socket.on('end', () => resolve(response));
+    socket.on('connect', () => {
+      socket.write(`POST /api/nonexistent-parser-probe HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Encoding: deflate\r\nContent-Length: ${first.length + trailing.length}\r\nConnection: keep-alive\r\n\r\n`);
+      socket.write(first);
+    });
+  });
+}
+
 try {
   const healthResponse = await waitForHealth();
   const health = await healthResponse.json();
@@ -89,6 +110,28 @@ try {
 
   const badOrigin = await fetch(`${base}/api/health`, { headers: { Origin: 'https://evil.example' } });
   assert.equal(badOrigin.status, 403);
+
+  // Exercise decoder teardown in the actual compiled server, not only package
+  // versions. A valid compressed frame followed by garbage formerly crashed
+  // affected body-parser releases after the parser's response had completed.
+  for (const [encoding, compress] of [['gzip', gzipSync], ['deflate', deflateSync]]) {
+    const frame = compress(Buffer.from('{"synthetic":"compressed-parser-check"}'));
+    for (const body of [frame, Buffer.concat([frame, Buffer.from([0]), Buffer.alloc(100 * 1024, 0x58)])]) {
+      const probe = await fetch(`${base}/api/nonexistent-parser-probe`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': encoding }, body,
+        signal: AbortSignal.timeout(5000),
+      });
+      if (body === frame) assert.equal(probe.status, 404, `valid ${encoding} must reach routing`);
+      else assert.ok([400, 404].includes(probe.status), `bounded parser failure/unknown route: ${encoding}`);
+      await probe.arrayBuffer();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      assert.equal((await fetch(`${base}/api/health`)).status, 200, 'decoder teardown must not terminate server');
+      assert.equal(child.exitCode, null);
+    }
+  }
+  assert.match(await stagedDeflateRequest(), /^HTTP\/1\.1 404\b/, 'late trailing bytes must not crash decoder after routing');
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
 
   for (const version of ['1.0', '1.1']) {
     for (const headers of ['', 'Host: \r\n']) {

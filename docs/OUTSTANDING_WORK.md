@@ -1,5 +1,38 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Parallel ownership and parser dependencies — 2026-10-24
+
+Owner confirmed Qoder writes only the original Pharma-AI workspace and
+`edgeview-chatgpt` is exclusively ChatGPT's worktree. Resume this branch without
+editing or merging Qoder's dirty tree. Existing commit 0652b15 was independently
+inspected/tested and retained, not recreated. Its focused AI destination,
+connection binding, diagnostic-payload and credential-origin checks pass.
+Real unauthenticated model endpoint checks previously reached NVIDIA (200)
+and Groq (401); this is NOT verification of saved credentials or live UI.
+
+Production audit newly failed on body-parser1.20.8 (GHSA-27r3-jxmh-p828) and
+multer2.4.0 (GHSA-q7qp-rjg7-q26m). Narrow refresh keeps Express4.22.3, resolves
+body-parser1.20.9 and multer2.5.0, and raises the direct Multer floor. Current
+upload filter is synchronous, so the Multer advisory's asynchronous-filter
+prerequisite was not demonstrated in EdgeView. No forced ExcelJS downgrade.
+
+The compiled-server release smoke now sends valid gzip/deflate (must reach
+routing), compressed frames plus trailing garbage, and a staged deflate request
+whose trailing bytes arrive after the response begins. After delayed decoder
+errors it checks server liveness. These follow upstream failure classes; the old
+package crash was not independently reproduced before upgrading. Independent
+review prompted the staged-timing and stricter valid-frame controls.
+
+Local `npm ci --ignore-scripts` FAILED on a Windows-locked Rollup native file and
+temporarily left dependencies incomplete. `npm install --ignore-scripts`
+repaired them successfully, with a leftover locked cleanup-directory warning.
+After repair: installed versions verified, typecheck/lint/V1 suite, upload HTTP
+regressions, build and expanded production release smoke PASS. Production audit
+at high threshold PASS, but two MODERATE uuid/ExcelJS findings remain. Clean
+reinstall on this workstation is not marked PASS; hosted clean-install evidence
+for the new commit remains pending. No live app restart or production-data
+change was performed. Windows customer/runtime/visual/update gates remain open.
+
 ## Migration recovery retention reconciled — 2026-10-23
 
 Frozen Qoder pruning was reimplemented, not copied: it ran before migration
