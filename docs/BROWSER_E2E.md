@@ -65,6 +65,12 @@ These tests establish only their synthetic scenarios, not the historical
 
 ## Official setup references
 
+The provider-health case supplies a malformed response (a null provider entry),
+checks a visible unavailable state without a crash or continuing loading
+indicator, then restores the real API and clicks Test enabled providers. All
+four providers must show Not Configured on the genuinely keyless test instance.
+This tests failure rendering and recovery, not real provider authentication.
+
 The Settings case changes provider toggles, primary AI provider and Groq model
 through the rendered form, verifies the actual persisted API response, restarts
 the owned backend, and checks both restored controls and backend values. It also

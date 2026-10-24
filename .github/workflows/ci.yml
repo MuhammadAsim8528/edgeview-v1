@@ -44,6 +44,7 @@ jobs:
       - run: node --import tsx server/tests/country_overview.test.ts
       - run: node --import tsx server/tests/country_details.test.ts
       - run: node --import tsx server/tests/activity_log_projection.test.ts
+      - run: node --import tsx server/tests/provider_health_contract.test.ts
       - run: node --import tsx server/tests/activity_log_no_hydration.test.ts
       - run: node --import tsx server/tests/activity_log_endpoint.test.ts
       - run: node --import tsx server/tests/contact_scope_presentation.test.tsx

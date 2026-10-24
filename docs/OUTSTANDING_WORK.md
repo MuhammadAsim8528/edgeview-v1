@@ -1,5 +1,24 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Provider-health malformed response guard — 2026-10-24
+
+Rendered negative control: a successful HTTP response containing a null provider
+entry failed against the previous build. The panel previously passed report
+objects straight into rendering. It now validates the four-provider shape,
+status/routing enums, counts, latency and error types before rendering; invalid
+responses show an explicit unavailable state instead of a continuing loading
+indicator. Previously loaded valid metrics remain visible with the existing
+stale-state warning. No backend provider state or raw evidence was changed.
+
+PASS focused browser recovery (1.6s scenario / 16.6s run): malformed report shows
+unavailable, restoring the real API and pressing Test enabled providers renders
+all four as Not Configured, with no page errors. No keys/paid calls were used.
+PASS provider_health_contract adversarial cases, typecheck, lint, E2E typecheck
+and production build; test:v1 and production release smoke passed. All eight
+browser cases then passed together (1.6m). Focused regression is wired into CI. Real configured
+provider health, remote monitoring, transport stalls/deadlines and live-instance
+manual visual QA remain open; this is not proof of real provider connectivity.
+
 ## Settings failed-load write protection — 2026-10-24
 
 The new rendered negative control failed against the previous compiled app:
