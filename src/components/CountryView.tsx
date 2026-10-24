@@ -21,12 +21,14 @@ import {
 import { ParsedFile } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { formatCurrency, formatFullCurrency } from '../utils/formatters';
+import { buildCountryOverview, isCountryOverview, type CountryOverview } from '../../shared/country_overview';
 
 interface CountryViewProps {
   files?: ParsedFile[];
   selectedFile?: ParsedFile | null;
   onOpenExport?: (payload: GlobalExportPayload) => void;
 }
+const EMPTY_FILES: ParsedFile[] = [];
 
 interface CountrySummary {
   country: string;
@@ -49,10 +51,19 @@ interface ExporterDetail {
   total_value: number;
 }
 
-export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFile, onOpenExport }) => {
+export const CountryView: React.FC<CountryViewProps> = (props) =>
+  <CountryViewContent key={props.selectedFile?.id || `all:${(props.files || []).map(file => file.id).sort().join(',')}`} {...props} />;
+
+const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, selectedFile, onOpenExport }) => {
   const [countries, setCountries] = useState<{ country: string; importers_count: number }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [overviewStats, setOverviewStats] = useState<CountryOverview['stats'] | null>(null);
+  const [overviewError, setOverviewError] = useState(false);
+  const [overviewRetry, setOverviewRetry] = useState(0);
+  const scopedFiles = selectedFile ? [selectedFile] : files;
+  const completeLocalScope = scopedFiles.length > 0 && scopedFiles.every(file => Array.isArray(file.rows)
+    && Number.isSafeInteger(file.summary?.total_rows) && file.summary.total_rows === file.rows.length);
 
   // Accordion state
   const [expandedCountries, setExpandedCountries] = useState<Record<string, boolean>>({});
@@ -67,8 +78,8 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   // Collect all rows client-side as fallback / direct engine
   const clientRows = useMemo(() => {
     let rows: Record<string, any>[] = [];
-    if (selectedFile && selectedFile.rows && selectedFile.rows.length > 0) {
-      rows = selectedFile.rows;
+    if (selectedFile) {
+      rows = selectedFile.rows || [];
     } else if (files && files.length > 0) {
       files.forEach((f) => {
         if (f.rows) rows.push(...f.rows);
@@ -108,14 +119,20 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   // Initial Country List Fetch
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
     async function fetchCountries() {
       setLoading(true);
+      setOverviewError(false);
+      setOverviewStats(null);
+      setCountries([]);
       try {
-        const fileParam = selectedFile ? `?file_id=${selectedFile.id}` : '';
-        const { ok, data } = await safeFetchJson<{ country: string; importers_count: number }[]>(`/api/countries${fileParam}`);
-        if (ok && Array.isArray(data)) {
+        const params = new URLSearchParams({ overview: '1' });
+        if (selectedFile) params.set('file_id', selectedFile.id);
+        const { ok, data } = await safeFetchJson<CountryOverview>(`/api/countries?${params}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
+        if (ok && isCountryOverview(data)) {
           if (isMounted) {
-            setCountries(data);
+            setCountries(data.countries);
+            setOverviewStats(data.stats);
             setLoading(false);
             return;
           }
@@ -126,24 +143,11 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
 
       // Fallback: Group client rows by country
       if (isMounted) {
-        const countryMap = new Map<string, Set<string>>();
-        clientRows.forEach((r) => {
-          if (!countryMap.has(r.country)) {
-            countryMap.set(r.country, new Set());
-          }
-          if (r.importer && r.importer !== 'Unknown Importer') {
-            countryMap.get(r.country)!.add(r.importer);
-          }
-        });
-
-        const list = Array.from(countryMap.entries())
-          .map(([country, impSet]) => ({
-            country,
-            importers_count: impSet.size,
-          }))
-          .sort((a, b) => a.country.localeCompare(b.country, undefined, { sensitivity: 'base' }));
-
-        setCountries(list);
+        if (completeLocalScope) {
+          const fallback = buildCountryOverview(clientRows);
+          setCountries(fallback.countries);
+          setOverviewStats(fallback.stats);
+        } else setOverviewError(true);
         setLoading(false);
       }
     }
@@ -151,8 +155,9 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
     fetchCountries();
     return () => {
       isMounted = false;
+      controller.abort();
     };
-  }, [clientRows, selectedFile]);
+  }, [clientRows, selectedFile, completeLocalScope, overviewRetry]);
 
   // Expand / Collapse Country
   const toggleCountry = async (countryName: string) => {
@@ -281,29 +286,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   }, [countries, searchQuery]);
 
   // Overall Aggregated Stats
-  const globalStats = useMemo(() => {
-    const uniqueCountries = new Set<string>();
-    const uniqueImporters = new Set<string>();
-    const uniqueExporters = new Set<string>();
-    let totalValue = 0;
-
-    clientRows.forEach((r) => {
-      if (r.country && r.country !== 'Unknown') uniqueCountries.add(r.country);
-      if (r.importer && r.importer !== 'Unknown Importer') uniqueImporters.add(r.importer);
-      if (r.exporter && r.exporter !== 'Unknown Exporter') uniqueExporters.add(r.exporter);
-      totalValue += r.total_value;
-    });
-
-    return {
-      totalCountries: uniqueCountries.size || countries.length,
-      // Parsed row bodies are loaded lazily for large files. The country API
-      // still supplies authoritative per-country importer counts, so avoid a
-      // misleading zero while those rows are not resident in the browser.
-      totalImporters: uniqueImporters.size || countries.reduce((sum, item) => sum + (item.importers_count || 0), 0),
-      totalExporters: uniqueExporters.size,
-      totalValue,
-    };
-  }, [clientRows, countries]);
+  const globalStats = useMemo(() => overviewStats || (completeLocalScope ? buildCountryOverview(clientRows).stats : null), [overviewStats, completeLocalScope, clientRows]);
 
   // Export Full Hierarchical Country Summary via Global Export Manager
   const [isExporting, setIsExporting] = useState(false);
@@ -422,7 +405,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Globe className="w-4 h-4 text-[#10b981]" />
           </div>
           <div className="text-2xl font-bold font-mono text-white mt-2">
-            {globalStats.totalCountries}
+            {globalStats?.totalCountries ?? '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Active trade destinations</div>
         </div>
@@ -433,7 +416,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Building2 className="w-4 h-4 text-[#10b981]" />
           </div>
           <div className="text-2xl font-bold font-mono text-[#10b981] mt-2">
-            {globalStats.totalImporters.toLocaleString()}
+            {globalStats?.totalImporters.toLocaleString() ?? '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Importer-country entities</div>
         </div>
@@ -444,7 +427,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Ship className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-white mt-2">
-            {clientRows.length > 0 ? globalStats.totalExporters.toLocaleString() : '—'}
+            {globalStats?.totalExporters.toLocaleString() ?? '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Unique supply partners</div>
         </div>
@@ -456,9 +439,9 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
           </div>
           <div
             className="text-2xl font-bold font-mono text-[#10b981] mt-2 truncate"
-            title={formatFullCurrency(globalStats.totalValue)}
+            title={globalStats ? formatFullCurrency(globalStats.totalValue) : 'Not available'}
           >
-            {clientRows.length > 0 ? formatCurrency(globalStats.totalValue) : '—'}
+            {globalStats ? formatCurrency(globalStats.totalValue) : '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Total valuation in USD</div>
         </div>
@@ -499,6 +482,11 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
           <div className="p-12 text-center text-gray-400 space-y-3">
             <RefreshCw className="w-6 h-6 text-[#10b981] animate-spin mx-auto" />
             <p className="text-xs font-medium">Loading country analytics data...</p>
+          </div>
+        ) : overviewError ? (
+          <div role="alert" className="p-8 text-center text-sm">
+            <p>Country analytics could not be loaded. No complete local copy is available.</p>
+            <button type="button" onClick={() => setOverviewRetry(value => value + 1)} className="mt-3 px-3 py-2 rounded bg-sky-700">Retry analytics</button>
           </div>
         ) : filteredCountries.length === 0 ? (
           <div className="p-12 text-center text-gray-400">

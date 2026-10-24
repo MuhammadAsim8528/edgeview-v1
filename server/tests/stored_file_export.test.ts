@@ -33,9 +33,11 @@ const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) 
 const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', `
   const {db}=await import('./server/db.ts');
   process.on('message', count=>{
+    db.files.clear(); // Only this owned test process: remove built-in demo fixtures.
     const rows=Array.from({length:count},(_,index)=>({Date:'2026-01-01',Importer:'Synthetic Importer '+index,Country:'Kenya',Exporter:'Synthetic Exporter',Item:'Product '+index+' '+ 'x'.repeat(300),TOT_FC:index+1}));
     db.files.set('large-synthetic',{id:'large-synthetic',name:'large.csv',rows});
     db.files.set('small-synthetic',{id:'small-synthetic',name:'small.csv',rows:rows.slice(0,2)});
+    db.files.set('empty-synthetic',{id:'empty-synthetic',name:'empty.csv',rows:[]});
     db.files.set('other-synthetic',{id:'other-synthetic',name:'other.csv',rows:[{Importer:'OTHER_FILE_MUST_NOT_APPEAR',Country:'Kenya',Item:'Other'}]});
     process.send({seeded:true,jsonBytes:Buffer.byteLength(JSON.stringify(rows))});
   });
@@ -57,6 +59,17 @@ try {
   assert.ok(ready, 'owned isolated actual server must start');
   const seeded = once(child, 'message', { signal: AbortSignal.timeout(30_000) }); child.send(count);
   assert.ok((await seeded)[0].jsonBytes > 5 * 1024 * 1024, 'fixture must exceed the unchanged JSON limit');
+  const overview = await (await fetch(`${base}/api/countries?overview=1&file_id=large-synthetic`)).json();
+  assert.deepEqual(overview.stats, { totalCountries: 1, totalImporters: count, totalExporters: 1, totalValue: count * (count + 1) / 2 });
+  assert.deepEqual(overview.countries, [{ country: 'Kenya', importers_count: count }]);
+  const allOverview = await (await fetch(`${base}/api/countries?overview=1`)).json();
+  assert.equal(allOverview.stats.totalImporters, count + 1, 'same importer repeated in another file is not counted twice');
+  assert.equal(allOverview.stats.totalExporters, 1);
+  const emptyOverview = await (await fetch(`${base}/api/countries?overview=1&file_id=empty-synthetic`)).json();
+  assert.deepEqual(emptyOverview.stats, { totalCountries: 0, totalImporters: 0, totalExporters: 0, totalValue: 0 });
+  assert.equal((await fetch(`${base}/api/countries?overview=1&file_id=missing`)).status, 404);
+  const legacyCountries = await (await fetch(`${base}/api/countries?file_id=small-synthetic`)).json();
+  assert.deepEqual(legacyCountries, [{ country: 'Kenya', importers_count: 2 }], 'legacy list contract remains unchanged');
   const secondPage = await loadFilePage(`${base}/api/files/large-synthetic/data?limit=25&offset=25&group_shipments=false`, 25, 25, new AbortController().signal);
   assert.ok(secondPage.ok);
   if (secondPage.ok) {

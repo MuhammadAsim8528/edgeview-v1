@@ -1,5 +1,34 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Country overview uses its actual dataset scope — 2026-10-24
+
+The existing /api/countries route now supports overview=1, returning the list
+and aggregate cards from the same normalized backend rows. Legacy list callers
+are unchanged. Importers are name/country entities (as in existing drill-down),
+exporters are unique names across the scope, value is the sum of stored trade
+rows, and zero is distinct from unavailable. No per-file summary counts are
+blindly added into a fake unique global count.
+
+CountryView uses that compact overview without loading row bodies. A selected
+metadata-only file no longer falls back to another file's rows. Local fallback
+requires all rows of every scoped file, proven against summary row counts.
+Missing/incomplete overview gives a retryable unavailable state, not fabricated
+zero. Initial request has a 30s deadline and abort cleanup. File-scope changes
+remount file-specific country/importer caches rather than reusing another file's
+drill-down state. Stable empty props avoid an effect refresh loop.
+
+PASS: country_overview denominator/dedup/zero/unknown/schema and scoped static
+markup; actual isolated overview API selected/all/empty/missing-file and legacy
+list compatibility in stored_file_export; full check, build and release smoke.
+The first all-files API assertion exposed built-in demo data in the isolated
+test process; fixture setup now clears that owned process's demo files before
+seeding, and the exact test passes. No production dataset was modified.
+NOT VERIFIED: rendered cards or scope-switch interaction. Country/importer
+drill-down network-failure fallback and keyboard access remain open; this slice
+does not claim the entire Country view is audited. Existing normalization and
+stored duplicate trade-row semantics are preserved, not reconciled here.
+React guidance influenced stable defaults, memoized aggregates and scope keys.
+
 ## File page failure/loading/count truth — 2026-10-24
 
 FileViewer now associates each server page with its exact file/filter/sort/page

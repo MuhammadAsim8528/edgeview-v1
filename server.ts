@@ -1,4 +1,5 @@
 import express from 'express';
+import { buildCountryOverview } from './shared/country_overview';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
@@ -2256,6 +2257,11 @@ function getAllDatasetRows(fileId?: string): Array<{
 
 app.get('/api/countries', (req, res) => {
   const fileId = req.query.file_id as string;
+  if (req.query.overview === '1') {
+    if (fileId && !db.files.has(fileId)) { res.status(404).json({ code: 'FILE_NOT_FOUND', message: 'The selected dataset is unavailable.' }); return; }
+    res.json(buildCountryOverview(getAllDatasetRows(fileId)));
+    return;
+  }
   const rows = getAllDatasetRows(fileId);
   const countryImporters = new Map<string, Set<string>>();
 
