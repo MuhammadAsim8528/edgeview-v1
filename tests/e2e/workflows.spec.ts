@@ -39,6 +39,9 @@ test('synthetic upload, paging, full CSV, country keyboard drill-down and restar
   expect(exported).toContain('Synthetic Buyer 59');
   await expect(page.getByText('Export completed successfully!')).toBeHidden();
   await page.getByRole('button', { name: 'Country View', exact: true }).click();
+  await expect(page.getByText('Total Importers', { exact: true }).locator('xpath=../..').getByText('60', { exact: true })).toBeVisible();
+  await expect(page.getByText('Total Exporters', { exact: true }).locator('xpath=../..').getByText('1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Total Trade Value', { exact: true }).locator('xpath=../..').getByText('$600', { exact: true })).toBeVisible();
   const country = page.getByRole('button', { name: 'Expand Kenya', exact: true });
   await country.focus(); await page.keyboard.press('Enter');
   await expect(page.getByText('Country Summary: Kenya', { exact: true })).toBeVisible();
