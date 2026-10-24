@@ -320,6 +320,15 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.post('/api/monitoring/frontend-error', (req, res) => {
+  // No arbitrary exception messages, stack traces, URLs or business fields accepted.
+  if (!req.body || Array.isArray(req.body) || Object.keys(req.body).length !== 1 || req.body.code !== 'REACT_RENDER_FAILED') {
+    return res.status(400).json({ success: false, code: 'INVALID_FRONTEND_ERROR' });
+  }
+  void captureMonitoringEvent('runtime_error', { stage: 'render', outcome: 'failed', error_code: 'REACT_RENDER_FAILED' });
+  return res.status(202).json({ success: true, delivery: 'NOT_CONFIRMED' });
+});
+
 app.get('/api/monitoring/status', (_req, res) => {
   res.json({ success: true, monitoring: getMonitoringStatus() });
 });

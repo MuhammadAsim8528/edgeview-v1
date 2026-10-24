@@ -1,4 +1,24 @@
 import { test, expect } from './fixtures';
+import { build } from 'esbuild';
+
+test('actual React boundary recovers and sends only a fixed crash code to the real API', async ({ page, context, runtime }) => {
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  const compiled = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ErrorBoundary} from './src/components/ErrorBoundary'; let fail=true; function View(){if(fail){throw new Error('SYNTHETIC_PRIVATE_CRASH_BODY');}return <p>Recovered fixture view</p>;} createRoot(document.getElementById('root')).render(<ErrorBoundary onReset={()=>{fail=false;}}><View/></ErrorBoundary>);`, resolveDir: process.cwd(), loader: 'tsx' }, bundle:true, write:false, format:'iife', platform:'browser', define:{'process.env.NODE_ENV':'"production"'} });
+  await page.route('**/__crash-fixture.js', route => route.fulfill({contentType:'application/javascript',body:compiled.outputFiles[0].text}));
+  await page.route('**/__crash-fixture.html', route => route.fulfill({contentType:'text/html',body:'<!doctype html><div id="root"></div><script src="/__crash-fixture.js"></script>'}));
+  const report = page.waitForResponse(response => response.url().endsWith('/api/monitoring/frontend-error'));
+  await page.goto('/__crash-fixture.html');
+  const response = await report;
+  expect(response.status()).toBe(202);
+  expect(response.request().postDataJSON()).toEqual({code:'REACT_RENDER_FAILED'});
+  await expect(page.getByText('Error code: REACT_RENDER_FAILED', {exact:true})).toBeVisible();
+  await expect(page.getByText('SYNTHETIC_PRIVATE_CRASH_BODY', {exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Reset Section',exact:true}).click();
+  await expect(page.getByText('Recovered fixture view',{exact:true})).toBeVisible();
+  const invalid = await page.request.post('/api/monitoring/frontend-error',{data:{code:'REACT_RENDER_FAILED',message:'SYNTHETIC_PRIVATE_CRASH_BODY'}});
+  expect(invalid.status()).toBe(400);
+});
 
 test('disabled monitoring stays honest in the API and rendered Settings', async ({ page, context, runtime }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));

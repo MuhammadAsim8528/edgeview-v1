@@ -1,4 +1,5 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { ReactNode } from 'react';
+import { reportFrontendCrash } from '../utils/reportFrontendCrash';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 
 interface Props {
@@ -25,8 +26,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('[ErrorBoundary caught an error]:', error, errorInfo);
+  public componentDidCatch() {
+    console.error('EdgeView interface rendering failed.');
+    void reportFrontendCrash();
   }
 
   private handleReset = () => {
@@ -48,14 +50,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
               {this.props.fallbackTitle || 'Section Render Failure'}
             </h3>
             <p className="text-xs text-gray-400 max-w-sm">
-              An unexpected error occurred while rendering this interface. Your existing uploaded data is fully safe.
+              This view could not be displayed. Reset the section to try again. If the problem continues, open Settings to check diagnostics.
             </p>
           </div>
-          {this.state.error && (
-            <div className="text-[10px] font-mono bg-[#0f0f0f] border border-[#222] text-rose-400 px-3 py-1.5 rounded-md max-w-full overflow-x-auto select-all">
-              {this.state.error.message || 'Unknown runtime error'}
-            </div>
-          )}
+          <p className="text-[10px] font-mono text-gray-500">Error code: REACT_RENDER_FAILED</p>
           <button
             onClick={this.handleReset}
             className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#333] text-gray-300 hover:text-white font-medium text-xs border border-[#333] transition-colors cursor-pointer"

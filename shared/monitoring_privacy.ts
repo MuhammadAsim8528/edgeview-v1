@@ -17,6 +17,7 @@ const PRODUCT_EVENTS = new Set([
 ]);
 const ERROR_MESSAGES = {
   UNEXPECTED_ERROR: 'Unexpected EdgeView error',
+  REACT_RENDER_FAILED: 'EdgeView interface rendering failed',
   PROVIDER_AUTH_FAILED: 'Provider authentication failed',
   PROVIDER_RATE_LIMITED: 'Provider request rate limited',
   PROVIDER_TIMEOUT: 'Provider request timed out',
@@ -31,7 +32,7 @@ const ERROR_MESSAGES = {
 } as const;
 const ENUMS: Record<string, readonly string[]> = {
   provider: ['nvidia', 'groq', 'serper', 'hunter', 'direct_http'],
-  stage: ['startup', 'shutdown', 'import', 'run', 'query_generation', 'search', 'resolution', 'scrape', 'storage', 'export', 'diagnostics', 'update', 'rollback'],
+  stage: ['startup', 'shutdown', 'render', 'import', 'run', 'query_generation', 'search', 'resolution', 'scrape', 'storage', 'export', 'diagnostics', 'update', 'rollback'],
   outcome: ['started', 'success', 'failed', 'cancelled', 'skipped'],
 };
 const NUMBERS: Record<string, number> = {
