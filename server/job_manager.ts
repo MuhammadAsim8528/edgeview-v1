@@ -762,6 +762,35 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
             }
             continue;
           }
+
+          // Ordinary full/batch enrichment is incremental. If this exact
+          // country-aware contact already points at a successful V1 run, reuse
+          // the persisted projection instead of paying providers for the same
+          // company again. Force Fetch is the explicit refresh override.
+          if (!forceFetch && contact?.edgeview_v1_run_id) {
+            const cachedRun = getV1Run(String(contact.edgeview_v1_run_id));
+            if (cachedRun && (cachedRun.status === 'COMPLETED' || cachedRun.status === 'PARTIAL')) {
+              companyState.status = 'completed';
+              companyState.stage = `Reused existing V1 ${cachedRun.status} enrichment; Force Fetch to refresh`;
+              companyState.error = undefined;
+              companyState.outcome = String(contact.quality_status || '').toUpperCase() === 'COMPLETE' ? 'COMPLETE' : 'PARTIAL';
+              companyState.resourceUsage = emptyProviderUsage();
+              companyState.metrics = {
+                emailsFound: Array.isArray(contact.emails_list) ? contact.emails_list.length : contact.email ? 1 : 0,
+                phonesFound: Array.isArray(contact.phones_list) ? contact.phones_list.length : contact.phone ? 1 : 0,
+                socialsFound: Array.isArray(contact.socials) ? contact.socials.length : 0,
+                leadershipFound: Array.isArray(contact.contact_persons) && contact.contact_persons.length > 0,
+                websiteFound: Boolean(contact.website),
+              };
+              companyState.durationMs = 0;
+              job.current_company = companyName;
+              job.current_stage = companyState.stage;
+              job.completed_companies++;
+              if (job.completed_companies % 5 === 0 || cursor >= permittedIds.length) await checkpoint(companyState.stage);
+              continue;
+            }
+          }
+
           companyState.status = 'processing';
           companyState.stage = 'V1 query generation and deterministic retrieval';
           job.current_company = companyName;
