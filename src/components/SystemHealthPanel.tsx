@@ -14,24 +14,8 @@ import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { safeFetchJson } from '../utils/safeFetch';
 import { formatObservedLatency, formatObservedRate, formatObservedCount } from '../utils/telemetryFormat';
 import { RuntimeResourcesPanel } from './RuntimeResourcesPanel';
-
-export interface ProviderHealth {
-  provider: string;
-  configured: boolean;
-  status: 'healthy' | 'unconfigured' | 'auth_failed' | 'rate_limited' | 'degraded' | 'timeout' | 'disabled' | 'unknown';
-  routingState: 'available' | 'cooldown' | 'suppressed' | 'disabled' | 'unconfigured';
-  requestCount: number;
-  successCount: number;
-  failureCount: number;
-  timeoutCount: number;
-  rateLimitCount: number;
-  retryCount: number | null;
-  cacheHits: number | null;
-  cacheMisses: number | null;
-  averageLatencyMs: number | null;
-  lastDiagnosticLatencyMs?: number | null;
-  lastError: string;
-}
+import { isProviderHealthReport, type ProviderHealth } from '../utils/providerHealth';
+export type { ProviderHealth } from '../utils/providerHealth';
 
 export const SystemHealthPanel: React.FC = () => {
   const v1Providers = ['serper', 'hunter', 'nvidia', 'groq'];
@@ -52,11 +36,11 @@ export const SystemHealthPanel: React.FC = () => {
     try {
       const { ok, data, error } = await safeFetchJson<any>('/api/governor/provider-metrics', { signal: controller.signal });
       if (controller.signal.aborted) return;
-      if (ok && data && data.success && data.report) {
+      if (ok && data?.success === true && isProviderHealthReport(data.report)) {
         setHealthReport(data.report);
         setHealthError(null);
       } else {
-        setHealthError(error || 'Telemetry is unavailable. Check that EdgeView is running.');
+        setHealthError('Provider metrics are unavailable. Retry the provider check or wait for refresh.');
       }
     } catch (err) {
       if (!controller.signal.aborted) setHealthError('Telemetry could not be refreshed.');
@@ -298,6 +282,8 @@ export const SystemHealthPanel: React.FC = () => {
           Object.entries(healthReport)
             .filter(([key]) => v1Providers.includes(key.toLowerCase()))
             .map(([k, v]) => renderHealthCard(k, v))
+        ) : healthError ? (
+          <div className="col-span-full py-8 text-center text-xs text-gray-400">No provider metrics available.</div>
         ) : (
           <div className="col-span-full py-8 text-center text-xs text-gray-400 flex items-center justify-center space-x-2">
             <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
