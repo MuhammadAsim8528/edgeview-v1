@@ -73,5 +73,16 @@ try {
   assert.deepEqual(archive.filter(item => /(^|\/)docs\//.test(item)), [], 'the ZIP itself carries no docs path');
   assert.ok(archive.some(item => /(^|\/)EDGEVIEW_OPERATIONS\.md$/.test(item)), 'the ZIP still carries the operator guide');
   assert.ok(archive.some(item => /(^|\/)EdgeView\.bat$/.test(item)), 'the ZIP still carries the launcher');
-  console.log(`PASS deliverable excludes the internal docs tree at every depth, keeps the operator guide, runtime inputs and allowlisted helpers, and publishes a real ZIP from the resolved archiver (manifest ${manifest.files.length} files)`);
+
+  // Defence in depth: a state file that the copy filters let through must abort the build, not ship.
+  const second = path.join(root, 'leaky', 'checkout', 'pharma');
+  fs.cpSync(project, second, { recursive: true });
+  fs.writeFileSync(path.join(second, 'src', 'runtime-state.db'), `${CANARY} live database`);
+  const leaky = spawnSync(process.execPath, [path.resolve('scripts/package-windows.mjs')], { cwd: second, encoding: 'utf8' });
+  assert.notEqual(leaky.status, 0, 'a stray database file inside an included directory must fail the build');
+  assert.match(leaky.stderr, /prohibited sensitive\/state files/i, 'the abort must be attributed to the prohibited-file audit');
+  assert.equal(fs.existsSync(path.join(root, 'leaky', 'outputs', 'EdgeView-V1-Windows.zip')), false, 'no ZIP is published once the prohibited-file audit fires');
+  assert.equal(fs.existsSync(path.join(root, 'leaky', 'outputs', 'EdgeView-V1-Windows')), false, 'no stage is published once the prohibited-file audit fires');
+
+  console.log(`PASS deliverable excludes the internal docs tree at every depth, keeps the operator guide, runtime inputs and allowlisted helpers, publishes a real ZIP from the resolved archiver and aborts on a stray state file (manifest ${manifest.files.length} files)`);
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
