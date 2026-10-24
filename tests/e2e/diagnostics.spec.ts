@@ -1,0 +1,32 @@
+import { test, expect } from './fixtures';
+
+test('log failures are not presented as empty success and real refresh recovers', async ({ page, context, runtime }, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  await page.route('**/api/logs/enrichment*', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"SYNTHETIC_PRIVATE_LOG_ERROR"}' }));
+  await page.goto('/');
+  await page.locator('#nav-tab-settings').click();
+  await expect(page.getByRole('heading', { name: 'System Diagnostics & Activity Logs', exact: true })).toBeVisible();
+  await expect(page.getByText('Activity logs could not be loaded. Retry to refresh.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No enrichment log entries available.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('SYNTHETIC_PRIVATE_LOG_ERROR', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Enrichment Logs (—)', exact: true })).toBeVisible();
+  await page.unroute('**/api/logs/enrichment*');
+  await page.route('**/api/logs/enrichment*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[{"message":null}]' }));
+  await page.getByRole('button', { name: 'Refresh Logs', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh Logs', exact: true })).toBeEnabled();
+  await expect(page.getByText('Activity logs could not be loaded. Retry to refresh.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No enrichment log entries available.', { exact: true })).toHaveCount(0);
+  await page.unroute('**/api/logs/enrichment*');
+  await page.getByRole('button', { name: 'Refresh Logs', exact: true }).click();
+  await expect(page.getByText('No enrichment log entries available.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Activity logs could not be loaded. Retry to refresh.', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: /^System Logs/ }).click();
+  await expect(page.getByRole('button', { name: 'Refresh Logs', exact: true })).toBeEnabled();
+  await page.getByPlaceholder('Search log entries...').fill('a-term-that-does-not-occur-in-the-synthetic-logs');
+  await expect(page.getByText('No system log entries match this search.', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('logs-search.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});
