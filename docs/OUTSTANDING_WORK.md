@@ -1,5 +1,21 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Shipment grouping restoration found during repeated navigation — 2026-10-25
+
+The second resource attempt completed one cycle, then failed because Files
+remounted in Group Shipments ON mode. A dedicated pre-fix browser regression
+also failed after navigating away/back (17.3s). This was a real preference-reset
+gap, not a request to relax the workload assertion.
+
+The grouping display preference now uses one versioned, bounded browser flag,
+read lazily and saved from the toggle event. Storage denial keeps the view usable
+and shows a save warning; no trade records/evidence are copied into browser
+preferences. The flag is a browser-wide display choice, not per-file authority.
+Unit regression passed for round-trip, invalid values and denied storage.
+Rebuilt browser navigation/refresh verification passed (2.0s scenario / 4.4s run).
+Typecheck, lint, test:v1, E2E typecheck and build passed. Page/search/filter/scroll restoration
+remains separate; this change does not claim complete FileViewer state recovery.
+
 ## Settings keyboard and credential-field names — 2026-10-25
 
 The rendered pre-fix test failed to find a named Serper credential field.
