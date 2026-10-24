@@ -40,7 +40,7 @@ import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/uti
 import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey } from './server/company_identity';
-import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
+import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
 import { persistV1ContactOverlay, projectHistoricalContactFields, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
@@ -1638,8 +1638,8 @@ app.get('/api/runtime/state', async (req, res) => {
 });
 
 app.get('/api/enrich/activity-log', async (req, res) => {
-  const runs = listV1RunSummaries(20).map(summary => getV1Run(summary.id)).filter(Boolean) as NonNullable<ReturnType<typeof getV1Run>>[];
-  res.json(runs.flatMap(run => run.timeline.map(event => ({ ...event, run_id: run.id, company_name: run.company_name }))));
+  res.setHeader('X-EdgeView-Log-Scope', 'latest-20-runs');
+  res.json(listV1ActivityEvents(Number(req.query.tail ?? 500)));
 });
 
 app.get('/api/logs/system', async (req, res) => {
@@ -1653,8 +1653,8 @@ app.post('/api/logs/system/clear', async (req, res) => {
 });
 
 app.get('/api/logs/enrichment', async (req, res) => {
-  const runs = listV1RunSummaries(20).map(summary => getV1Run(summary.id)).filter(Boolean) as NonNullable<ReturnType<typeof getV1Run>>[];
-  res.json(runs.flatMap(run => run.timeline.map(event => ({ ...event, run_id: run.id, company_name: run.company_name }))));
+  res.setHeader('X-EdgeView-Log-Scope', 'latest-20-runs');
+  res.json(listV1ActivityEvents(Number(req.query.tail ?? 500)));
 });
 
 app.post('/api/logs/enrichment/clear', async (req, res) => {

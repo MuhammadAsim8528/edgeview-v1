@@ -1,5 +1,33 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Activity endpoints no longer hydrate evidence bodies — 2026-10-24
+
+Both /api/logs/enrichment and /api/enrich/activity-log now use a shared
+activity-only reader of persisted timeline metadata, not map(getV1Run) retaining
+twenty fully hydrated runs. Response tail defaults to 500, clamps to 1–1,000,
+selects newest events within the existing latest-20-run activity scope, and
+advertises that scope in X-EdgeView-Log-Scope. Historical identity discovery and
+full getV1Run/evidence integrity behavior are unchanged. Corrupt/missing timeline
+files yield explicit current read-failure diagnostics with RUN_TIMELINE_READ_FAILED;
+these do not modify immutable runs or invent historical provider calls.
+
+PASS: activity_log_no_hydration with 25 persisted runs and multi-megabyte raw
+payload, blocked blob reads plus a positive full-reader control, legacy inline
+fixture, repeated bounded reads, newest ordering, unchanged immutable checksum,
+all 25 historical identities and explicit malformed-timeline failure. First
+positive-control assertion expected an unwrapped probe error; corrected to
+verify the real V1_BLOB_INTEGRITY_ERROR and exact probe cause, then rerun.
+PASS actual HTTP on both aliases: corrupt raw blob leaves timeline available,
+full evidence endpoint still fails closed, tail/scope/order are correct, corrupt
+timeline is observable and backend stays healthy. Full checks, typecheck/lint,
+production build/release smoke and four rendered E2E cases also passed (29.8s).
+
+Limits: each persisted metadata JSON is still parsed; legacy runs with inline
+raw bodies can therefore still require large reads. Other full-run consumers,
+global summary/header-cache scaling, long memory/leak workloads, populated live
+log UI, monitoring delivery, Settings persistence QA and live deployment remain
+open. This removes a demonstrated hydration/retention path, not all memory risk.
+
 ## Activity-log failure truth and V1 schema mapping — 2026-10-24
 
 Trace: existing /api/logs/system returns runtime log records; existing
