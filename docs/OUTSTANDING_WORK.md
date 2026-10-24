@@ -1,5 +1,32 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Official-page phone recall corrected — 2026-10-24
+
+Reimplemented the useful phone-recall portion of QA reference f527fe1, without
+its unrelated selection/batch changes. Deterministic projection now accepts Cell
+labels and unlabelled international numbers from successful resolved official
+pages, including markdown-only content. Third-party profile attribution remains
+restricted. Phone patterns cannot consume a date/postcode on the next line;
+fax labels, wrong-country numbers and oversized numeric sequences are rejected.
+Overlay version is 18 so historical projections can recompute from retained raw
+evidence; no data was injected into operational records and no paid run started.
+
+PASS: official_phone_recall (six expected unique channels plus adversarial
+negatives), search_snippet_email_admission, historical_evidence_preservation,
+official_page_body_budget, npm run check, production build/release smoke.
+NOT VERIFIED: fresh Surgilinks or other live company run, resulting API/UI
+display, the full importer dataset, or whether COMPLETE adequately communicates
+coverage. This is projection recall improvement, not proof of exhaustive search.
+
+Exact prior f6faae98cedf5c2331f25062636f6ac31ba3d2d8 package check passed
+manifest/unchanged staged and extracted launch checks; build
+e27188d3b237776f7bfc31d8dff89c074526d4c6d2da6bc96efcf45ceefc8e2d,
+disposable ZIP SHA256 be59a28484c49f285d4a64e71e28efb93eefab1ced4e2ca6f5e44907b14327c8.
+It remains a developer ZIP requiring Node/npm, not clean-Windows acceptance.
+Supported Computer Use initialization was retried and failed before enumeration:
+`failed to write kernel assets: The system cannot find the path specified. (os error 3)`.
+No permission UI or browser control was obtained; visual QA remains open.
+
 ## Contact report defaults aligned — 2026-10-24
 
 Both Contacts export actions now carry the current scope: Exporter -> exporter,
