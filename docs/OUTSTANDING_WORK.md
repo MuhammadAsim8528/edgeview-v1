@@ -1,5 +1,25 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Sustained synthetic navigation observation — 2026-10-25
+
+Opt-in test:soak uses the existing isolated egress-blocked Playwright fixture,
+bounded numeric samples, five-minute default workload and idle/settling periods.
+It stays outside the ordinary fast browser suite. Completed 15 cycles / 18
+samples / 361.5s; no page/console errors. First-to-last workload backend RSS
+107.19 -> 105.07 MiB; settled 104.57 MiB. Heap 36.73 -> 36.81 MiB; settled
+36.97 MiB. Median cycle 1,745ms, maximum 3,271ms. Chromium's heap estimate was
+coarsely constant and cannot prove browser memory stability. No arbitrary
+growth threshold or leak-free verdict was introduced.
+
+See docs/RESOURCE_SOAK.md and docs/evidence/resource-soak-20261025.json for
+samples, candidate build identity, pre-commit metadata caveat and unsuccessful
+attempts. Earlier repetition exposed and led to the grouping/debounce fixes,
+not relaxed assertions. Large/real datasets, provider jobs, exports, multi-hour
+GC-aware leak work and clean-runtime performance remain open. The workstation
+was shared, not a controlled benchmark environment.
+Typecheck for E2E/soak passed. All 12 standard browser cases passed together
+(3.4m) after the navigation fixes, and production release smoke passed.
+
 ## Mount-time debounce undoing pagination — 2026-10-25
 
 Repeated navigation reached page 2, then Previous became disabled because an

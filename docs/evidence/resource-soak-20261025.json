@@ -1,0 +1,191 @@
+{
+  "buildId": "2cd84e2fc477963b59ee0f191e140a3c4908d8156c5078134df073e099af557a",
+  "gitCommit": "dd636727dfce2c34d86656be8d0f4bf50faa1791",
+  "requestedWorkloadSeconds": 300,
+  "elapsedSeconds": 361.4655002,
+  "samples": [
+    {
+      "phase": "idle-start",
+      "elapsedSeconds": 0.36685249999999997,
+      "rssBytes": 134377472,
+      "heapUsedBytes": 44279920,
+      "cpuPercent": null,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 129,
+      "cycleMs": null
+    },
+    {
+      "phase": "idle-end",
+      "elapsedSeconds": 30.397223299999997,
+      "rssBytes": 109105152,
+      "heapUsedBytes": 37565968,
+      "cpuPercent": 1.0051341317188913,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 129,
+      "cycleMs": null
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 32.6285503,
+      "rssBytes": 112398336,
+      "heapUsedBytes": 38516352,
+      "cpuPercent": 4.8807206966646115,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 521,
+      "cycleMs": 1745.429400000001
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 52.887330399999996,
+      "rssBytes": 112742400,
+      "heapUsedBytes": 38826304,
+      "cpuPercent": 0.31165424674200004,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1973.7858999999953
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 73.05480610000001,
+      "rssBytes": 113741824,
+      "heapUsedBytes": 38648504,
+      "cpuPercent": 0.6201114167576895,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 2121.2967000000062
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 93.1996391,
+      "rssBytes": 113573888,
+      "heapUsedBytes": 39005016,
+      "cpuPercent": 0.07927775586078149,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 2233.0645000000077
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 114.2762863,
+      "rssBytes": 109047808,
+      "heapUsedBytes": 39172312,
+      "cpuPercent": 0.14735215497583226,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 3270.9679999999935
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 132.7087286,
+      "rssBytes": 108793856,
+      "heapUsedBytes": 39638920,
+      "cpuPercent": 0.6767241994662663,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1685.0038000000059
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 153.52024,
+      "rssBytes": 109977600,
+      "heapUsedBytes": 39657752,
+      "cpuPercent": 0.38485699573877047,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 2439.0274999999965
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 172.4817978,
+      "rssBytes": 110379008,
+      "heapUsedBytes": 39654656,
+      "cpuPercent": 0.24279611026166936,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1415.3250000000116
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 193.0552366,
+      "rssBytes": 110665728,
+      "heapUsedBytes": 39799984,
+      "cpuPercent": 0.3038491229534735,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1948.4419000000053
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 212.6634643,
+      "rssBytes": 111099904,
+      "heapUsedBytes": 40593672,
+      "cpuPercent": 0.31376469470768625,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1543.4041000000143
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 232.7246757,
+      "rssBytes": 111480832,
+      "heapUsedBytes": 40468120,
+      "cpuPercent": 0.23564884731864943,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1578.4341999999888
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 253.7384589,
+      "rssBytes": 111951872,
+      "heapUsedBytes": 40505952,
+      "cpuPercent": 0.2953029507971129,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 2551.829999999987
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 272.6945068,
+      "rssBytes": 112463872,
+      "heapUsedBytes": 40615544,
+      "cpuPercent": 0.2522197001945346,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1475.6563000000315
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 292.4426889,
+      "rssBytes": 109752320,
+      "heapUsedBytes": 38564544,
+      "cpuPercent": 0.3929712497245993,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1228.1586999999708
+    },
+    {
+      "phase": "workload",
+      "elapsedSeconds": 312.56081550000005,
+      "rssBytes": 110178304,
+      "heapUsedBytes": 38599976,
+      "cpuPercent": 0.23423510059430705,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 510,
+      "cycleMs": 1320.5395000000135
+    },
+    {
+      "phase": "settled",
+      "elapsedSeconds": 361.452475,
+      "rssBytes": 109645824,
+      "heapUsedBytes": 38761384,
+      "cpuPercent": 0.061060261369262896,
+      "browserJsHeapEstimateBytes": 10000000,
+      "domNodes": 3,
+      "cycleMs": null
+    }
+  ],
+  "pageErrorCount": 0,
+  "consoleErrorCount": 0,
+  "limitations": "Synthetic 60-row workflow only. Browser heap is a Chromium estimate, not process RSS. No forced GC, paid provider work, large import, export or leak-free verdict. Thresholds are not established by this observation."
+}
