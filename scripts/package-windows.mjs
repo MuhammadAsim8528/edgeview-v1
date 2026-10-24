@@ -83,8 +83,17 @@ function hashTree(directory, relative = '') {
 hashTree(stage);
 fs.writeFileSync(path.join(stage, 'PACKAGE_MANIFEST.json'), `${JSON.stringify({ format: 1, files: manifest }, null, 2)}\n`, 'utf8');
 
-const archived = spawnSync('tar', ['-a', '-c', '-f', zip, '-C', buildRoot, path.basename(stage)], { encoding: 'utf8' });
-if (archived.status !== 0) throw new Error(archived.stderr || 'Failed to create Windows ZIP');
+const systemTar = path.join(process.env.SystemRoot ?? '', 'System32', 'tar.exe');
+// A bash-flavoured PATH can put GNU tar first, which reads C:\... as a remote share and, on other
+// hosts, silently writes an uncompressed tarball behind the .zip name.
+const archiver = process.platform === 'win32' && fs.existsSync(systemTar) ? systemTar : 'tar';
+const archived = spawnSync(archiver, ['-a', '-c', '-f', zip, '-C', buildRoot, path.basename(stage)], { encoding: 'utf8' });
+if (archived.status !== 0) throw new Error(archived.stderr || `Failed to create Windows ZIP with ${archiver}`);
+if (fs.statSync(zip).size < 4) throw new Error('Windows ZIP is too small to be an archive.');
+const descriptor = fs.openSync(zip, 'r');
+const signature = Buffer.alloc(4);
+try { fs.readSync(descriptor, signature, 0, 4, 0); } finally { fs.closeSync(descriptor); }
+if (signature.readUInt32LE(0) !== 0x04034b50) throw new Error(`${archiver} produced an archive without a ZIP local-file header; refusing to publish it as a ZIP.`);
 verifyPackage(stage, { rejectUnexpected: true });
 if (fs.existsSync(destinationStage)) verifyPackage(destinationStage, { rejectUnexpected: true });
 const oldStage = path.join(buildRoot, 'previous-stage');
@@ -103,7 +112,7 @@ try {
   retainRecovery = false;
   throw error;
 }
-console.log(JSON.stringify({ stage: destinationStage, zip: destinationZip }));
+console.log(JSON.stringify({ stage: destinationStage, zip: destinationZip, archiver }));
 } finally {
   if (!retainRecovery) fs.rmSync(buildRoot, { recursive: true, force: true });
   else console.error(`Packaging recovery files retained at ${buildRoot}`);

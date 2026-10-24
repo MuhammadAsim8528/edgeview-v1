@@ -39,12 +39,11 @@ try {
   write('scripts/package-windows.mjs', '// the packager itself must not be a runtime dependency');
   write('scripts/generate-third-party-notices.mjs', `${CANARY} release engineering tool`);
 
-  // The packager shells out to `tar`; a bash-flavoured PATH can put GNU tar first, which reads
-  // C:\... as a remote share. Resolve the system archiver explicitly for this fixture.
   const systemTar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-  const env = fs.existsSync(systemTar) ? { ...process.env, PATH: `${path.dirname(systemTar)}${path.delimiter}${process.env.PATH}` } : process.env;
-  const run = spawnSync(process.execPath, [path.resolve('scripts/package-windows.mjs')], { cwd: project, encoding: 'utf8', env });
+  const run = spawnSync(process.execPath, [path.resolve('scripts/package-windows.mjs')], { cwd: project, encoding: 'utf8' });
   assert.equal(run.status, 0, `packaging failed: ${run.stderr}`);
+  if (process.platform === 'win32' && fs.existsSync(systemTar)) assert.equal(JSON.parse(run.stdout).archiver, systemTar, 'the Windows build must use the system archiver');
+  assert.deepEqual([...fs.readFileSync(path.join(outputs, 'EdgeView-V1-Windows.zip')).subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'the published artifact really is a ZIP');
   assert.ok(fs.existsSync(stage) && fs.existsSync(path.join(outputs, 'EdgeView-V1-Windows.zip')));
   assert.equal(fs.existsSync(path.join(project, 'docs')), true, 'the source docs tree must still exist for the assertion to mean anything');
 
@@ -74,5 +73,5 @@ try {
   assert.deepEqual(archive.filter(item => /(^|\/)docs\//.test(item)), [], 'the ZIP itself carries no docs path');
   assert.ok(archive.some(item => /(^|\/)EDGEVIEW_OPERATIONS\.md$/.test(item)), 'the ZIP still carries the operator guide');
   assert.ok(archive.some(item => /(^|\/)EdgeView\.bat$/.test(item)), 'the ZIP still carries the launcher');
-  console.log(`PASS deliverable excludes the internal docs tree at every depth while keeping the operator guide, runtime inputs and allowlisted helpers (manifest ${manifest.files.length} files)`);
+  console.log(`PASS deliverable excludes the internal docs tree at every depth, keeps the operator guide, runtime inputs and allowlisted helpers, and publishes a real ZIP from the resolved archiver (manifest ${manifest.files.length} files)`);
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
