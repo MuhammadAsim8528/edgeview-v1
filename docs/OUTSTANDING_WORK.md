@@ -1,5 +1,32 @@
 # EdgeView completion ledger — 2026-10-20
 
+## DOCX structure/text defect found by download QA — 2026-10-25
+
+Rendered export QA downloaded real CSV/XLSX/DOCX from a two-row uploaded file.
+DOCX text showed literal &amp; from double escaping an ordinary ampersand.
+A strengthened, independent browser DOMParser check also rejected document.xml
+(10.2s negative control): paragraph spacing embedded element markup inside an
+opening tag. This was not detected by successful HTTP/ZIP signature checks.
+
+The shared streaming paragraph helper now uses w:before/w:after attributes on
+w:spacing. Text is escaped once at run(), including generic title/header/cells
+and international country headings; metadata's separate escaping remains.
+No new dependency, competing generator or architecture rewrite was introduced.
+OOXML reference: https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.spacingbetweenlines.after?view=openxml-3.0.1
+
+Rebuilt browser scenario passed (15.8s / 25.6s run): five file formats (CSV,
+XLSX, DOCX, PDF, combined ZIP) plus ordinary and international contact-directory
+DOCX through the actual export controls. CSV/XLSX retain both records; all DOCX
+XML/rels members parse and document text preserves names/ampersands; combined
+ZIP contains one of each required format and repeats those validations. No
+page/console errors. PDF checks are signature/trailer only, NOT text/layout.
+Native Office/PDF opening, OOXML schema conformance, fonts/pagination and live
+owner-browser behavior remain NOT VERIFIED. Synthetic operational data only;
+no contact/provider success was injected into the product.
+Typecheck, lint, E2E typecheck, test:v1, production build and release smoke passed.
+Hosted dd16b63 navigation-fix run 40128857841 completed/success before this DOCX
+slice; that earlier success did not include the new format/XML regression.
+
 ## Upload completion overriding newer navigation — 2026-10-25
 
 Hosted run 40127483594 on 6939535 passed Windows verify (including the actual

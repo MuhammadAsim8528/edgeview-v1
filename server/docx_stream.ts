@@ -47,8 +47,8 @@ function run(text: string, opts: { size?: number; bold?: boolean; italics?: bool
 
 function paragraph(runs: string, opts: { after?: number; before?: number; center?: boolean } = {}): string {
   const spacing: string[] = [];
-  if (opts.before) spacing.push(`<w:before w:val="${opts.before}"/>`);
-  if (opts.after !== undefined) spacing.push(`<w:after w:val="${opts.after}"/>`);
+  if (opts.before !== undefined) spacing.push(`w:before="${opts.before}"`);
+  if (opts.after !== undefined) spacing.push(`w:after="${opts.after}"`);
   const jc = opts.center ? '<w:jc w:val="center"/>' : '';
   return `<w:p><w:pPr><w:spacing${spacing.length ? ' ' + spacing.join(' ') : ''}/>${jc}</w:pPr>${runs}</w:p>`;
 }
@@ -359,7 +359,7 @@ export async function generateInternationalImporterDirectoryDocx(
 
   for (const section of directory.countrySections) {
     parts.push(
-      paragraph(run(`INTERNATIONAL IMPORTERS — ${escXml(section.country.toUpperCase())}`, { size: HPS.countryHeading, bold: true, color: '0F172A' }), {
+      paragraph(run(`INTERNATIONAL IMPORTERS — ${section.country.toUpperCase()}`, { size: HPS.countryHeading, bold: true, color: '0F172A' }), {
         before: 300,
         after: 120,
       })
@@ -550,7 +550,7 @@ export async function generateGenericDocxReportStream(
 
   // Blue title banner (single-cell table).
   const banner = borderCell(
-    paragraph(run(`EdgeView — ${escXml(title)}`, { size: 52, bold: true, color: 'FFFFFF' }), { after: 0, center: true }),
+    paragraph(run(`EdgeView — ${title}`, { size: 52, bold: true, color: 'FFFFFF' }), { after: 0, center: true }),
     { width: TOTAL_DXA, fill: '0284C7', margins: [180, 180, 180, 180] }
   );
   parts.push(
@@ -562,7 +562,7 @@ export async function generateGenericDocxReportStream(
   const headerCells = columns
     .map((col) =>
       borderCell(
-        paragraph(run(escXml(col.header), { size: 32, bold: true, color: '111827' }), { after: 0 }),
+        paragraph(run(col.header, { size: 32, bold: true, color: '111827' }), { after: 0 }),
         { width: getColDxa(col.header), fill: 'E5E7EB', margins: [120, 120, 100, 100] }
       )
     )
@@ -574,7 +574,7 @@ export async function generateGenericDocxReportStream(
       .map((col) => {
         const val = sanitizeCellStr(rec[col.key] ?? rec[col.header] ?? '');
         return borderCell(
-          paragraph(run(escXml(val || '\u2014'), { size: 28, color: '374151' }), { after: 0 }),
+          paragraph(run(val || '\u2014', { size: 28, color: '374151' }), { after: 0 }),
           { width: getColDxa(col.header), margins: [100, 100, 100, 100] }
         );
       })
