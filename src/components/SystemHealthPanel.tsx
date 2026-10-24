@@ -33,9 +33,14 @@ export const SystemHealthPanel: React.FC = () => {
     if (healthRequest.current) return;
     const controller = new AbortController();
     healthRequest.current = controller;
+    const deadline = setTimeout(() => controller.abort(), 30_000);
     try {
-      const { ok, data, error } = await safeFetchJson<any>('/api/governor/provider-metrics', { signal: controller.signal });
-      if (controller.signal.aborted) return;
+      const { ok, data } = await safeFetchJson<any>('/api/governor/provider-metrics', { signal: controller.signal });
+      if (healthRequest.current !== controller) return;
+      if (controller.signal.aborted) {
+        setHealthError('Provider metrics timed out. Retry the provider check or wait for refresh.');
+        return;
+      }
       if (ok && data?.success === true && isProviderHealthReport(data.report)) {
         setHealthReport(data.report);
         setHealthError(null);
@@ -43,8 +48,9 @@ export const SystemHealthPanel: React.FC = () => {
         setHealthError('Provider metrics are unavailable. Retry the provider check or wait for refresh.');
       }
     } catch (err) {
-      if (!controller.signal.aborted) setHealthError('Telemetry could not be refreshed.');
+      if (healthRequest.current === controller) setHealthError('Telemetry could not be refreshed.');
     } finally {
+      clearTimeout(deadline);
       if (healthRequest.current === controller) healthRequest.current = null;
     }
   };
