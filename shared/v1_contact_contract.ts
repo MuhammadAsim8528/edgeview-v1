@@ -56,6 +56,22 @@ function uniqueStrings(values: unknown[], limit: number): string[] {
   return out;
 }
 
+function uniquePhones(values: unknown[], limit: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const clean = String(value ?? '').trim();
+    if (!clean) continue;
+    const digits = clean.replace(/\D/g, '').replace(/^00/, '');
+    const key = digits.length >= 7 ? digits : clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 function socialPlatform(url: string): string {
   if (/linkedin\.com/i.test(url)) return 'LinkedIn';
   if (/(?:twitter\.com|x\.com)/i.test(url)) return 'X';
@@ -146,7 +162,7 @@ export function normalizeV1ContactPeople(value: unknown): V1ContactPerson[] {
 
 export function normalizeV1ContactOverlay(input: any): V1ContactOverlay {
   const emails = uniqueStrings([...(Array.isArray(input?.emails_list) ? input.emails_list : []), input?.email], 50);
-  const phones = uniqueStrings([...(Array.isArray(input?.phones_list) ? input.phones_list : []), input?.phone], 10);
+  const phones = uniquePhones([...(Array.isArray(input?.phones_list) ? input.phones_list : []), input?.phone], 10);
   const addresses = normalizeV1Addresses(input?.addresses, input?.address);
   const { linkedin_urls, socials } = normalizeV1Socials(input || {});
   const contact_people = normalizeV1ContactPeople(input?.contact_persons);
