@@ -1,5 +1,20 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Settings keyboard and credential-field names — 2026-10-25
+
+The rendered pre-fix test failed to find a named Serper credential field.
+All four password inputs now have provider-specific accessible names, and
+primary-provider radios share a native name in a named radio group. Browser
+verification passed (1.7s scenario / 6.0s run), including actual ArrowRight and
+ArrowLeft selection changes. Typecheck, lint, E2E typecheck and build passed.
+This is a narrow Settings check, not whole-app accessibility certification.
+
+Supported Computer Use initialization retried after reading the current skill,
+guidance, confirmation policy and API reference. Importing @oai/sky through
+node_repl failed before app enumeration: failed to write kernel assets: The
+system cannot find the path specified. (os error 3). No permission UI appeared;
+no live browser interaction, alternate port, raw CDP or bypass was used.
+
 ## Connection-check request lifecycle — 2026-10-25
 
 Individual provider and aggregate connection-check UI requests now have a 60s

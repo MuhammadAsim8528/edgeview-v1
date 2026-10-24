@@ -65,6 +65,10 @@ These tests establish only their synthetic scenarios, not the historical
 
 ## Official setup references
 
+The Settings accessibility case checks provider-specific credential names,
+password input types and real left/right arrow navigation of the primary AI
+radio group. It is not a complete accessibility audit or screen-reader test.
+
 The provider-health case supplies a malformed response (a null provider entry),
 checks a visible unavailable state without a crash or continuing loading
 indicator, then restores the real API and clicks Test enabled providers. All
