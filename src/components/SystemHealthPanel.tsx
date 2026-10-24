@@ -69,24 +69,34 @@ export const SystemHealthPanel: React.FC = () => {
   }, []);
 
   const testConnections = async () => {
+    if (testRequest.current) return;
     setIsTesting(true);
     setTestError(null);
     const controller = new AbortController();
     testRequest.current = controller;
+    const deadline = setTimeout(() => controller.abort(), 60_000);
     try {
-      const { ok, data, error } = await safeFetchJson<any>('/api/system/health/test', { method: 'POST', signal: controller.signal });
-      if (controller.signal.aborted) return;
-      if (!ok || !data?.success) {
-        setTestError(error || 'Provider checks could not run. Try again after checking the backend.');
+      const { ok, data } = await safeFetchJson<any>('/api/system/health/test', { method: 'POST', signal: controller.signal });
+      if (testRequest.current !== controller) return;
+      if (controller.signal.aborted) {
+        setTestError('Provider checks timed out. You can retry.');
         return;
       }
-      await fetchHealthReport();
-      await refresh();
+      if (!ok || data?.success !== true || !isProviderHealthReport(data.providers)) {
+        setTestError('Provider checks could not run. Try again after checking the backend.');
+        return;
+      }
+      setHealthReport(data.providers);
+      setHealthError(null);
+      void refresh();
     } catch (err) {
-      if (!controller.signal.aborted) setTestError('Provider checks could not be completed.');
+      if (testRequest.current === controller) setTestError('Provider checks could not be completed.');
     } finally {
-      if (testRequest.current === controller) testRequest.current = null;
-      if (!controller.signal.aborted) setIsTesting(false);
+      clearTimeout(deadline);
+      if (testRequest.current === controller) {
+        testRequest.current = null;
+        setIsTesting(false);
+      }
     }
   };
 

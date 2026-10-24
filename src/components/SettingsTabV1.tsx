@@ -31,6 +31,7 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const loadRequest = useRef<AbortController | null>(null);
+  const providerRequests = useRef(new Map<ProviderId, AbortController>());
   const [saving, setSaving] = useState(false);
   const [nvidiaModel, setNvidiaModel] = useState('nvidia/nemotron-3-nano-omni-30b-a3b-reasoning');
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
@@ -87,18 +88,29 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
       const active = loadRequest.current;
       loadRequest.current = null;
       active?.abort();
+      for (const request of providerRequests.current.values()) request.abort();
+      providerRequests.current.clear();
     };
   }, []);
 
   const testProvider = async (id: ProviderId) => {
+    if (providerRequests.current.has(id)) return;
+    const controller = new AbortController();
+    providerRequests.current.set(id, controller);
+    const deadline = setTimeout(() => controller.abort(), 60_000);
     patchProvider(id, { testing: true, result: undefined, ok: undefined });
     const model = id === 'nvidia' ? nvidiaModel : id === 'groq' ? groqModel : undefined;
-    const { data, error } = await safeFetchJson<any>('/api/settings/test', {
+    const { ok, data, error } = await safeFetchJson<any>('/api/settings/test', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({ service: id, key: providers[id].key, model }),
     });
-    const success = Boolean(data?.success);
-    const message = data?.message || error || 'Provider test failed';
+    clearTimeout(deadline);
+    if (providerRequests.current.get(id) !== controller) return;
+    providerRequests.current.delete(id);
+    const success = !controller.signal.aborted && ok && data?.success === true;
+    const message = controller.signal.aborted ? 'Provider check timed out. You can retry.'
+      : typeof data?.message === 'string' ? data.message : error || 'Provider test failed';
     patchProvider(id, { testing: false, ok: success, result: message });
     showToast(`${PROVIDERS.find(p => p.id === id)?.name}: ${message}`, success ? 'success' : 'error');
   };
