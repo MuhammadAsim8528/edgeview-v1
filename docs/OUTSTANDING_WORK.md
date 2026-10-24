@@ -1,5 +1,23 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Provider-metrics stalled refresh recovery — 2026-10-24
+
+Negative browser control failed against the previous compiled app (45.5s): a
+pending provider-metrics request held the refresh lock indefinitely and left
+the loading indicator visible. The metrics read now has a 30s abort deadline,
+publishes a distinct timeout state, releases the in-flight lock in finally and
+clears its timer. Unmounted/obsolete requests cannot publish. This changes only
+the local metrics read, not provider HTTP limits, routing or research jobs.
+
+PASS: typecheck, lint, test:v1, E2E typecheck, provider-health contract regression
+and production build/release smoke. All nine rendered browser scenarios passed (1.9m),
+including timeout/recovery at 30.9s with an inspected screenshot showing the
+timeout message and no metrics spinner. No real provider credentials or credits
+were used; these are isolated compiled-app checks, not live-instance QA.
+Aggregate Test enabled providers
+and individual provider-check request deadlines remain separate outstanding
+work; this fix must not be described as bounding every diagnostic operation.
+
 ## Provider-health malformed response guard — 2026-10-24
 
 Rendered negative control: a successful HTTP response containing a null provider

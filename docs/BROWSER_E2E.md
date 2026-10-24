@@ -70,6 +70,9 @@ checks a visible unavailable state without a crash or continuing loading
 indicator, then restores the real API and clicks Test enabled providers. All
 four providers must show Not Configured on the genuinely keyless test instance.
 This tests failure rendering and recovery, not real provider authentication.
+The stalled-metrics case waits for the UI's actual 30s deadline, checks that
+loading ends, then restores the real API and verifies a successful refresh.
+No clock mocking or real provider credentials are involved.
 
 The Settings case changes provider toggles, primary AI provider and Groq model
 through the rendered form, verifies the actual persisted API response, restarts
