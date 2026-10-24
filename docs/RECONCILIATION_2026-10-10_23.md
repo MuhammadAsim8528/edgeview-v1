@@ -1,5 +1,48 @@
 # October 10–23 release reconciliation
 
+## October 24 evidence addendum (does not erase historical claims below)
+
+Current exclusive ChatGPT branch is based on 860b6e4. Owner reconfirmed Qoder
+uses the original workspace; ChatGPT uses `edgeview-chatgpt`. Do not merge a dirty
+worktree or copy the separate QA worktree's mixed changes.
+
+- Export HTML escaping/URL guards: de8aeb3 endpoint/security checks, rendered
+  downloaded document still NOT VERIFIED.
+- Upload filename boundary: 12d2273 all four HTTP aliases, rejection before
+  persistence, valid CSV/NVL/XLSX checks. Browser upload still NOT VERIFIED.
+- Missing/duplicate Host: 8906c1c compiled raw-HTTP regressions PASS; no browser
+  DNS-rebinding exploit claim or removal of existing HOST override.
+- Export admission budget: ae3be06 compiled GET/HEAD/POST/OPTIONS and nested
+  stats-mount aliases PASS; concurrent memory/load acceptance remains open.
+- Migration backup retention: 45bab8b post-write/reopen/integrity/schema gating,
+  failed-schema/write/reopen preservation and link boundaries PASS. Full restore,
+  interrupted restore and installed-update rollback remain PARTIAL.
+- AI credential transport: existing 0652b15 independently rechecked; query and
+  extraction destinations, DNS pinning, HTTPS/redirect/body and origin checks
+  PASS in synthetic fixtures. Actual configured-provider/company/UI run open.
+- Request parsers: 860b6e4 production audit has zero HIGH findings; two MODERATE
+  uuid/ExcelJS findings remain. Failed local clean install/repaired install and
+  exact developer-package evidence are recorded in OUTSTANDING_WORK.md.
+- Dependabot config and release/security/license evidence tooling exist on this
+  branch. Default-branch activation, hosted feature entitlement, exact final
+  release CI and trusted customer release are not inferred from file presence.
+
+Reopened available chats “AI Agent Build Advice 7” and “AI Agent Build Advice 8”.
+Their current connector pages report no older cursor but expose only bounded
+recent turns, NOT the complete October 10 onward history. Latest QA conversation
+reports full-file export hitting the 5 MB request limit, duplicate/miscounted
+pagination summaries, exporter-report default mismatch, incomplete official phone
+recall despite COMPLETE, and missing global country totals/keyboard semantics.
+These are acceptance blockers, not disproved by green existing tests. The
+separate `edgeview-qa-fixes` tree already contains uncommitted changes touching
+these subsystems; preserve/review its coherent slices rather than duplicate them.
+Reports of live/QA provider health and rendered behavior are attributed reports,
+not this writer's independently repeated browser verification.
+
+All unclosed rows below remain in scope. The original evidence cutoff and
+ownership text are historical; use this addendum plus OUTSTANDING_WORK.md for
+current state. Final recommendation remains NOT READY.
+
 Evidence cutoff: 2026-10-23. Branch base: ef1c074. This is a companion to
 OUTSTANDING_WORK.md, not a replacement or a favorable readiness report.
 

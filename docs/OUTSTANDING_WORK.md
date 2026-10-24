@@ -1,5 +1,65 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Recovered work and privacy projection — 2026-10-24
+
+Reopened available Advice 7/8 chats and compared the earlier reconciliation
+against actual branch history. Updated RECONCILIATION_2026-10-10_23.md with dated
+evidence instead of erasing old unfinished rows. Connector pages are bounded;
+complete October 10–18 turn-by-turn retrieval is still NOT VERIFIED.
+
+Latest coordinator QA reports unresolved full-file export/5 MB request failure,
+duplicate pagination totals, contact-report scope mismatch, phone recall with an
+overstated COMPLETE label, and missing country totals/keyboard semantics. The
+separate QA worktree already has mixed uncommitted fixes touching these areas.
+Do not duplicate or bulk-copy them. Its findings are attributed QA evidence,
+not this writer's own browser pass. Reconcile/review coherent fixes when ready.
+
+An isolated vendor-neutral boundary now exists in shared/monitoring_privacy.ts.
+It builds new frozen, null-prototype output from fixed event/enumeration codes,
+bounded numeric metrics and separately supplied build/installation metadata.
+It drops arbitrary properties/messages, exception bodies/stacks, URLs, headers,
+prompts, contact/business records and property-supplied operation UUIDs. Fixed
+error messages retain useful error grouping without copying exception text.
+Review found final-newline and UUID-provenance gaps; tests cover their correction.
+
+Data egress classification for this boundary:
+
+| Classification | Fields/policy |
+|---|---|
+| LOCAL ONLY | Complete local errors/evidence remain local; projection does not mutate them. |
+| SAFE TELEMETRY | Fixed product-event/provider/stage/outcome/error codes; bounded HTTP/timing/resource numbers; validated build/version/channel. |
+| PSEUDONYMOUS | Installation UUID from a trusted local protected-random identity authority; syntax validation here does NOT establish provenance. |
+| SENSITIVE | Dataset/company/job identifiers, business totals, raw errors and paths: not accepted from event properties. |
+| NEVER TRANSMIT | Credentials/tokens/cookies, contacts, raw files/rows/evidence/provider bodies/prompts, raw HWID. |
+
+Focused adversarial tests retain approved metadata (empty-output implementations
+fail utility acceptance) and reject private markers, malformed/newline identity,
+unknown/inherited codes, UUID-shaped business IDs, getters/toJSON, revoked proxies,
+numeric boundary violations and deeply nested inputs. Arbitrary JavaScript Proxy
+trap execution is not sandboxed; thrown errors fail closed. Identity provenance
+is a caller prerequisite, not a claim of this pure projection.
+The same provenance requirement applies to numeric measurements: a type/range
+check cannot identify a phone number relabeled as RAM. Real integration must use
+trusted resource/timing collectors, never arbitrary provider/business objects.
+
+Status: privacy MODULE PARTIAL for full monitoring. No SDK imports, initialization,
+credentials, network activation or product call-site wiring added in this slice.
+Re-ran the original Qoder adapter probe read-only: same source SHA256
+1c6ed5e7eef5f83213b7c7efc35e9036ebd3dabee6c2822b417aab2b31dcd15b,
+all nine leak probes still FAIL. Do not enable it. Final SDK envelopes/batches,
+automatic errors/logs/traces, replay-off enforcement, bounded offline transport,
+actual Sentry/PostHog delivery and Diagnostics UI integration remain unfinished.
+Focused projection test, typecheck, existing V1 suite, build and production
+release smoke passed for this slice; no rendered or remote-delivery PASS implied.
+
+Recovered requirements are still open, in acceptance order: actual enrichment
+recall/provenance and scope/UI fixes; full export behavior and rendered QA;
+privacy-safe integrated monitoring; restore/crash/performance/long-run gates;
+self-contained Windows installer, trusted update/acceptance/rollback/signing;
+exact three final artifacts, clean Windows and Stable end-user deployment.
+Earlier all-provider/unbounded-research ideas are superseded by current bounded
+V1, not abandoned features to resurrect. No release readiness claim.
+
 ## Parallel ownership and parser dependencies — 2026-10-24
 
 Owner confirmed Qoder writes only the original Pharma-AI workspace and
