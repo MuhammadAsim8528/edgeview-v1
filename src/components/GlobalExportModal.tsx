@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import {
   FileText,
@@ -22,6 +22,9 @@ export interface GlobalExportPayload {
   selectedRows?: any[];
   filters?: Record<string, any>;
   filenamePrefix?: string;
+  sourceFileId?: string;
+  recordCount?: number;
+  defaultReportType?: 'importer' | 'exporter' | 'both' | 'international_importer';
 }
 
 export type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'all';
@@ -45,9 +48,15 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (isOpen && payload?.dataset === 'contacts') {
+      setReportType(payload.defaultReportType || 'importer');
+    }
+  }, [isOpen, payload?.dataset, payload?.defaultReportType, payload?.title]);
+
   if (!isOpen || !payload) return null;
 
-  const totalRecords = payload.records ? payload.records.length : 0;
+  const totalRecords = payload.recordCount ?? (payload.records ? payload.records.length : 0);
   const selectedCount = payload.selectedRows ? payload.selectedRows.length : 0;
   const effectiveCount = selectedCount > 0 ? selectedCount : totalRecords;
 
@@ -66,7 +75,7 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
       const requestBody = {
         dataset: payload.dataset,
         title: payload.title,
-        records: payload.records,
+        records: payload.sourceFileId ? [] : payload.records,
         columns: payload.columns,
         selectedRows: payload.selectedRows,
         filters: payload.filters,
@@ -82,7 +91,10 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
           : `Compiling ${selectedFormat.toUpperCase()} document payload...`
       );
 
-      const response = await fetch('/api/export', {
+      const endpoint = payload.sourceFileId
+        ? `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`
+        : '/api/export';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
