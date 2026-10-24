@@ -1,5 +1,34 @@
 import { test, expect } from './fixtures';
 
+test('disabled monitoring stays honest in the API and rendered Settings', async ({ page, context, runtime }) => {
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  const before = await page.request.get('/api/monitoring/status');
+  expect(before.ok()).toBe(true);
+  const status = await before.json();
+  expect(status.monitoring.enabled).toBe(false);
+  expect(status.monitoring.replay).toBe('OFF');
+  for (const vendor of ['sentry', 'posthog']) {
+    expect(status.monitoring[vendor].state).toBe('DISABLED');
+    expect(status.monitoring[vendor].dashboard_verified).toBe(false);
+    expect(status.monitoring[vendor].last_transport_success_at).toBeNull();
+  }
+  const probe = await page.request.post('/api/monitoring/test');
+  expect(probe.ok()).toBe(true);
+  const result = await probe.json();
+  expect(result.success).toBe(false);
+  expect(result.delivery.sentry).toBe(false);
+  expect(result.delivery.posthog).toBe(false);
+  await page.goto('/');
+  await page.locator('#nav-tab-settings').click();
+  const panel = page.getByRole('region', { name: 'Remote monitoring status', exact: true });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Test monitoring delivery', exact: true })).toBeDisabled();
+  await expect(panel.getByText('DISABLED', { exact: true })).toHaveCount(2);
+  await expect(panel.getByText('NOT VERIFIED', { exact: true })).toHaveCount(2);
+  await expect(panel.getByText('TRANSPORT_OK', { exact: true })).toHaveCount(0);
+});
+
 test('log failures are not presented as empty success and real refresh recovers', async ({ page, context, runtime }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
