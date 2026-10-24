@@ -26,8 +26,13 @@ test('contact scope, export overrides and saved selection agree in the rendered 
     await supplier.getByRole('button').first().click();
     await expect(page.getByText('1 companies selected for batch action', { exact: true })).toBeVisible();
     await page.reload();
+    // Bulk selections are intentionally session-local so a stale expensive action
+    // cannot remain armed after restart/reload.
+    await expect(page.getByText('1 companies selected for batch action', { exact: true })).toHaveCount(0);
+    const reloadedSupplier = page.locator('tbody tr').filter({ hasText: 'Scope Supplier' });
+    await expect(reloadedSupplier).toBeVisible();
+    await reloadedSupplier.getByRole('button').first().click();
     await expect(page.getByText('1 companies selected for batch action', { exact: true })).toBeVisible();
-    await expect(page.locator('tbody tr').filter({ hasText: 'Scope Supplier' })).toBeVisible();
     await page.getByRole('button', { name: 'Export Selected', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exporter Suppliers & History', exact: true })).toHaveAttribute('aria-pressed', 'true');
     const downloading = page.waitForEvent('download');
