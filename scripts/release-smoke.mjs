@@ -272,7 +272,7 @@ try {
     assert.ok(Number(limited.headers.get('retry-after')) > 0);
   }
   assert.equal((await fetch(`${base}${csvPath}`, { method: 'HEAD' })).status, 429);
-  for (const route of ['/api/export', '/api/export/blocks', '/api/export/csv', '/api/export/report', '/api/export/docx', '/api/export/pdf']) {
+  for (const route of ['/api/export', `/api/export/file/${encodeURIComponent(uploadedId)}`, '/api/export/blocks', '/api/export/csv', '/api/export/report', '/api/export/docx', '/api/export/pdf']) {
     const blockedPostExport = await fetch(`${base}${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(blockedPostExport.status, 429, route);
     assert.equal((await blockedPostExport.json()).code, 'LOCAL_RATE_LIMITED');

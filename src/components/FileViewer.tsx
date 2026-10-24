@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
+import { loadFilePage, type FilePageResult } from '../utils/filePage';
 import {
   Download,
   Search,
@@ -504,65 +505,40 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   const [endDate, setEndDate] = useState<string>('');
 
   // Server-Side Paginated State for Fast Large Dataset Transfer
-  const [serverRows, setServerRows] = useState<any[]>([]);
-  const [serverTotalCount, setServerTotalCount] = useState<number>(0);
-  const [serverFilterOptions, setServerFilterOptions] = useState<{ countries: string[]; importers: string[] }>({ countries: [], importers: [] });
-  const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
+  const [pageResult, setPageResult] = useState<{ key: string; result: FilePageResult } | null>(null);
+  const [pageRetry, setPageRetry] = useState(0);
 
   // Server-side paginated mode enforced for any file without rows or with > 50 rows
   const isServerSide = !file?.rows || file.rows.length === 0 || file.rows.length > 50;
+  const pageParams = new URLSearchParams({ limit: String(pageSize), offset: String((currentPage - 1) * pageSize),
+    group_shipments: String(isGrouped), search: debouncedSearch, product: productFilter, country: countryFilter,
+    importer: importerFilter, start_date: startDate, end_date: endDate });
+  if (sortColumn) { pageParams.set('sort_by', sortColumn); pageParams.set('sort_dir', sortDirection); }
+  const pageUrl = file?.id && isServerSide ? `/api/files/${encodeURIComponent(file.id)}/data?${pageParams}` : '';
+  const pageKey = `${pageUrl}#${pageRetry}`;
+  const activePage = pageResult?.key === pageKey ? pageResult.result : null;
+  const isDataLoading = Boolean(pageUrl && !activePage);
+  const pageError = activePage && 'error' in activePage ? activePage.error : null;
+  const serverRows = activePage?.ok ? activePage.rows : [];
+  const serverTotalCount = activePage?.ok ? activePage.total : 0;
+  const serverFilterOptions = useMemo(() => activePage?.ok ? activePage.filters : { countries: [], importers: [] }, [activePage]);
 
   useEffect(() => {
-    if (!file?.id || !isServerSide) return;
+    if (!pageUrl) return;
     let isMounted = true;
+    const controller = new AbortController();
     const fetchPaginatedData = async () => {
-      setIsDataLoading(true);
-      const params = new URLSearchParams({
-        limit: String(pageSize),
-        offset: String((currentPage - 1) * pageSize),
-        group_shipments: isGrouped ? 'true' : 'false',
-        search: debouncedSearch,
-        product: productFilter,
-        country: countryFilter,
-        importer: importerFilter,
-        start_date: startDate,
-        end_date: endDate,
-      });
-      if (sortColumn) {
-        params.set('sort_by', sortColumn);
-        params.set('sort_dir', sortDirection);
-      }
-
-      const { ok, data } = await safeFetchJson<any>(`/api/files/${encodeURIComponent(file.id)}/data?${params.toString()}`);
-      if (isMounted && ok && data) {
-        setServerRows(data.rows || data.data || []);
-        setServerTotalCount(data.total_count ?? data.total_rows ?? 0);
-        if (data.filter_options && (data.filter_options.countries?.length > 0 || data.filter_options.importers?.length > 0)) {
-          setServerFilterOptions({
-            countries: data.filter_options.countries || [],
-            importers: data.filter_options.importers || [],
-          });
-        }
-      }
-      if (isMounted) setIsDataLoading(false);
+      const result = await loadFilePage(pageUrl, pageSize, (currentPage - 1) * pageSize, controller.signal);
+      if (isMounted) setPageResult({ key: pageKey, result });
     };
 
     fetchPaginatedData();
-    return () => { isMounted = false; };
+    return () => { isMounted = false; controller.abort(); };
   }, [
-    file?.id,
-    isServerSide,
+    pageUrl,
+    pageKey,
     currentPage,
     pageSize,
-    isGrouped,
-    debouncedSearch,
-    productFilter,
-    countryFilter,
-    importerFilter,
-    startDate,
-    endDate,
-    sortColumn,
-    sortDirection,
   ]);
 
   const rawRows = file?.rows || [];
@@ -986,7 +962,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
     );
   }
 
-  if (file && (!file.rows || file.rows.length === 0) && file.summary?.total_rows === 0 && serverTotalCount === 0 && !isDataLoading) {
+  if (file && (!file.rows || file.rows.length === 0) && file.summary?.total_rows === 0 && serverTotalCount === 0 && !isDataLoading && !pageError) {
     return (
       <div className="bg-[#1a1a1a] rounded-xl border border-[#262626] p-12 text-center text-[#9ca3af] shadow-xs">
         <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-3" />
@@ -1123,7 +1099,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             <span>{isExportingFiltered ? 'Preparing export…' : 'Export Filtered'}</span>
           </button>
 
-          {/* Export Full Original CSV Button */}
+          {/* Export all stored rows through the server-owned report pipeline. */}
           <button
             onClick={() => {
               if (file && onOpenExport) {
@@ -1131,9 +1107,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 onOpenExport({
                   dataset: 'files',
                   title: `${file.name} (Full Dataset)`,
-                  records: file.rows || [],
+                  records: [],
                   sourceFileId: file.id,
-                  recordCount: file.summary?.total_rows || file.rows?.length || 0,
+                  recordCount: file.summary?.total_rows ?? file.rows?.length ?? 0,
                   filenamePrefix: `EdgeView_${baseName}_Full`,
                 });
               } else {
@@ -1142,7 +1118,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             }}
             id="export-csv-btn"
             className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333] hover:bg-[#262626] text-[#e5e7eb] font-medium text-xs shadow-xs transition-colors cursor-pointer"
-            title="Export complete original raw dataset"
+            title="Export all stored rows in the selected report format"
           >
             <Download className="w-3.5 h-3.5 text-[#9ca3af]" />
             <span>Export Full</span>
@@ -1391,9 +1367,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 </div>
 
                 <span className="font-mono text-[#9ca3af] font-medium">
-                  Showing {effectiveTotalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
+                  {isDataLoading ? 'Loading page…' : pageError ? 'Page unavailable' : <>Showing {effectiveTotalCount === 0 ? 0 : Math.min((currentPage - 1) * pageSize + 1, effectiveTotalCount)} -{' '}
                   {Math.min(currentPage * pageSize, effectiveTotalCount)} of {effectiveTotalCount}{' '}
-                  {isGrouped ? 'shipments' : 'rows'}
+                  {isGrouped ? 'shipments' : 'rows'}</>}
                 </span>
               </div>
             </div>
@@ -1445,7 +1421,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                       className="px-4 py-12 text-center text-[#9ca3af] bg-[#1a1a1a]"
                     >
                       <div className="max-w-xs mx-auto space-y-2">
-                        <p className="font-semibold text-[#e5e7eb]">No matching shipment records found</p>
+                        <p role={pageError ? 'alert' : 'status'} className="font-semibold text-[#e5e7eb]">{isDataLoading ? 'Loading shipment records…' : pageError || 'No matching shipment records found'}</p>
+                        {pageError && <button type="button" onClick={() => setPageRetry(value => value + 1)} className="px-3 py-1.5 rounded-lg bg-sky-700 text-white">Retry page</button>}
+                        {!isDataLoading && !pageError && <>
                         <p className="text-xs text-[#9ca3af]">
                           Try adjusting or resetting your active search filters.
                         </p>
@@ -1458,6 +1436,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                             <span>Clear All Filters</span>
                           </button>
                         )}
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -1483,7 +1462,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           <div className="p-3 bg-[#262626] border-t border-[#333333] flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center space-x-3 text-xs text-[#9ca3af] font-mono">
               <span>
-                Page {currentPage} of {totalPages}
+                {isDataLoading ? 'Loading page…' : pageError ? 'Page unavailable' : `Page ${currentPage} of ${totalPages} (${effectiveTotalCount.toLocaleString()} ${isGrouped ? 'shipments' : 'rows'})`}
               </span>
 
               {/* Rows Per Page Selector */}

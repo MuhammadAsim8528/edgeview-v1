@@ -1,5 +1,209 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Country drill-down failure boundaries — 2026-10-24
+
+Country/importer detail loaders validate response shapes and numeric fields,
+encode scope identifiers, use a 30s deadline, and distinguish genuine empty data
+from transport/schema failure. Failed requests cannot synthesize empty/partial
+details from metadata-only browser rows. Complete scoped local copies retain
+the existing fallback. UI exposes retryable error states. At most four detail
+operations (a country operation has two HTTP calls) are in flight; duplicate
+opens share the pending operation. Unmount cancels pending work and prevents
+obsolete completion updates. Importer keys use unambiguous namespaced tuples.
+
+Country/importer headers now have button roles, focusability, Enter/Space
+activation, aria-expanded/labels and visible focus styling. These are source
+changes, NOT a claim that actual keyboard/browser behavior has been exercised.
+PASS: country_details synthetic success/encoded scope/malformed/500/offline/
+zero/empty/timeout/cancellation, actual backend country/importer loaders in the
+isolated stored_file_export fixture, npm run check, build/release smoke.
+NOT VERIFIED: real rendered retries, request-cap behavior, unmount races or
+keyboard interaction. Broader country export partial-row fallback and plain
+object country-name cache key edge cases remain for independent investigation.
+Visual QA and all other outstanding production gates remain open.
+
+## Country overview uses its actual dataset scope — 2026-10-24
+
+The existing /api/countries route now supports overview=1, returning the list
+and aggregate cards from the same normalized backend rows. Legacy list callers
+are unchanged. Importers are name/country entities (as in existing drill-down),
+exporters are unique names across the scope, value is the sum of stored trade
+rows, and zero is distinct from unavailable. No per-file summary counts are
+blindly added into a fake unique global count.
+
+CountryView uses that compact overview without loading row bodies. A selected
+metadata-only file no longer falls back to another file's rows. Local fallback
+requires all rows of every scoped file, proven against summary row counts.
+Missing/incomplete overview gives a retryable unavailable state, not fabricated
+zero. Initial request has a 30s deadline and abort cleanup. File-scope changes
+remount file-specific country/importer caches rather than reusing another file's
+drill-down state. Stable empty props avoid an effect refresh loop.
+
+PASS: country_overview denominator/dedup/zero/unknown/schema and scoped static
+markup; actual isolated overview API selected/all/empty/missing-file and legacy
+list compatibility in stored_file_export; full check, build and release smoke.
+The first all-files API assertion exposed built-in demo data in the isolated
+test process; fixture setup now clears that owned process's demo files before
+seeding, and the exact test passes. No production dataset was modified.
+NOT VERIFIED: rendered cards or scope-switch interaction. Country/importer
+drill-down network-failure fallback and keyboard access remain open; this slice
+does not claim the entire Country view is audited. Existing normalization and
+stored duplicate trade-row semantics are preserved, not reconciled here.
+React guidance influenced stable defaults, memoized aggregates and scope keys.
+
+## File page failure/loading/count truth — 2026-10-24
+
+FileViewer now associates each server page with its exact file/filter/sort/page
+request and retry generation. A changed request cannot render the previous
+page's rows; obsolete requests are aborted and cannot replace current state.
+Loading, failed and genuinely empty pages are distinct. A 30-second deadline
+ends stalled loads and a Retry page action is available. Failed responses do not
+expose arbitrary server error text. Both pagination labels use the effective
+server count rather than sorted browser-local rows (previously zero).
+
+The page boundary validates rows, exact page length/count and filter options;
+an incomplete 200 response is a visible failure, not an empty-success fallback.
+PASS: file_page_loading synthetic malformed/partial/500/offline/timeout/abort
+cases and initial static FileViewer loading markup; stored_file_export now also
+loads actual API page two (rows 25–49 of 17,612) through the new loader; full
+check/build/release smoke. Initial typecheck caught union-narrowing/test promise
+typing mistakes; corrected and rerun. No real browser interactions verified.
+Remaining: rendered retry/navigation race QA, refresh/scroll persistence,
+country totals/accessibility, full UI inventory and other release gates.
+
+## Official-page phone recall corrected — 2026-10-24
+
+Reimplemented the useful phone-recall portion of QA reference f527fe1, without
+its unrelated selection/batch changes. Deterministic projection now accepts Cell
+labels and unlabelled international numbers from successful resolved official
+pages, including markdown-only content. Third-party profile attribution remains
+restricted. Phone patterns cannot consume a date/postcode on the next line;
+fax labels, wrong-country numbers and oversized numeric sequences are rejected.
+Overlay version is 18 so historical projections can recompute from retained raw
+evidence; no data was injected into operational records and no paid run started.
+
+PASS: official_phone_recall (six expected unique channels plus adversarial
+negatives), search_snippet_email_admission, historical_evidence_preservation,
+official_page_body_budget, npm run check, production build/release smoke.
+NOT VERIFIED: fresh Surgilinks or other live company run, resulting API/UI
+display, the full importer dataset, or whether COMPLETE adequately communicates
+coverage. This is projection recall improvement, not proof of exhaustive search.
+
+Exact prior f6faae98cedf5c2331f25062636f6ac31ba3d2d8 package check passed
+manifest/unchanged staged and extracted launch checks; build
+e27188d3b237776f7bfc31d8dff89c074526d4c6d2da6bc96efcf45ceefc8e2d,
+disposable ZIP SHA256 be59a28484c49f285d4a64e71e28efb93eefab1ced4e2ca6f5e44907b14327c8.
+It remains a developer ZIP requiring Node/npm, not clean-Windows acceptance.
+Supported Computer Use initialization was retried and failed before enumeration:
+`failed to write kernel assets: The system cannot find the path specified. (os error 3)`.
+No permission UI or browser control was obtained; visual QA remains open.
+
+## Contact report defaults aligned — 2026-10-24
+
+Both Contacts export actions now carry the current scope: Exporter -> exporter,
+Importer -> importer, mixed/research filters -> both. The modal mounts a fresh
+dialog per opening/scope, avoiding a stale previous report choice without a
+state-reset effect. Explicit report choice remains available. Persisted contact
+selections were not removed. Report buttons expose their selected state.
+
+PASS: contact_export_scope (request defaults/override/selection and static React
+markup), stored_file_export (actual isolated HTTP, 17,612 rows and five formats),
+npm run check, production build and production release smoke. The first typecheck
+caught test union-access errors; these were corrected and the full check rerun.
+NOT VERIFIED: browser reopen/change/click behavior, downloaded report appearance,
+the historical 633-versus-626 exporter discrepancy, or deployment on port 3901.
+The React skill guided keyed state reset rather than effect-driven state drift.
+This closes a narrow default-selection defect, not the full export/UI gate.
+
+## Full stored-file export round-trip fixed — 2026-10-24
+
+QA reference 948bcfe identified a useful server-owned export direction but was
+not cherry-picked wholesale with its interdependent UI/scope changes. This branch
+now wires FileViewer Export Full -> GlobalExportModal -> compact request builder
+-> POST /api/export/file/:fileId -> exact db.files rows -> existing export manager.
+No full-row prefetch or re-post through the browser; the 5 MB JSON limit stays.
+
+Unlike the reference candidate, this endpoint enforces files-only authority and
+rejects any client rows, selections, filters or unknown override fields. Missing
+or empty files do not fall back to global data. Client selection/filter mixtures
+fail visibly rather than silently exporting a wider file. Existing contacts and
+filtered export request semantics remain unchanged. New route shares the export
+admission budget and uses safe filename headers/validation and sanitized errors.
+
+`stored_file_export.test.ts` uses an owned isolated actual server and synthetic
+17,612-row file whose JSON exceeds 5 MiB, plus a separate sentinel file. Request
+under 1 KiB produces all 17,612 CSV rows including the last, never the sentinel.
+Oversized legacy request still gets413. Tests cover override rejection, missing
+file, all five formats on a small file, generic contact selection compatibility
+and actual modal initial markup showing the server record count without rows.
+This is source/API/initial-render evidence, NOT a browser click/download proof.
+
+Focused test, typecheck/lint/V1 suite, build and production release smoke passed.
+No runtime/data changes on Qoder's original workspace or live installation.
+Report column formatting stays the existing canonical full-dataset format;
+lossless original-file backup/all-original-column export is not claimed. Browser
+verification, very-large export concurrency/memory and live deployment remain open.
+
+## Recovered work and privacy projection — 2026-10-24
+
+Reopened available Advice 7/8 chats and compared the earlier reconciliation
+against actual branch history. Updated RECONCILIATION_2026-10-10_23.md with dated
+evidence instead of erasing old unfinished rows. Connector pages are bounded;
+complete October 10–18 turn-by-turn retrieval is still NOT VERIFIED.
+
+Latest coordinator QA reports unresolved full-file export/5 MB request failure,
+duplicate pagination totals, contact-report scope mismatch, phone recall with an
+overstated COMPLETE label, and missing country totals/keyboard semantics. The
+separate QA worktree already has mixed uncommitted fixes touching these areas.
+Do not duplicate or bulk-copy them. Its findings are attributed QA evidence,
+not this writer's own browser pass. Reconcile/review coherent fixes when ready.
+
+An isolated vendor-neutral boundary now exists in shared/monitoring_privacy.ts.
+It builds new frozen, null-prototype output from fixed event/enumeration codes,
+bounded numeric metrics and separately supplied build/installation metadata.
+It drops arbitrary properties/messages, exception bodies/stacks, URLs, headers,
+prompts, contact/business records and property-supplied operation UUIDs. Fixed
+error messages retain useful error grouping without copying exception text.
+Review found final-newline and UUID-provenance gaps; tests cover their correction.
+
+Data egress classification for this boundary:
+
+| Classification | Fields/policy |
+|---|---|
+| LOCAL ONLY | Complete local errors/evidence remain local; projection does not mutate them. |
+| SAFE TELEMETRY | Fixed product-event/provider/stage/outcome/error codes; bounded HTTP/timing/resource numbers; validated build/version/channel. |
+| PSEUDONYMOUS | Installation UUID from a trusted local protected-random identity authority; syntax validation here does NOT establish provenance. |
+| SENSITIVE | Dataset/company/job identifiers, business totals, raw errors and paths: not accepted from event properties. |
+| NEVER TRANSMIT | Credentials/tokens/cookies, contacts, raw files/rows/evidence/provider bodies/prompts, raw HWID. |
+
+Focused adversarial tests retain approved metadata (empty-output implementations
+fail utility acceptance) and reject private markers, malformed/newline identity,
+unknown/inherited codes, UUID-shaped business IDs, getters/toJSON, revoked proxies,
+numeric boundary violations and deeply nested inputs. Arbitrary JavaScript Proxy
+trap execution is not sandboxed; thrown errors fail closed. Identity provenance
+is a caller prerequisite, not a claim of this pure projection.
+The same provenance requirement applies to numeric measurements: a type/range
+check cannot identify a phone number relabeled as RAM. Real integration must use
+trusted resource/timing collectors, never arbitrary provider/business objects.
+
+Status: privacy MODULE PARTIAL for full monitoring. No SDK imports, initialization,
+credentials, network activation or product call-site wiring added in this slice.
+Re-ran the original Qoder adapter probe read-only: same source SHA256
+1c6ed5e7eef5f83213b7c7efc35e9036ebd3dabee6c2822b417aab2b31dcd15b,
+all nine leak probes still FAIL. Do not enable it. Final SDK envelopes/batches,
+automatic errors/logs/traces, replay-off enforcement, bounded offline transport,
+actual Sentry/PostHog delivery and Diagnostics UI integration remain unfinished.
+Focused projection test, typecheck, existing V1 suite, build and production
+release smoke passed for this slice; no rendered or remote-delivery PASS implied.
+
+Recovered requirements are still open, in acceptance order: actual enrichment
+recall/provenance and scope/UI fixes; full export behavior and rendered QA;
+privacy-safe integrated monitoring; restore/crash/performance/long-run gates;
+self-contained Windows installer, trusted update/acceptance/rollback/signing;
+exact three final artifacts, clean Windows and Stable end-user deployment.
+Earlier all-provider/unbounded-research ideas are superseded by current bounded
+V1, not abandoned features to resurrect. No release readiness claim.
+
 ## Parallel ownership and parser dependencies — 2026-10-24
 
 Owner confirmed Qoder writes only the original Pharma-AI workspace and

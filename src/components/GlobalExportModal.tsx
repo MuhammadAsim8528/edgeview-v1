@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
+import { buildExportRequest } from '../utils/exportRequest';
 import {
   FileText,
   FileSpreadsheet,
@@ -24,10 +25,11 @@ export interface GlobalExportPayload {
   filenamePrefix?: string;
   sourceFileId?: string;
   recordCount?: number;
-  defaultReportType?: 'importer' | 'exporter' | 'both' | 'international_importer';
+  defaultReportType?: ExportReportType;
 }
 
 export type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'all';
+export type ExportReportType = 'importer' | 'exporter' | 'both' | 'international_importer';
 
 interface GlobalExportModalProps {
   isOpen: boolean;
@@ -35,28 +37,19 @@ interface GlobalExportModalProps {
   payload: GlobalExportPayload | null;
 }
 
-export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
-  isOpen,
-  onClose,
-  payload,
-}) => {
+export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({ isOpen, onClose, payload }) =>
+  isOpen && payload ? <ExportDialog key={`${payload.dataset}:${payload.title}:${payload.defaultReportType || 'importer'}`} onClose={onClose} payload={payload} /> : null;
+
+const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload }> = ({ onClose, payload }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('csv');
-  const [reportType, setReportType] = useState<'importer' | 'exporter' | 'both' | 'international_importer'>('importer');
+  const [reportType, setReportType] = useState<ExportReportType>(payload.defaultReportType || 'importer');
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportStep, setExportStep] = useState<string>('');
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (isOpen && payload?.dataset === 'contacts') {
-      setReportType(payload.defaultReportType || 'importer');
-    }
-  }, [isOpen, payload?.dataset, payload?.defaultReportType, payload?.title]);
-
-  if (!isOpen || !payload) return null;
-
-  const totalRecords = payload.recordCount ?? (payload.records ? payload.records.length : 0);
+  const totalRecords = payload.recordCount ?? payload.records.length;
   const selectedCount = payload.selectedRows ? payload.selectedRows.length : 0;
   const effectiveCount = selectedCount > 0 ? selectedCount : totalRecords;
 
@@ -72,17 +65,7 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
       setExportProgress(40);
       setExportStep(`Processing ${effectiveCount} record${effectiveCount === 1 ? '' : 's'} for ${selectedFormat.toUpperCase()} export...`);
 
-      const requestBody = {
-        dataset: payload.dataset,
-        title: payload.title,
-        records: payload.sourceFileId ? [] : payload.records,
-        columns: payload.columns,
-        selectedRows: payload.selectedRows,
-        filters: payload.filters,
-        filenamePrefix: payload.filenamePrefix || 'EdgeView_Export',
-        format: selectedFormat,
-        report_type: payload.dataset === 'contacts' ? reportType : undefined,
-      };
+      const request = buildExportRequest(payload, selectedFormat, reportType);
 
       setExportProgress(65);
       setExportStep(
@@ -91,15 +74,12 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
           : `Compiling ${selectedFormat.toUpperCase()} document payload...`
       );
 
-      const endpoint = payload.sourceFileId
-        ? `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`
-        : '/api/export';
-      const response = await fetch(endpoint, {
+      const response = await fetch(request.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(request.body),
       });
 
       setExportProgress(85);
@@ -236,6 +216,7 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
                   <button
                     key={opt.id}
                     type="button"
+                    aria-pressed={reportType === opt.id}
                     onClick={() => !isExporting && setReportType(opt.id)}
                     className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
                       reportType === opt.id

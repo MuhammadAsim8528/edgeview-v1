@@ -11,7 +11,7 @@ const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', '
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
 const emptyProviderUsage = (): Record<ResearchProvider, number> => Object.fromEntries(RESEARCH_PROVIDERS.map((id) => [id, 0])) as Record<ResearchProvider, number>;
 
-const V1_OVERLAY_VERSION = 17;
+const V1_OVERLAY_VERSION = 18;
 
 export function validPhone(value: string): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
@@ -293,19 +293,19 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     .filter(value => officialDomain && sameDomainOrSubdomain(`https://${value.split('@').at(-1)}`, officialDomain));
   const phones = contactPages.flatMap(result => {
     const html = String(result.html || '');
-    const text = String(result.text || '');
-    const explicitInternationalPhones = [...text.matchAll(/\+\d[\d\s().-]{7,}\d/g)].map(match => {
-      const value = match[0];
-      const start = Math.max(0, (match.index || 0) - 24);
-      const prefix = text.slice(start, match.index || 0);
-      // Keep an explicit fax number out of the ordinary phone list while still
-      // admitting current phone/cell/mobile numbers published by the official site.
-      return /fax\s*[:.\-]?\s*$/i.test(prefix) ? '' : value;
-    }).filter(Boolean);
+    const text = String(result.text || result.markdown || '');
+    // Do not join lines: a postal code/date on the next line is not part of
+    // the phone. Unlabelled international numbers require an official page;
+    // third-party profiles still require a phone label or explicit tel link.
+    const internationalPhones = officialPages.includes(result)
+      ? [...text.matchAll(/\+\d[\d \t().-]{7,}\d/g)].filter(match => {
+        const prefix = text.slice(Math.max(0, (match.index || 0) - 60), match.index || 0).split(/\r?\n/).at(-1) || '';
+        return !/\bfax(?:\s+(?:number|no\.?))?\s*[:.\-]?\s*$/i.test(prefix);
+      }).map(match => match[0]) : [];
     return [
       ...[...html.matchAll(/tel:([^"'<>]+)/gi)].map(match => safeDecodeUriComponent(match[1].split('?')[0])),
-      ...[...text.matchAll(/(?:phone|telephone|tel|mobile|cell|whatsapp|call us)\s*[:.\-]?\s*(\+?\d[\d\s().-]{7,}\d)/gi)].map(match => match[1]),
-      ...explicitInternationalPhones,
+      ...[...text.matchAll(/\b(?:phone|telephone|tel|mobile|cell|whatsapp|call us)[ \t]*[:.\-]?[ \t]*(\+?\d[\d \t().-]{7,}\d)/gi)].map(match => match[1]),
+      ...internationalPhones,
     ];
   })
     .map(value => value.replace(/\s+/g, ' ').trim())

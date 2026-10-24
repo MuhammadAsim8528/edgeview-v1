@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
 import {
@@ -21,12 +21,15 @@ import {
 import { ParsedFile } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { formatCurrency, formatFullCurrency } from '../utils/formatters';
+import { buildCountryOverview, isCountryOverview, type CountryOverview } from '../../shared/country_overview';
+import { loadCountryDetails, loadImporterDetails } from '../utils/countryDetails';
 
 interface CountryViewProps {
   files?: ParsedFile[];
   selectedFile?: ParsedFile | null;
   onOpenExport?: (payload: GlobalExportPayload) => void;
 }
+const EMPTY_FILES: ParsedFile[] = [];
 
 interface CountrySummary {
   country: string;
@@ -49,10 +52,19 @@ interface ExporterDetail {
   total_value: number;
 }
 
-export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFile, onOpenExport }) => {
+export const CountryView: React.FC<CountryViewProps> = (props) =>
+  <CountryViewContent key={props.selectedFile?.id || `all:${(props.files || []).map(file => file.id).sort().join(',')}`} {...props} />;
+
+const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, selectedFile, onOpenExport }) => {
   const [countries, setCountries] = useState<{ country: string; importers_count: number }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [overviewStats, setOverviewStats] = useState<CountryOverview['stats'] | null>(null);
+  const [overviewError, setOverviewError] = useState(false);
+  const [overviewRetry, setOverviewRetry] = useState(0);
+  const scopedFiles = selectedFile ? [selectedFile] : files;
+  const completeLocalScope = scopedFiles.length > 0 && scopedFiles.every(file => Array.isArray(file.rows)
+    && Number.isSafeInteger(file.summary?.total_rows) && file.summary.total_rows === file.rows.length);
 
   // Accordion state
   const [expandedCountries, setExpandedCountries] = useState<Record<string, boolean>>({});
@@ -63,12 +75,21 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   const [expandedImporters, setExpandedImporters] = useState<Record<string, boolean>>({});
   const [importerDetails, setImporterDetails] = useState<Record<string, ExporterDetail[]>>({});
   const [loadingImporter, setLoadingImporter] = useState<Record<string, boolean>>({});
+  const [countryErrors, setCountryErrors] = useState<Record<string, string>>({});
+  const [importerErrors, setImporterErrors] = useState<Record<string, string>>({});
+  const pendingDetails = useRef(new Map<string, AbortController>());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    const pending = pendingDetails.current;
+    return () => { mounted.current = false; for (const controller of pending.values()) controller.abort(); pending.clear(); };
+  }, []);
 
   // Collect all rows client-side as fallback / direct engine
   const clientRows = useMemo(() => {
     let rows: Record<string, any>[] = [];
-    if (selectedFile && selectedFile.rows && selectedFile.rows.length > 0) {
-      rows = selectedFile.rows;
+    if (selectedFile) {
+      rows = selectedFile.rows || [];
     } else if (files && files.length > 0) {
       files.forEach((f) => {
         if (f.rows) rows.push(...f.rows);
@@ -108,14 +129,20 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   // Initial Country List Fetch
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
     async function fetchCountries() {
       setLoading(true);
+      setOverviewError(false);
+      setOverviewStats(null);
+      setCountries([]);
       try {
-        const fileParam = selectedFile ? `?file_id=${selectedFile.id}` : '';
-        const { ok, data } = await safeFetchJson<{ country: string; importers_count: number }[]>(`/api/countries${fileParam}`);
-        if (ok && Array.isArray(data)) {
+        const params = new URLSearchParams({ overview: '1' });
+        if (selectedFile) params.set('file_id', selectedFile.id);
+        const { ok, data } = await safeFetchJson<CountryOverview>(`/api/countries?${params}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
+        if (ok && isCountryOverview(data)) {
           if (isMounted) {
-            setCountries(data);
+            setCountries(data.countries);
+            setOverviewStats(data.stats);
             setLoading(false);
             return;
           }
@@ -126,24 +153,11 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
 
       // Fallback: Group client rows by country
       if (isMounted) {
-        const countryMap = new Map<string, Set<string>>();
-        clientRows.forEach((r) => {
-          if (!countryMap.has(r.country)) {
-            countryMap.set(r.country, new Set());
-          }
-          if (r.importer && r.importer !== 'Unknown Importer') {
-            countryMap.get(r.country)!.add(r.importer);
-          }
-        });
-
-        const list = Array.from(countryMap.entries())
-          .map(([country, impSet]) => ({
-            country,
-            importers_count: impSet.size,
-          }))
-          .sort((a, b) => a.country.localeCompare(b.country, undefined, { sensitivity: 'base' }));
-
-        setCountries(list);
+        if (completeLocalScope) {
+          const fallback = buildCountryOverview(clientRows);
+          setCountries(fallback.countries);
+          setOverviewStats(fallback.stats);
+        } else setOverviewError(true);
         setLoading(false);
       }
     }
@@ -151,36 +165,40 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
     fetchCountries();
     return () => {
       isMounted = false;
+      controller.abort();
     };
-  }, [clientRows, selectedFile]);
+  }, [clientRows, selectedFile, completeLocalScope, overviewRetry]);
 
   // Expand / Collapse Country
-  const toggleCountry = async (countryName: string) => {
+  const toggleCountry = async (countryName: string, retry = false) => {
     const isCurrentlyExpanded = Boolean(expandedCountries[countryName]);
-    setExpandedCountries((prev) => ({ ...prev, [countryName]: !isCurrentlyExpanded }));
+    setExpandedCountries((prev) => ({ ...prev, [countryName]: retry || !isCurrentlyExpanded }));
 
-    if (isCurrentlyExpanded) return;
+    if (isCurrentlyExpanded && !retry) return;
     if (countrySummaries[countryName] && countryImporters[countryName]) return;
-
+    const requestKey = JSON.stringify(['country', countryName]);
+    if (pendingDetails.current.has(requestKey)) return;
+    if (pendingDetails.current.size >= 4) { setCountryErrors(prev => ({ ...prev, [countryName]: 'Other details are loading. Please retry shortly.' })); return; }
+    const controller = new AbortController();
+    pendingDetails.current.set(requestKey, controller);
+    setCountryErrors(prev => ({ ...prev, [countryName]: '' }));
     setLoadingCountry((prev) => ({ ...prev, [countryName]: true }));
 
     try {
-      const fileParam = selectedFile ? `?file_id=${selectedFile.id}` : '';
-      const encodedCountry = encodeURIComponent(countryName);
-
-      const [sumRes, impRes] = await Promise.all([
-        safeFetchJson<CountrySummary>(`/api/countries/${encodedCountry}/summary${fileParam}`),
-        safeFetchJson<ImporterItem[]>(`/api/countries/${encodedCountry}/importers${fileParam}`),
-      ]);
-
-      if (sumRes.ok && sumRes.data && impRes.ok && impRes.data) {
-        setCountrySummaries((prev) => ({ ...prev, [countryName]: sumRes.data! }));
-        setCountryImporters((prev) => ({ ...prev, [countryName]: impRes.data! }));
+      const result = await loadCountryDetails(countryName, selectedFile?.id, controller.signal);
+      if (!mounted.current || controller.signal.aborted) return;
+      if (result.ok) {
+        setCountrySummaries((prev) => ({ ...prev, [countryName]: result.data.summary }));
+        setCountryImporters((prev) => ({ ...prev, [countryName]: result.data.importers }));
         setLoadingCountry((prev) => ({ ...prev, [countryName]: false }));
         return;
       }
-    } catch (err) {
-      console.warn('Country detail API fetch failed, using client fallback:', err);
+    } catch { if (!mounted.current || controller.signal.aborted) return; }
+    finally { if (pendingDetails.current.get(requestKey) === controller) pendingDetails.current.delete(requestKey); }
+    if (!completeLocalScope) {
+      setCountryErrors(prev => ({ ...prev, [countryName]: 'Country details could not be loaded. Please retry.' }));
+      setLoadingCountry(prev => ({ ...prev, [countryName]: false }));
+      return;
     }
 
     // Client-side fallback for Country summary & importers
@@ -228,30 +246,35 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   };
 
   // Expand / Collapse Importer
-  const toggleImporter = async (countryName: string, importerName: string) => {
-    const key = `${countryName}::${importerName}`;
+  const toggleImporter = async (countryName: string, importerName: string, retry = false) => {
+    const key = JSON.stringify(['importer', countryName, importerName]);
     const isCurrentlyExpanded = Boolean(expandedImporters[key]);
 
-    setExpandedImporters((prev) => ({ ...prev, [key]: !isCurrentlyExpanded }));
+    setExpandedImporters((prev) => ({ ...prev, [key]: retry || !isCurrentlyExpanded }));
 
-    if (isCurrentlyExpanded) return;
+    if (isCurrentlyExpanded && !retry) return;
     if (importerDetails[key]) return;
-
+    if (pendingDetails.current.has(key)) return;
+    if (pendingDetails.current.size >= 4) { setImporterErrors(prev => ({ ...prev, [key]: 'Other details are loading. Please retry shortly.' })); return; }
+    const controller = new AbortController();
+    pendingDetails.current.set(key, controller);
+    setImporterErrors(prev => ({ ...prev, [key]: '' }));
     setLoadingImporter((prev) => ({ ...prev, [key]: true }));
 
     try {
-      const fileParam = selectedFile ? `?file_id=${selectedFile.id}` : '';
-      const encodedCountry = encodeURIComponent(countryName);
-      const encodedImporter = encodeURIComponent(importerName);
-
-      const { ok, data } = await safeFetchJson<ExporterDetail[]>(`/api/countries/${encodedCountry}/${encodedImporter}/details${fileParam}`);
-      if (ok && Array.isArray(data)) {
-        setImporterDetails((prev) => ({ ...prev, [key]: data }));
+      const result = await loadImporterDetails(countryName, importerName, selectedFile?.id, controller.signal);
+      if (!mounted.current || controller.signal.aborted) return;
+      if (result.ok) {
+        setImporterDetails((prev) => ({ ...prev, [key]: result.data }));
         setLoadingImporter((prev) => ({ ...prev, [key]: false }));
         return;
       }
-    } catch (err) {
-      console.warn('Importer details API fetch failed, using client fallback:', err);
+    } catch { if (!mounted.current || controller.signal.aborted) return; }
+    finally { if (pendingDetails.current.get(key) === controller) pendingDetails.current.delete(key); }
+    if (!completeLocalScope) {
+      setImporterErrors(prev => ({ ...prev, [key]: 'Importer details could not be loaded. Please retry.' }));
+      setLoadingImporter(prev => ({ ...prev, [key]: false }));
+      return;
     }
 
     // Client-side fallback for Importer Details
@@ -281,31 +304,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
   }, [countries, searchQuery]);
 
   // Overall Aggregated Stats
-  const globalStats = useMemo(() => {
-    const uniqueCountries = new Set<string>();
-    const uniqueImporters = new Set<string>();
-    const uniqueExporters = new Set<string>();
-    let totalValue = 0;
-
-    clientRows.forEach((r) => {
-      if (r.country && r.country !== 'Unknown') uniqueCountries.add(r.country);
-      if (r.importer && r.importer !== 'Unknown Importer') uniqueImporters.add(r.importer);
-      if (r.exporter && r.exporter !== 'Unknown Exporter') uniqueExporters.add(r.exporter);
-      totalValue += r.total_value;
-    });
-
-    const authoritativeSummary = selectedFile?.summary;
-    return {
-      totalCountries: uniqueCountries.size || countries.length,
-      // Parsed row bodies are loaded lazily for large files. Reuse authoritative
-      // upload metadata when the browser intentionally does not hold every row.
-      totalImporters: uniqueImporters.size
-        || authoritativeSummary?.importers_count
-        || countries.reduce((sum, item) => sum + (item.importers_count || 0), 0),
-      totalExporters: uniqueExporters.size || authoritativeSummary?.exporters_count || 0,
-      totalValue: totalValue || authoritativeSummary?.total_cost_usd || 0,
-    };
-  }, [clientRows, countries, selectedFile]);
+  const globalStats = useMemo(() => overviewStats || (completeLocalScope ? buildCountryOverview(clientRows).stats : null), [overviewStats, completeLocalScope, clientRows]);
 
   // Export Full Hierarchical Country Summary via Global Export Manager
   const [isExporting, setIsExporting] = useState(false);
@@ -424,7 +423,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Globe className="w-4 h-4 text-[#10b981]" />
           </div>
           <div className="text-2xl font-bold font-mono text-white mt-2">
-            {globalStats.totalCountries}
+            {globalStats?.totalCountries ?? '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Active trade destinations</div>
         </div>
@@ -435,7 +434,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Building2 className="w-4 h-4 text-[#10b981]" />
           </div>
           <div className="text-2xl font-bold font-mono text-[#10b981] mt-2">
-            {globalStats.totalImporters.toLocaleString()}
+            {globalStats?.totalImporters.toLocaleString() ?? '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Importer-country entities</div>
         </div>
@@ -446,7 +445,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <Ship className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-white mt-2">
-            {globalStats.totalExporters > 0 ? globalStats.totalExporters.toLocaleString() : '-'}
+            {globalStats?.totalExporters.toLocaleString() ?? '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Unique supply partners</div>
         </div>
@@ -458,9 +457,9 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
           </div>
           <div
             className="text-2xl font-bold font-mono text-[#10b981] mt-2 truncate"
-            title={formatFullCurrency(globalStats.totalValue)}
+            title={globalStats ? formatFullCurrency(globalStats.totalValue) : 'Not available'}
           >
-            {globalStats.totalValue > 0 ? formatCurrency(globalStats.totalValue) : '-'}
+            {globalStats ? formatCurrency(globalStats.totalValue) : '—'}
           </div>
           <div className="text-[11px] text-gray-400 mt-1">Total valuation in USD</div>
         </div>
@@ -502,6 +501,11 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
             <RefreshCw className="w-6 h-6 text-[#10b981] animate-spin mx-auto" />
             <p className="text-xs font-medium">Loading country analytics data...</p>
           </div>
+        ) : overviewError ? (
+          <div role="alert" className="p-8 text-center text-sm">
+            <p>Country analytics could not be loaded. No complete local copy is available.</p>
+            <button type="button" onClick={() => setOverviewRetry(value => value + 1)} className="mt-3 px-3 py-2 rounded bg-sky-700">Retry analytics</button>
+          </div>
         ) : filteredCountries.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
             <AlertCircle className="w-8 h-8 text-gray-600 mx-auto mb-2" />
@@ -523,15 +527,10 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
                     role="button"
                     tabIndex={0}
                     aria-expanded={isExpanded}
-                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${c.country} country details`}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${c.country}`}
+                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void toggleCountry(c.country); } }}
                     onClick={() => toggleCountry(c.country)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        void toggleCountry(c.country);
-                      }
-                    }}
-                    className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-[#242424] transition-colors select-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#10b981]"
+                    className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-[#242424] focus-visible:outline-2 focus-visible:outline-sky-400 transition-colors select-none"
                   >
                     <div className="flex items-center space-x-3">
                       <div className="text-gray-400">
@@ -564,6 +563,11 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
                         <div className="p-4 flex items-center space-x-2 text-xs text-gray-400">
                           <RefreshCw className="w-4 h-4 animate-spin text-[#10b981]" />
                           <span>Loading summary and importers list for {c.country}...</span>
+                        </div>
+                      ) : countryErrors[c.country] ? (
+                        <div role="alert" className="text-sm text-amber-200">
+                          <p>{countryErrors[c.country]}</p>
+                          <button type="button" onClick={() => toggleCountry(c.country, true)} className="mt-2 px-3 py-1.5 rounded bg-sky-700 text-white">Retry country details</button>
                         </div>
                       ) : (
                         <>
@@ -623,7 +627,7 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
                             ) : (
                               <div className="space-y-2">
                                 {importers.map((imp) => {
-                                  const impKey = `${c.country}::${imp.importer}`;
+                                  const impKey = JSON.stringify(['importer', c.country, imp.importer]);
                                   const isImpExpanded = Boolean(expandedImporters[impKey]);
                                   const details = importerDetails[impKey] || [];
                                   const isImpLoading = Boolean(loadingImporter[impKey]);
@@ -635,8 +639,13 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
                                     >
                                       {/* Level 3 Importer Card Header */}
                                       <div
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-expanded={isImpExpanded}
+                                        aria-label={`${isImpExpanded ? 'Collapse' : 'Expand'} importer ${imp.importer}`}
+                                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void toggleImporter(c.country, imp.importer); } }}
                                         onClick={() => toggleImporter(c.country, imp.importer)}
-                                        className="p-3.5 flex flex-wrap items-center justify-between cursor-pointer hover:bg-[#242424] transition-colors select-none gap-2"
+                                        className="p-3.5 flex flex-wrap items-center justify-between cursor-pointer hover:bg-[#242424] focus-visible:outline-2 focus-visible:outline-sky-400 transition-colors select-none gap-2"
                                       >
                                         <div className="flex items-center space-x-2.5 min-w-0">
                                           <div className="text-gray-400 shrink-0">
@@ -683,6 +692,11 @@ export const CountryView: React.FC<CountryViewProps> = ({ files = [], selectedFi
                                             <div className="p-3 flex items-center space-x-2 text-xs text-gray-400">
                                               <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#10b981]" />
                                               <span>Loading exporter breakdown...</span>
+                                            </div>
+                                          ) : importerErrors[impKey] ? (
+                                            <div role="alert" className="text-sm text-amber-200">
+                                              <p>{importerErrors[impKey]}</p>
+                                              <button type="button" onClick={() => toggleImporter(c.country, imp.importer, true)} className="mt-2 px-3 py-1.5 rounded bg-sky-700 text-white">Retry importer details</button>
                                             </div>
                                           ) : details.length === 0 ? (
                                             <div className="text-xs text-gray-500 italic p-2">

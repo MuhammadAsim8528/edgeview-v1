@@ -1,4 +1,5 @@
 import express from 'express';
+import { buildCountryOverview } from './shared/country_overview';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
@@ -34,7 +35,7 @@ import {
 import { processExportRequest, transformFullDatasetRecords, FULL_DATASET_COLUMNS, generateCsvData, generateXlsxWorkbook, contactReportColumns, flattenContactReportRows } from './server/export_manager';
 import { buildContactReport } from './server/contact_report_model';
 import { buildContactBlocksHtml } from './server/export_blocks';
-import { ExportValidationError } from './server/export_validation';
+import { ExportValidationError, resolveStoredFileExport } from './server/export_validation';
 import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/utils/header_encoder';
 import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { selectContactEntity } from './server/contact_projection';
@@ -1786,6 +1787,25 @@ app.post('/api/export/file/:fileId', async (req, res) => {
 });
 
 // Unified Global Export Manager Endpoint
+app.post('/api/export/file/:fileId', async (req, res) => {
+  try {
+    const file = db.getFileById(req.params.fileId);
+    if (!file || !Array.isArray(file.rows) || !file.rows.length) {
+      return res.status(404).json({ success: false, code: 'NO_EXPORT_DATA', error: 'No stored rows available for this file.' });
+    }
+    const payload = resolveStoredFileExport(req.body, file.rows);
+    const { buffer, contentType, filename, failedFormats } = await processExportRequest(payload);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', getSafeContentDisposition(filename || 'export'));
+    if (failedFormats?.length) res.setHeader('X-Export-Failed-Formats', getSafeAsciiHeaderValue(failedFormats));
+    return res.send(buffer);
+  } catch (error) {
+    if (error instanceof ExportValidationError) return res.status(400).json({ success: false, code: 'INVALID_EXPORT_REQUEST', error: error.message });
+    console.error('Stored file export failed:', error);
+    return res.status(500).json({ success: false, code: 'EXPORT_FAILED', error: 'Could not export the stored file.' });
+  }
+});
+
 app.post('/api/export', async (req, res) => {
   try {
     const payload = req.body;
@@ -2261,6 +2281,11 @@ function getAllDatasetRows(fileId?: string): Array<{
 
 app.get('/api/countries', (req, res) => {
   const fileId = req.query.file_id as string;
+  if (req.query.overview === '1') {
+    if (fileId && !db.files.has(fileId)) { res.status(404).json({ code: 'FILE_NOT_FOUND', message: 'The selected dataset is unavailable.' }); return; }
+    res.json(buildCountryOverview(getAllDatasetRows(fileId)));
+    return;
+  }
   const rows = getAllDatasetRows(fileId);
   const countryImporters = new Map<string, Set<string>>();
 
