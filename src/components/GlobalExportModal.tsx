@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import { buildExportRequest } from '../utils/exportRequest';
 import {
@@ -48,12 +48,25 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
   const [exportStep, setExportStep] = useState<string>('');
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
+  const activeRequest = useRef<AbortController | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    const request = activeRequest.current;
+    activeRequest.current = null;
+    request?.abort();
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   const totalRecords = payload.recordCount ?? payload.records.length;
   const selectedCount = payload.selectedRows ? payload.selectedRows.length : 0;
   const effectiveCount = selectedCount > 0 ? selectedCount : totalRecords;
 
   const handleStartExport = async () => {
+    if (activeRequest.current || isExporting) return;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    let timedOut = false;
+    const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 60_000);
     setIsExporting(true);
     setExportError(null);
     setExportSuccess(false);
@@ -62,6 +75,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
 
     try {
       await new Promise((r) => setTimeout(r, 200));
+      if (activeRequest.current !== controller) return;
       setExportProgress(40);
       setExportStep(`Processing ${effectiveCount} record${effectiveCount === 1 ? '' : 's'} for ${selectedFormat.toUpperCase()} export...`);
 
@@ -80,12 +94,17 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(request.body),
+        signal: controller.signal,
       });
+      if (activeRequest.current !== controller) return;
+      controller.signal.throwIfAborted();
 
       setExportProgress(85);
       setExportStep('Validating & finalizing download payload...');
 
       const { blob, filename } = await processAndValidateExportResponse(response, selectedFormat);
+      if (activeRequest.current !== controller) return;
+      controller.signal.throwIfAborted();
 
       // Trigger automatic browser download
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -101,16 +120,19 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
       setExportStep('Export completed successfully!');
       setExportSuccess(true);
 
-      setTimeout(() => {
+      closeTimer.current = setTimeout(() => {
         setIsExporting(false);
         setExportSuccess(false);
         onClose();
       }, 800);
     } catch (err: any) {
-      console.error('Export error:', err);
-      setExportError(err?.message || 'Export failed. Please try again.');
+      if (activeRequest.current !== controller) return;
+      setExportError(timedOut ? 'The export took too long. Please retry.' : err?.message || 'Export failed. Please try again.');
       setIsExporting(false);
       setExportProgress(0);
+    } finally {
+      clearTimeout(deadline);
+      if (activeRequest.current === controller) activeRequest.current = null;
     }
   };
 
@@ -277,7 +299,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
 
           {/* Progress & Error States */}
           {exportError && (
-            <div className="p-3 bg-red-950/60 border border-red-800 rounded-lg text-red-300 flex items-start space-x-2 text-xs">
+            <div role="alert" className="p-3 bg-red-950/60 border border-red-800 rounded-lg text-red-300 flex items-start space-x-2 text-xs">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold block">Export Failed</span>

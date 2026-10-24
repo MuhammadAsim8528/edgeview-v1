@@ -1,5 +1,26 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Stalled export recovery — 2026-10-25
+
+A real browser negative control reached the export dialog and remained at 65%
+with Cancel/Export disabled after 65s; its failure screenshot was inspected.
+An earlier attempt failed backend readiness before the UI and is not counted
+as a reproduction. GlobalExportModal now bounds the fetch/response-read lifetime
+to 60s, guards duplicate starts, aborts/invalidate on unmount and clears request
+and delayed-close timers. Timeout is an accessible visible error; controls unlock.
+This cancels client waiting, not guaranteed already-started backend generation.
+
+Rebuilt browser regression passed (1.1m): real held request, timeout, enabled
+controls, then removal of the failure interception and a real CSV download
+containing the uploaded record. Before/after screenshots inspected. No company
+facts or successful provider results were injected. Typecheck, lint, E2E typecheck,
+production build and release smoke passed. Other export formats, large exports
+and live-owner-browser behavior are separate gates, not inferred from CSV.
+
+Supported browser inventory was attempted directly again; it failed before tab
+enumeration/permission UI with kernel-assets os error 3. No alternate port,
+raw CDP or authorization bypass was used.
+
 ## Hosted CI and supplemental secret gate — 2026-10-25
 
 Exact c0bf5b7 release-check run 40125836554 completed/success (Windows verify,
