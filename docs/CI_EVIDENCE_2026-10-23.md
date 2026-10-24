@@ -1,5 +1,43 @@
 # Hosted CI and dependency evidence — 2026-10-23
 
+## Fresh verification — 2026-10-25
+
+The older observations below are historical, not current failure claims.
+For exact commit c0bf5b7ea65d8a9ad938fec263bf2944571e5e18, GitHub REST
+reports release-check run 40125836554 completed/success: verify, browser-e2e
+and docker-qa succeeded; publish was correctly skipped (not a release tag).
+Research-contract run 40125836559 and evidence-inventory run 40125836558 also
+completed/success. Run: https://github.com/MuhammadAsim8528/edgeview-v1/actions/runs/40125836554
+
+Artifact metadata lists EdgeView-V1-Windows (3,191,691 bytes) and synthetic
+browser evidence (634,976 bytes), both unexpired when checked. Their contents
+were not independently downloaded/inspected in this REST check. Hosted success
+does not close live visual QA, clean-Windows installation or customer readiness.
+
+Dependabot vulnerability alerts were enabled through the repository API:
+GET initially 404, authorized PUT 204, subsequent GET 204. This verifies alerts
+enabled, not automatic remediation or zero vulnerabilities. Code-scanning
+default-setup returned 403; secret-scanning alerts returned 404; repository
+security_and_analysis remains null. Native CodeQL, secret scanning and push
+protection are NOT VERIFIED. No paid feature, organization migration, automatic
+merge or release publication was enabled.
+
+The supplementary pinned history scanner is development/Windows CI only.
+Its SHA256-verified Gitleaks 8.30.1 archive comes from the fixed official release;
+only gitleaks.exe is extracted. Upstream default rules are explicit; repository
+config/ignore and inline allow comments cannot suppress this gate. All available
+refs include merge diffs and deleted-file history; shallow history fails closed.
+Output contains counts/version/scope only. Temporary redacted reports and binary
+are removed. Provider credentials are not inherited into scanner processes.
+The original prohibited-path/provider-pattern gate remains in place.
+
+Scope limitations: no uncommitted/index/ignored files, unavailable pre-baseline
+history or server-side push protection. The Linux evidence-only workflow keeps
+its existing pattern gate; release publication depends on the Windows verify
+job containing the supplemental scanner. Signature verification is not claimed:
+the fixed official archive digest is the integrity trust anchor. The scanner is
+not a CodeQL/SAST substitute and is excluded from the runtime script whitelist.
+
 This supersedes only the access/unknown portions of earlier branch notes, not
 their historical observations. GitHub connector404 was not repository absence:
 existing Git Credential Manager authentication permitted read-only REST access.

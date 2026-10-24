@@ -1,5 +1,26 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Hosted CI and supplemental secret gate — 2026-10-25
+
+Exact c0bf5b7 release-check run 40125836554 completed/success (Windows verify,
+browser E2E, Docker QA); publishing correctly skipped. Artifact metadata was
+read, not artifact contents. Dependabot alerts enabled and verified via 204
+readback. Native CodeQL/secret scanning/push protection remain NOT VERIFIED
+(403/404/null responses), not a green gate.
+
+Windows release CI now supplements the original six-pattern/path check with
+checksum-pinned Gitleaks 8.30.1. No customer runtime dependency or source upload
+to a scanning SaaS. Adversarial controls include a never-issued synthetic PAT,
+deleted-file history, hostile ignore/config/inline allowances, shallow clones
+and archive integrity. Independent review found the first candidate skipped
+merge-only secrets; merge diffs and a specific regression were added rather
+than accepting the initial passing controls. Details/limits: docs/CI_EVIDENCE_2026-10-23.md.
+This is available-ref history protection, not local staged/pre-push enforcement.
+Final focused controls passed, including merge-only insertion; the actual
+available-history scan returned zero findings. npm run check passed (typecheck,
+lint, test:v1); existing pattern/path scan passed across 143 available commits.
+The new hosted scanner steps are not verified until their own commit runs in CI.
+
 ## Sustained synthetic navigation observation — 2026-10-25
 
 Opt-in test:soak uses the existing isolated egress-blocked Playwright fixture,

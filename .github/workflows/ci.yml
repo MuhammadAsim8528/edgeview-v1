@@ -28,6 +28,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: node scripts/audit-git-secrets.mjs
+      - name: Pinned development-only secret scanner controls
+        run: node scripts/scan-history-gitleaks.test.mjs
+      - name: Scan available full Git history with pinned Gitleaks
+        run: node scripts/scan-history-gitleaks.mjs
       - run: npm audit --omit=dev --audit-level=high
       - run: node scripts/vite-install-boundary.test.mjs
       - run: node --import tsx server/tests/export_blocks_html_safety.test.ts
