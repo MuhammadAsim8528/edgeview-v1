@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -67,6 +68,29 @@ function audit(directory, relative = '') {
 }
 audit(stage);
 if (prohibited.length) throw new Error(`Package contains prohibited sensitive/state files: ${prohibited.join(', ')}`);
+
+// A shipped document must not hand the build machine's layout to the operator's machine.
+const builderPaths = [...new Set([os.homedir(), process.env.USERPROFILE, process.env.HOME, root]
+  .filter(Boolean).map(directory => path.resolve(directory)).filter(directory => directory.length > 3))];
+// Both separators are searched: a document may quote the path as C:\Users\... or C:/Users/... or file:///C:/Users/...
+const needleForms = builderPaths.flatMap(directory => [directory.replace(/\\/g, '/'), directory.replace(/\//g, '\\')].map(needle => needle.toLowerCase()));
+const textFile = /\.(?:md|txt|json|map|ts|tsx|js|mjs|cjs|html|htm|css|svg|xml|yml|yaml|bat|cmd|ps1|csv|ini|gitignore|editorconfig)$/i;
+const leaked = [];
+function scanForBuilderPaths(directory, relative = '') {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = relative ? `${relative}/${entry.name}` : entry.name;
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) scanForBuilderPaths(absolute, child);
+    else if (entry.isFile() && textFile.test(entry.name)) {
+      const bytes = fs.readFileSync(absolute);
+      // UTF-16 text decodes to NUL-padded bytes under utf8, so both decodings are searched.
+      const haystacks = [bytes.toString('utf8'), bytes.toString('utf16le')].map(text => text.toLowerCase());
+      if (haystacks.some(text => needleForms.some(needle => text.includes(needle)))) leaked.push(child);
+    }
+  }
+}
+scanForBuilderPaths(stage);
+if (leaked.length) throw new Error(`Package leaks a build-machine path in: ${leaked.join(', ')}. Remove the absolute path before packaging.`);
 
 const manifest = [];
 function hashTree(directory, relative = '') {

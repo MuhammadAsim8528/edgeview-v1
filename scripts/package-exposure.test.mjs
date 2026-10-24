@@ -84,5 +84,30 @@ try {
   assert.equal(fs.existsSync(path.join(root, 'leaky', 'outputs', 'EdgeView-V1-Windows.zip')), false, 'no ZIP is published once the prohibited-file audit fires');
   assert.equal(fs.existsSync(path.join(root, 'leaky', 'outputs', 'EdgeView-V1-Windows')), false, 'no stage is published once the prohibited-file audit fires');
 
-  console.log(`PASS deliverable excludes the internal docs tree at every depth, keeps the operator guide, runtime inputs and allowlisted helpers, publishes a real ZIP from the resolved archiver and aborts on a stray state file (manifest ${manifest.files.length} files)`);
+  // A shipped file must not hand the build machine's own directory layout to the operator.
+  const third = path.join(root, 'path-leak', 'checkout', 'pharma');
+  fs.cpSync(project, third, { recursive: true });
+  fs.writeFileSync(path.join(third, 'EDGEVIEW_OPERATIONS.md'), `start EdgeView from ${os.homedir()}\\EdgeView\n`);
+  fs.writeFileSync(path.join(third, 'EDGEVIEW_ARCHITECTURE.md'), `served from file:///${os.homedir().replace(/\\/g, '/')}/EdgeView\n`);
+  fs.writeFileSync(path.join(third, 'src', 'leaked.ts'), `export const here = '${root}';\n`);
+  fs.writeFileSync(path.join(third, 'shared', 'utf16.md'), Buffer.from(`path: ${os.homedir()}`, 'utf16le'));
+  fs.writeFileSync(path.join(third, 'README.md'), `Logs live at ${os.homedir().toUpperCase()}\\EdgeView\n`);
+  const pathLeak = spawnSync(process.execPath, [path.resolve('scripts/package-windows.mjs')], { cwd: third, encoding: 'utf8' });
+  assert.notEqual(pathLeak.status, 0, 'a build-machine path inside a shipped file must fail the build');
+  // Only the thrown message is comparable: node's code frame and stack lines legitimately contain the script path.
+  const leakLines = String(pathLeak.stderr).split(/\r?\n/);
+  const gateStart = leakLines.findIndex(line => /leaks a build-machine path in:/.test(line));
+  assert.notEqual(gateStart, -1, 'the abort must be attributed to the path-leak gate');
+  const gateBody = leakLines.slice(gateStart).filter(line => !/^\s+at /.test(line)).join(' ');
+  assert.match(gateBody, /leaks a build-machine path in:/, 'the gate message survives the join');
+  for (const offender of ['EDGEVIEW_OPERATIONS.md', 'EDGEVIEW_ARCHITECTURE.md', 'README.md', 'src/leaked.ts', 'shared/utf16.md']) {
+    assert.match(gateBody, new RegExp(offender.replace(/\./g, '\\.')), `the gate must name ${offender}`);
+  }
+  for (const form of [os.homedir(), os.homedir().replace(/\\/g, '/')]) {
+    assert.ok(!gateBody.toLowerCase().includes(form.toLowerCase()), `the gate must report names, not echo the build path ${form}`);
+  }
+  assert.ok(!gateBody.includes(CANARY), 'the gate does not dump shipped file content into the build log');
+  assert.equal(fs.existsSync(path.join(root, 'path-leak', 'outputs', 'EdgeView-V1-Windows.zip')), false, 'no ZIP escapes a path-leaking build');
+
+  console.log(`PASS deliverable excludes the internal docs tree at every depth, keeps the operator guide, runtime inputs and allowlisted helpers, publishes a real ZIP from the resolved archiver, aborts on a stray state file and blocks build-machine paths (manifest ${manifest.files.length} files)`);
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
