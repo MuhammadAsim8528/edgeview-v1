@@ -73,6 +73,11 @@ a visible failure, not success. No credentials or provider credits are used.
 This proves persistence for these settings, not configured-provider routing,
 real authentication, quota handling, or live installation behavior.
 
+Settings failure cases inject a 503, malformed successful JSON and a stalled
+load. They require no writable default form, a bounded retry state, no private
+server text, and recovery through the real API without a settings write. The
+stalled case waits for the compiled UI's real deadline; it does not mock time.
+
 - [Playwright web-server/environment behavior](https://playwright.dev/docs/test-webserver)
 - [Screenshots and retained traces](https://playwright.dev/docs/test-use-options)
 - [CI browser installation and worker guidance](https://playwright.dev/docs/ci)

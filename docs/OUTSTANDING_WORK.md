@@ -1,5 +1,25 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Settings failed-load write protection — 2026-10-24
+
+The new rendered negative control failed against the previous compiled app:
+GET /api/settings returning 503 left the default form writable. Settings now
+requires the four enabled/configured boolean pairs, primary provider and model
+strings before exposing the form. Failed/malformed loads show a generic retry
+message, not raw server text; submission is guarded while loading/failed/saving.
+Loads have a 30s deadline, superseded requests cannot publish, and leaving the
+screen cancels the active load. Retry uses the existing settings API; no new
+persistence authority or provider behavior was introduced.
+
+PASS: typecheck, lint, test:v1, E2E TypeScript check and production build.
+All seven browser cases passed together (1.5m), including the real 30s deadline
+(31.6s scenario), 503/malformed retry and restart persistence. The failed-load
+regression first failed against the old build, rather than merely mirroring the
+new implementation. Production release smoke passed. No production state or
+provider credit was used.
+Save/test request deadlines and broader Settings accessibility remain separate
+work; this change bounds settings loading only.
+
 ## Rendered Settings save/restart verification — 2026-10-24
 
 PASS: isolated Chromium Settings form disabled Serper/Hunter, selected Groq,
