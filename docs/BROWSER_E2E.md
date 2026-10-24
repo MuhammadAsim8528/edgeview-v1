@@ -22,7 +22,8 @@ installation, not part of the customer runtime or frontend bundle.
 
 ## Isolation and evidence
 
-- The worker creates private temporary JSON/SQLite/config/evidence paths.
+- Each test creates its own private temporary JSON/SQLite/config/evidence paths;
+  tests do not inherit another case's uploads or settings.
 - It starts the compiled production-mode backend, not Vite or a mocked UI.
 - It chooses an unused loopback test port and verifies the backend PID before
   upload; it never reuses a running server or accepts an external target URL.
@@ -32,7 +33,7 @@ installation, not part of the customer runtime or frontend bundle.
   restricted to that owned origin. No real-company/provider run is requested.
 - The workflow uploads a generated synthetic CSV through the actual UI. There
   is no production test-seeding endpoint or manually injected research success.
-- The worker owns shutdown/restart and removes only its own temporary directory.
+- The fixture owns shutdown/restart and removes only its own temporary directory.
 - No retries are configured to hide a first-run failure. Failure screenshots,
   traces and console/page errors are retained under `.test-cache/e2e-artifacts`.
   A successful workflow also retains a screenshot and allowlisted build identity.
@@ -49,6 +50,18 @@ The restart case closes the UI page before stopping/restarting its owned backend
 then reopens it in the same browser context. It does not certify graceful Windows
 shutdown, in-flight write recovery, offline-while-open UX, page/accordion/scroll
 restoration or a production launcher restart. Those remain separate gates.
+
+The controlled-failure case injects only failed/malformed responses, never a
+successful dataset. It checks visible file/country/importer errors, absence of
+stale rows and private server text, and recovery after restoring the real API.
+Deliberate HTTP 500/503 console resource errors are retained and narrowly checked
+in that failure case; the happy path still requires no console/page errors.
+
+The contact-export case checks the visible exporter default, an explicit importer
+override, reset when reopening, selected-company persistence through refresh,
+and actual selected-export CSV contents. It performs no enrichment/provider call.
+These tests establish only their synthetic scenarios, not the historical
+633-versus-626 exporter discrepancy or real contact accuracy.
 
 ## Official setup references
 

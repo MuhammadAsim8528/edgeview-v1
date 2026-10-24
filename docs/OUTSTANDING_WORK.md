@@ -1,5 +1,39 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Rendered failure recovery and contact export verification — 2026-10-24
+
+Expanded isolated Playwright coverage to three cases, each with its own backend
+process and private storage (one worker, no automatic retries). The earlier
+worker-scoped fixture could inherit another test's files; test-scoped ownership
+now prevents that contamination. Provider credentials/egress remain disabled.
+
+PASS in actual Chromium UI: file HTTP 500 produces a visible retry state with
+no stale buyer rows, fake empty result or injected private server message; an
+incomplete HTTP 200 is rejected; restoring the real route and retrying shows
+actual page-two Buyer 25. Country HTTP 503 and malformed importer detail both
+show errors, then recover from actual backend responses. Failure screenshot
+inspected. Only failed/malformed responses were injected, never successful data.
+Console HTTP resource errors are retained and narrowly allowed in this failure
+case; happy-path cases still require no page/console errors.
+
+PASS rendered Contacts: exporter filter defaults report type to exporter,
+explicit importer override works, reopen resets to current exporter scope,
+selection/filter survive refresh, selected export defaults correctly and its
+downloaded CSV contains Scope Supplier. PASS rendered Country overview cards:
+60 importer-country entities, one exporter, $600 for the selected 60-row fixture.
+This upgrades earlier source/API-only evidence for these exact scenarios, not
+the real dataset or all controls. E2E typecheck and three-case suite passed
+(25.8s total on the latest precommit run). Full checks/release smoke also passed.
+
+Read-only live /api/health still reports PID 30112, commit
+f96a6da068d44a8ed8d0d51aae4b017f96db3038, build
+2143be7901f9d1806144f63311d99255e1be624d7fc61e2d272ca274b2e5a973.
+It is NOT this branch's newly tested build. No Qoder-owned live server was
+restarted or replaced. The prior GitHub status connector query returned 404;
+hosted CI remains unverified. Historical exporter count discrepancies, real
+enrichment, offline-while-open, races, settings/diagnostics and remaining release
+gates are still open.
+
 ## First actual isolated rendered workflow — 2026-10-24
 
 Added pinned development-only @playwright/test 1.64.1 (Apache-2.0, Node >=20;

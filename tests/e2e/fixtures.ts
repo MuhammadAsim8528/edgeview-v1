@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import { unusedTestPort } from '../../scripts/test-server-port.mjs';
 
 type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any> };
-export const test = base.extend<{}, { runtime: Runtime }>({
+export const test = base.extend<{ runtime: Runtime }>({
   runtime: [async ({}, use) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-browser-e2e-'));
     const port = await unusedTestPort();
@@ -47,7 +47,7 @@ export const test = base.extend<{}, { runtime: Runtime }>({
     };
     try { await start(); await use({ baseURL, identity, restart: async () => { await stop(); await start(); } }); }
     finally { await stop(); fs.rmSync(root, { recursive: true, force: true }); }
-  }, { scope: 'worker', timeout: 120_000 }],
+  }, { timeout: 120_000 }],
   baseURL: async ({ runtime }, use) => { await use(runtime.baseURL); },
 });
 export { expect };
