@@ -711,12 +711,13 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
 
   // Debounce search input
   useEffect(() => {
+    if (searchInput === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
       setCurrentPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, debouncedSearch]);
 
   // 2. Filter Processed Data using Product, Country, Importer, Date Range, and Search
   const filteredRows = useMemo(() => {

@@ -1,5 +1,17 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Mount-time debounce undoing pagination — 2026-10-25
+
+Repeated navigation reached page 2, then Previous became disabled because an
+unchanged-search mount timer reset the page to 1. A strengthened browser case
+reproduced this on the prior build: page 2 was visible, but disappeared after
+600ms (18.7s failing scenario). Search debounce now schedules a page reset only
+when the input actually differs from the applied search. Real search changes
+still debounce and reset paging; no timeout was weakened to hide the race.
+Rebuilt navigation/refresh/stable-page regression passed (6.1s scenario / 11.7s
+run); typecheck, lint, build and release smoke passed. The broader resource
+workload is being rerun, not declared complete from this single regression.
+
 ## Shipment grouping restoration found during repeated navigation — 2026-10-25
 
 The second resource attempt completed one cycle, then failed because Files

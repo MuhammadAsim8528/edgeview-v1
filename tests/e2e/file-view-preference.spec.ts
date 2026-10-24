@@ -18,4 +18,9 @@ test('shipment grouping choice survives navigation and browser refresh', async (
   await page.reload();
   await expect(page.getByRole('button', { name: 'Group Shipments OFF', exact: true })).toBeVisible();
   await expect(page.getByText('Page 1 of 3 (60 rows)', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText('Page 2 of 3 (60 rows)', { exact: true })).toBeVisible();
+  // A mount-time debounce must not silently undo a later pagination action.
+  await page.waitForTimeout(600);
+  await expect(page.getByText('Page 2 of 3 (60 rows)', { exact: true })).toBeVisible();
 });
