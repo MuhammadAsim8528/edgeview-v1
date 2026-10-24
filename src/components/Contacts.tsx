@@ -34,6 +34,7 @@ import { SummaryCards } from './SummaryCards';
 import { safeFetchJson } from '../utils/safeFetch';
 import { normalizeCountryName } from '../utils/countryNormalizer';
 import { GlobalExportPayload } from './GlobalExportModal';
+import { contactExportReportType } from '../utils/exportRequest';
 import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { contactResearchCategory, matchesResearchFilter } from '../../shared/contact_research_scope';
 import { directoryPage as getDirectoryPage } from '../utils/directoryPagination';
@@ -287,6 +288,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     onOpenExport({
                       dataset: 'contacts',
                       title: 'Company Contact Directory',
+                      defaultReportType: contactExportReportType(filterType),
                       records: filteredContacts,
                       filenamePrefix: 'EdgeView_Contact_Directory',
                     });
@@ -346,6 +348,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     onOpenExport({
                       dataset: 'contacts',
                       title: 'Selected Company Contacts',
+                      defaultReportType: contactExportReportType(filterType),
                       records: selectedRecords.length > 0 ? selectedRecords : filteredContacts,
                       selectedRows: selectedIds,
                       filenamePrefix: 'EdgeView_Selected_Contacts',

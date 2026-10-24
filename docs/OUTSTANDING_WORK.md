@@ -1,5 +1,22 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Contact report defaults aligned — 2026-10-24
+
+Both Contacts export actions now carry the current scope: Exporter -> exporter,
+Importer -> importer, mixed/research filters -> both. The modal mounts a fresh
+dialog per opening/scope, avoiding a stale previous report choice without a
+state-reset effect. Explicit report choice remains available. Persisted contact
+selections were not removed. Report buttons expose their selected state.
+
+PASS: contact_export_scope (request defaults/override/selection and static React
+markup), stored_file_export (actual isolated HTTP, 17,612 rows and five formats),
+npm run check, production build and production release smoke. The first typecheck
+caught test union-access errors; these were corrected and the full check rerun.
+NOT VERIFIED: browser reopen/change/click behavior, downloaded report appearance,
+the historical 633-versus-626 exporter discrepancy, or deployment on port 3901.
+The React skill guided keyed state reset rather than effect-driven state drift.
+This closes a narrow default-selection defect, not the full export/UI gate.
+
 ## Full stored-file export round-trip fixed — 2026-10-24
 
 QA reference 948bcfe identified a useful server-owned export direction but was

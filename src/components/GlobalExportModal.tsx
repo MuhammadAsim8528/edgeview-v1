@@ -25,9 +25,11 @@ export interface GlobalExportPayload {
   filenamePrefix?: string;
   sourceFileId?: string;
   recordCount?: number;
+  defaultReportType?: ExportReportType;
 }
 
 export type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'all';
+export type ExportReportType = 'importer' | 'exporter' | 'both' | 'international_importer';
 
 interface GlobalExportModalProps {
   isOpen: boolean;
@@ -35,20 +37,17 @@ interface GlobalExportModalProps {
   payload: GlobalExportPayload | null;
 }
 
-export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
-  isOpen,
-  onClose,
-  payload,
-}) => {
+export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({ isOpen, onClose, payload }) =>
+  isOpen && payload ? <ExportDialog key={`${payload.dataset}:${payload.title}:${payload.defaultReportType || 'importer'}`} onClose={onClose} payload={payload} /> : null;
+
+const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload }> = ({ onClose, payload }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('csv');
-  const [reportType, setReportType] = useState<'importer' | 'exporter' | 'both' | 'international_importer'>('importer');
+  const [reportType, setReportType] = useState<ExportReportType>(payload.defaultReportType || 'importer');
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportStep, setExportStep] = useState<string>('');
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
-
-  if (!isOpen || !payload) return null;
 
   const totalRecords = payload.recordCount ?? payload.records.length;
   const selectedCount = payload.selectedRows ? payload.selectedRows.length : 0;
@@ -217,6 +216,7 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({
                   <button
                     key={opt.id}
                     type="button"
+                    aria-pressed={reportType === opt.id}
                     onClick={() => !isExporting && setReportType(opt.id)}
                     className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
                       reportType === opt.id

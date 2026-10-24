@@ -1,5 +1,9 @@
 import type { ExportFormat, GlobalExportPayload } from '../components/GlobalExportModal';
 
+export function contactExportReportType(filter: string): 'importer' | 'exporter' | 'both' {
+  return filter === 'EXPORTER' ? 'exporter' : filter === 'IMPORTER' ? 'importer' : 'both';
+}
+
 export function buildExportRequest(payload: GlobalExportPayload, format: ExportFormat, reportType?: string) {
   const common = { dataset: payload.dataset, title: payload.title, filenamePrefix: payload.filenamePrefix || 'EdgeView_Export', format };
   if (payload.sourceFileId !== undefined) {
@@ -8,5 +12,5 @@ export function buildExportRequest(payload: GlobalExportPayload, format: ExportF
     return { url: `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`, body: common };
   }
   return { url: '/api/export', body: { ...common, records: payload.records, columns: payload.columns,
-    selectedRows: payload.selectedRows, filters: payload.filters, report_type: payload.dataset === 'contacts' ? reportType : undefined } };
+    selectedRows: payload.selectedRows, filters: payload.filters, report_type: payload.dataset === 'contacts' ? reportType ?? payload.defaultReportType ?? 'importer' : undefined } };
 }
