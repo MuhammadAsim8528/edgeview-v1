@@ -73,6 +73,9 @@ This tests failure rendering and recovery, not real provider authentication.
 The stalled-metrics case waits for the UI's actual 30s deadline, checks that
 loading ends, then restores the real API and verifies a successful refresh.
 No clock mocking or real provider credentials are involved.
+The connection-check case holds individual and aggregate requests pending for
+their real 60s deadlines, verifies both controls unlock, then retries the real
+keyless API. It does not prove cancellation of backend/provider operations.
 
 The Settings case changes provider toggles, primary AI provider and Groq model
 through the rendered form, verifies the actual persisted API response, restarts

@@ -1,5 +1,28 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Connection-check request lifecycle — 2026-10-25
+
+Individual provider and aggregate connection-check UI requests now have a 60s
+deadline (allowing the current provider transports' 20s header/body bounds).
+Timeout is explicit and unlocks controls. Per-provider in-flight guards prevent
+duplicate requests; unmount aborts and invalidates the outstanding checks.
+Aggregate checks render their validated real backend report directly rather
+than keeping the button locked through redundant metrics/runtime refreshes.
+Individual success requires HTTP success and boolean true, not a truthy string.
+This does not cancel an already-started backend provider operation or certify
+provider-side timeouts under all network conditions.
+
+First browser attempt failed isolated-backend readiness before entering the UI;
+it is NOT a successful pre-fix negative control. A subsequent run reached both
+timeout messages but an exact-text selector incorrectly excluded the existing
+stale-metrics suffix; corrected to assert the complete alert. The corrected
+real-time timeout/retry browser scenario passed (1.0m), including restored
+buttons, retained-metrics notice, genuine missing-key failure and aggregate
+recovery. The other two provider-health scenarios passed in the preceding run.
+Typecheck, lint, test:v1, E2E typecheck, build and release smoke passed.
+Settings save acknowledgement/deadline behavior is still separate: cancelling
+a POST cannot prove that the backend did not persist it.
+
 ## Provider-metrics stalled refresh recovery — 2026-10-24
 
 Negative browser control failed against the previous compiled app (45.5s): a

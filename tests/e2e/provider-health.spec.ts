@@ -1,5 +1,29 @@
 import { test, expect } from './fixtures';
 
+test('stalled individual and aggregate provider checks unlock and can be retried', async ({ page, context, runtime }) => {
+  test.setTimeout(120_000);
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  await page.route('**/api/settings/test', () => {});
+  await page.route('**/api/system/health/test', () => {});
+  await page.goto('/');
+  await page.locator('#nav-tab-settings').click();
+  const groq = page.locator('form section').filter({ hasText: 'AI fallback for query planning and extraction' });
+  await groq.getByRole('button', { name: 'Test connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Test enabled providers', exact: true }).click();
+  await expect(groq.getByText('Provider check timed out. You can retry.', { exact: true })).toBeVisible({ timeout: 70_000 });
+  await expect(page.getByRole('alert').filter({ hasText: 'Provider checks timed out. You can retry.' })).toContainText('Previously loaded metrics remain visible.');
+  await expect(groq.getByRole('button', { name: 'Test connection', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Test enabled providers', exact: true })).toBeEnabled();
+  await page.unroute('**/api/settings/test');
+  await page.unroute('**/api/system/health/test');
+  await groq.getByRole('button', { name: 'Test connection', exact: true }).click();
+  await expect(groq.getByText(/API Key is empty/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Test enabled providers', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Test enabled providers', exact: true })).toBeEnabled();
+  await expect(page.getByRole('alert').filter({ hasText: 'Provider checks timed out. You can retry.' })).toHaveCount(0);
+});
+
 test('stalled provider metrics stop loading and recover on a real refresh', async ({ page, context, runtime }, testInfo) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
   await runtime.identity();
