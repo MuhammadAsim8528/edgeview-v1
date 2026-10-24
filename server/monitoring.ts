@@ -190,7 +190,7 @@ export async function captureMonitoringEvent(name: string, properties: unknown =
       posthog.capture({
         distinctId: String(projected.installation_id),
         event: String(projected.event),
-        properties: { ...projected },
+        properties: { ...projected, $geoip_disable: true },
       });
       if (flush) {
         await posthog.flush();

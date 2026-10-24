@@ -76,6 +76,10 @@ assert.ok(combined.includes('PROVIDER_RATE_LIMITED'), 'approved error class shou
 assert.ok(combined.includes('Provider request rate limited'), 'fixed safe error message should survive');
 assert.ok(requests.some(entry => entry.url.includes('/api/1/envelope')), 'Sentry envelope transport was not exercised');
 assert.ok(requests.some(entry => !entry.url.includes('/api/1/envelope')), 'PostHog transport was not exercised');
+const posthogBodies = requests.filter(entry => !entry.url.includes('/api/1/envelope')).map(entry =>
+  entry.headers['content-encoding'] === 'gzip' ? gunzipSync(entry.body).toString('utf8') : entry.body.toString('utf8')
+).join('\n');
+assert.ok(posthogBodies.includes('$geoip_disable'), 'PostHog transport must disable server-side GeoIP enrichment');
 
 const status = getMonitoringStatus();
 assert.equal(status.sentry.state, 'TRANSPORT_OK');
