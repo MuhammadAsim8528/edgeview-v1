@@ -42,6 +42,7 @@ jobs:
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/engine_ai_destination.test.ts
       - run: node --import tsx server/tests/monitoring_privacy.test.ts
+      - run: node scripts/probe-existing-monitoring-build.test.mjs
       - run: node --import tsx server/tests/stored_file_export.test.ts
       - run: node --import tsx server/tests/contact_export_scope.test.ts
       - run: node --import tsx server/tests/official_phone_recall.test.ts

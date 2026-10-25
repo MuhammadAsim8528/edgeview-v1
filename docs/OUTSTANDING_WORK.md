@@ -1,5 +1,31 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Approved derived-location scrubbing persisted — 2026-10-25
+
+Both Sentry projects now have city/subdivision/region/country_code/ip_address
+in Additional Sensitive Fields, verified after reload around 08:48 UTC. Existing
+IP suppression and scrubbers remain enabled. No historical deletion. Fresh-event
+effect remains NOT VERIFIED until propagation and controlled reception checks.
+Local verification at 9c77767: npm run check passed (typecheck, lint, nine V1
+test scripts); strict monitoring projection, offline privacy probe, migration
+retention/failure/reopen and backup manifest/isolated restore tests passed.
+The new delivery helper's early-failure controls verify exact explicit opt-in
+and generic error output without private argument echoing; no real event is
+sent by those controls. CI wiring added; hosted execution remains pending.
+
+## Hosted checks and dependency recheck — 2026-10-25
+
+Release run 40175130352 at 5dd926d completed Windows verify, browser-e2e and
+Docker QA successfully; publish was skipped. Runs at 098479e and 4cd7024 also
+completed successfully. Current 9c77767 inventory/read-contract jobs succeeded;
+release run 40177887940 was still running at inspection (not a PASS claim).
+Fresh npm audit --json: zero critical/high, two moderate package findings
+(uuid and parent ExcelJS, same advisory GHSA-w5hq-g745-h8pq). Installed ExcelJS
+uses uuid.v4 without an output buffer; upstream affected methods are v3/v5/v6.
+This narrows demonstrated reachability but does not remove the vulnerable package
+or dismiss the finding. GitHub default-branch eight-alert warning is a different
+branch scope and remains unresolved here. No forced downgrade or audit weakening.
+
 ## Fresh actual monitoring delivery — 2026-10-25
 
 PASS for a controlled existing integration artifact at commit 365021c, build

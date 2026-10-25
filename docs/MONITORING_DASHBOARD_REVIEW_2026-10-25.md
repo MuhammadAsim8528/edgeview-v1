@@ -90,3 +90,16 @@ the dashboard observations above were performed separately through Chrome.
 The latest supported local-tab acquisition still returns saved-origin denial
 despite the supplied Always allow screenshot. This remains a browser integration
 blocker, not evidence of EdgeView failure.
+
+## Approved derived-location scrubbing saved
+
+Owner explicitly approved additional location scrubbing. At approximately
+2026-10-25T08:48Z, both backend and frontend Sentry projects persisted these
+Additional Sensitive Fields, read back after reload:
+`city`, `subdivision`, `region`, `country_code`, `ip_address`.
+Existing additional-field lists were empty. Default/server scrubbers and IP
+suppression remain enabled. No historical records were deleted.
+PASS for configuration persistence; effective new-event geography suppression
+remains NOT VERIFIED pending propagation and a fresh controlled event.
+Vendor guidance allows 5–15 minutes for propagation:
+https://www.sentry.help/en/articles/13964201-can-i-disable-ip-geolocation-for-gdpr-compliance
