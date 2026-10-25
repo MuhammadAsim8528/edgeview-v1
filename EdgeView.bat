@@ -20,7 +20,14 @@ set PORT=3901
 set NODE_ENV=production
 start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$ready=$false; for($i=0;$i -lt 60;$i++){try{$r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://127.0.0.1:3901/api/health'; if($r.StatusCode -eq 200){$ready=$true;break}}catch{}; Start-Sleep -Milliseconds 250}; if($ready){Start-Process 'http://127.0.0.1:3901'}" >nul 2>&1
 node dist\server.cjs
+if errorlevel 1 goto :crash
 goto :eof
+:crash
+echo.
+echo EdgeView stopped unexpectedly with error level %ERRORLEVEL%.
+echo Review the message above before launching EdgeView again.
+pause
+exit /b 1
 :error
 echo.
 echo EdgeView could not start. Review the message above.

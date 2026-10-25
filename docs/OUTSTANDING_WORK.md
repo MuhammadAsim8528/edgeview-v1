@@ -2,6 +2,21 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Reviewed visible desktop-launch failure handling — 2026-10-25
+
+Adopted only the seven EdgeView.bat crash-handling lines from main b8e0266 after
+review. New launcher-process-exit.test.mjs first failed on missing crash output,
+then passes with the fix: actual batch routing shows server exit 3, returns 1,
+normal zero stays clean, failed build/install cannot reach later steps. Fixture
+replaces only external health decision and browser waiter, uses owned stub steps
+and no listening server. It does not probe/mutate live 3901 or launch a browser.
+Unlike Qoder's broader launcher-contract harness, it needs no process search/kill
+by matching command lines. Updated operator error/fallback description and added
+Windows CI step. Focused test, production build and isolated release smoke PASS.
+Existing typecheck/lint and browser privacy/accessibility checks passed before
+this batch-only change. Package/actual shortcut install acceptance stays open;
+no claim that this proves health probing, a user-visible live crash or installer.
+
 ### PRIV01 accessible current-flow disclosure — 2026-10-25
 
 Added PrivacyNotice.tsx to Settings: native collapsible keyboard disclosure,

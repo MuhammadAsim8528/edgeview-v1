@@ -20,6 +20,12 @@ not as a hidden extra step on every launch.
 
 If EdgeView is already healthy on port 3901, a second shortcut click opens the existing instance and exits immediately instead of attempting a conflicting second server.
 
+A backend process that exits with an error now prints its error level and waits
+for a key press instead of silently closing the launcher. A backend exit code
+of zero remains a normal stop. Dependency-install and rebuild failures abort
+before the backend starts. A failed rebuild restores the previous dist files
+but does not launch that restored build as an automatic fallback.
+
 ## Normal workflow
 
 1. Open or upload the trade file.
@@ -165,6 +171,7 @@ extracting the entire ZIP, not directly from inside the ZIP viewer.
 
 ## Release checklist
 
+- `npm run typecheck`
 - `npm run lint`
 - `npm run test:v1`
 - `npm run build`
