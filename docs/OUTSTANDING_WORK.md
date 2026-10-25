@@ -2,6 +2,24 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Current implementation checkpoint — 2026-10-25 (supersedes older coordination observations)
+
+Active reviewed code line is integration/edgeview-v1-20261024 at source checkpoint
+5689c7f. Working tree clean on inspection. Original Pharma-AI/main remains clean
+at b6db239 and was not replaced; its remaining changes still require review.
+Desired permanent development location remains original Pharma-AI. Main and this
+line remain divergent (37 main-only / 75 integration-only commits at this check);
+selected reviewed hunks were adopted with provenance, not a wholesale merge.
+No final source snapshot, customer installer or live-runtime replacement created.
+
+Getz Pharma/Kenya now has actual isolated-provider and stored-evidence comparison
+against its official Kenya phone/address, plus controlled durable DB reopen.
+That does not close UI/export, all-company, all-country or installed-package gates.
+Current contact overlay policy is 24, distinct from SQLite schema/app semver.
+Latest unshipped candidate app version remains 1.0.0-rc.2. The owner's stop before
+submission/publication/public feed upload remains mandatory after release review.
+
+
 ### Leadership title cleanup with original rejection preserved — 2026-10-25
 
 Real Getz projection exposed role text containing the person's own name. A
@@ -192,7 +210,7 @@ Expected injected ENOENT diagnostics are not an unexpected production failure.
 Qoder's reported mutation score was not independently rerun. No whole-tree merge,
 live restart, customer-data change or release approval is implied.
 
-### Current coordination / organisation / shipping constraint
+### Historical coordination / organisation observation — superseded above
 
 ### Hosted SDK compatibility/privacy finding — 2026-10-25
 
@@ -329,10 +347,10 @@ the cited acceptance scope, never automatically to the whole product.
 
 | ID / priority | Requirement; current state / capability | Code / commits / executed evidence | Remaining acceptance and dependencies |
 | --- | --- | --- | --- |
-| CC01 P0 | Company+country identity from upload to history; implementing / partial | company_identity.ts, db.ts, v1_identity.ts, job_manager.ts, contact_projection.ts; 75e8cac foreign-domain fix; prior reported four-case regression | Mixed global-domain fields, every admission/overlay/UI/export path; isolated reproduction then real-company rendered comparison |
-| CC02 P0 | Field-level local/parent/subsidiary/distributor attribution; implementing / partial | job_manager.ts projectDeterministicContactFields; v1_engine.ts accepted_claims include source_result_id/url/quote; source inspection finds domain-only contact admission | Kenya/Pakistan, Sudan/South Sudan, multi-office and distributor fixtures; country scoped claims and provenance, safe abstention; no blanket parent-domain rejection |
-| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; planned / partial | canonicalEntityIdentityKey; contact_projection_country_isolation.test.ts; historical_evidence_preservation.test.ts | Reproject old mixed runs under current policy; same-name/country aliases, missing/ambiguous scope and persistence/export checks |
-| CORE01 P0 | Bounded V1/provider capture, evidence and prior-good preservation; planned / implemented, runtime unverified here | v1_engine.ts, job_manager.ts; prior V1/atomic/blob tests in historical ledger | Enabled NVIDIA/Groq/Serper/Hunter real failure/recovery and complete source→UI truthsets; preserve raw failures and evidence; no retired autonomous stack |
+| CC01 P0 | Company+country identity from upload to history; implementing / partial | 75e8cac, 22a7879, 18d6ffb, adfd099; identity/country fixtures and actual Getz Kenya provider comparison; verification/GETZ_KENYA_2026-10-25.md | Remaining complex layouts/aliases, every cache/API/UI/export path and additional real-company rendered acceptance; no whole-product correctness claim |
+| CC02 P0 | Field-level local/parent/subsidiary/distributor attribution; implementing / partial | contact_country_scope.ts, job_manager.ts; 18d6ffb office HTML + labelled-address recall; adfd099 personal-name/location disambiguation; 5689c7f role cleanup; local/foreign/ambiguous/distributor controls PASS | Broader parent-versus-local leadership, related-entity relations, diverse office layouts and per-field real UI/export evidence; avoid overstating public-source certainty |
+| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; implementing / partial | 3a9672e stale-overlay withholding, 30c7f92 ordinary offline revalidation, 7baea6d unscoped dedup; cached policy/batch tests and real-capture durable reopen PASS; overlay policy 24 | Large real-history cost, interrupted/retried jobs, aliases and actual current dataset/API/UI/export acceptance; preserve original raw runs |
+| CORE01 P0 | Bounded V1/provider capture, evidence and prior-good preservation; implementing / partial | v1_engine.ts, job_manager.ts; actual NVIDIA query/extraction 200 and four Serper search 200 requests in each Getz acceptance run; direct failure records retained | Groq/Hunter real operations/failure/recovery not proven by configuration; full source-to-render truthsets, limitations and whole-dataset workflow remain open |
 | DATA01 P0 | CSV/XLSX/NVL, importer scope, pagination/export/state; planned / partial | routes/upload.ts, db.ts, Contacts.tsx, FileViewer.tsx, appStore.ts; previous branch fixes not assumed all integrated | Reconcile actual importers/exporters/duplicates, UI controls, refresh/navigation races and accurate counts; no customer dataset writes during fixtures |
 | JOB01 P0 | Progress/cancel/retry, bounded waits and crash recovery; planned / partial | job_manager.ts, ResearchWorkspace.tsx, SHUTDOWN_RECOVERY.md, RESEARCH_READ_RECOVERY.md | Trace cancellation to transport/job persistence; kill/restart/retry and no spinner/lost state; fresh runtime/visible proof |
 | SEC01 P0 | Local Host/Origin, SSRF/DNS/redirect/credential origin and resource limits; planned / partial | server.ts, ai_providers.ts, url_safety.ts, routes/upload.ts, security tests | Reconcile exact current tests and deployed build; alias/raw requests and malformed/error cases; preserve safe loopback boundary |
@@ -340,7 +358,7 @@ the cited acceptance scope, never automatically to the whole product.
 | MON01 P0 | Privacy-safe Sentry/PostHog plus disabled/offline controls; planned / partial | monitoring.ts, shared/monitoring_privacy.ts; b5fe935, 365021c; prior transport/rejection tests | Visible user settings, frontend crash and startup/unhandled coverage; fresh intended-build delivery and privacy; optional/offline never blocks startup |
 | MON02 P0 | Account IP/location privacy; planned / partially verified externally | Backend/frontend IP prevention and extra location fields saved; PostHog discard-IP saved; older branch 8b7308d records fresh 365021c backend event c8c23746830143719cbf23c394688d2e with geography Filtered | Import evidence by review, not code merge. Backend event only; fresh frontend effect and exact current integration/live build remain unverified |
 | DIAG01 P1 | Honest diagnostics preview/export/retention/support; planned / partial | support_diagnostics.ts, SystemHealthPanel.tsx; 365021c; support_diagnostics.test.ts | Review actual overview/provider/resource/error states, visible preview/download, offline and redaction; no raw logs/content leakage; support contact requires genuine publisher details |
-| PRIV01 P0 | Accessible privacy notice and AI/search disclosures; planned / partial | monitoring allowlist exists; SettingsTabV1.tsx inspection pending | Explain provider company/country/query/content egress separately from monitoring, consent/disable behavior, replay OFF; no invented publisher/legal promises |
+| PRIV01 P0 | Accessible privacy notice and AI/search disclosures; implementing / partial | 960e95e PrivacyNotice.tsx in Settings; typecheck/lint/build/smoke and two isolated browser/keyboard tests PASS; screenshot inspected | Persistent customer monitoring on/off control, genuine publisher privacy/support URLs, About/notices/licensing and final package acceptance; live browser origin remains denied |
 | ID01 P1 | Installation identity distinct from licensing/HWID; planned / partial | install_identity.ts random UUID; prior identity/doctor tests | UUID is not cryptographic licensing. Inspect DPAPI/private-key authority and corruption/recovery. Raw HWID authentication deferred; no hardware analytics |
 | REL01 P0 | One integration line, narrow commits and version/build/schema/channel; implementing / partial | build_identity, build metadata, sql.js schema, Git/CI; integration at 75e8cac | Reconcile older branch fixes and Qoder launcher commits individually; exact package identity, pilot/stable promotion and changelog; no rebuilding different code on promotion |
 | CI01 P0 | CI, dependency/license/SBOM/secret/release evidence; planned / partial | .github/workflows, release-license-inventory, collect-license-texts, verify-release-evidence | Actual current commit jobs/artifacts, dependency advisories and license texts; native private-repo CodeQL/push protection availability not assumed |
