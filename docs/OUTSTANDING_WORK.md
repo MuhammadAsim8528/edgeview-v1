@@ -2,6 +2,15 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Fresh real-provider confirmation of office correction — 2026-10-25
+
+Ran exact 18d6ffbf35ff41b1461acf5ce52affcb3c34bd0f in a distinct isolated storage
+root with actual configured providers: new run run-mvnycq8a-b6e77eb318 reproduces
+correct Kenyan phone/address, no local email asserted. No manually injected
+profile or altered capture. Source credentials/config remained unchanged;
+temporary protected credential copies removed. See Getz verification record
+for independently checked official source and remaining UI/role/export limits.
+
 ### Getz Kenya actual-provider comparison and office-boundary fix — 2026-10-25
 
 See [scoped verification record](verification/GETZ_KENYA_2026-10-25.md).

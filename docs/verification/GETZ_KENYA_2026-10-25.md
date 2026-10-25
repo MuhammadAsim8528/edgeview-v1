@@ -70,3 +70,18 @@ actual download/export, a fresh post-fix provider run, full importer dataset and
 installed customer package remain NOT VERIFIED. Controlled DB hydration is not
 proof of any of those behaviors. Temporary real-run evidence is private and is
 not a distributable fixture or final operational backup.
+
+## Fresh post-fix provider repeat
+
+Exact source commit: 18d6ffbf35ff41b1461acf5ce52affcb3c34bd0f.
+Fresh run: run-mvnycq8a-b6e77eb318, same Getz Pharma + Kenya input, distinct empty
+scratch storage. Again resolved getzpharma.com and projected +254 20 426 1000 and
+63 Westlands Road, Nairobi, Kenya with source references and quotes. No Kenyan
+email asserted. This confirms the result was not dependent on manually editing
+an old run or injecting a successful profile. Runtime still reported PARTIAL;
+contact completeness label is a field heuristic, not exhaustive Internet coverage.
+Original configuration SHA256 unchanged in this repeat too. Both temporary
+DPAPI-encrypted credential configuration copies were removed after acceptance;
+source credentials untouched and private raw captures retained outside Git.
+This repeat closes the fresh-provider-run gap above; UI/export/installed-package
+and the independently unverified personal-role limitations remain unchanged.
