@@ -1,5 +1,75 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Authoritative implementation ledger — reconciled 2026-10-25
+
+This section is the single current goal/phase authority. Earlier dated entries
+below are retained evidence, not competing priorities. RECONCILIATION_2026-10-10_23,
+REAL_WORLD_APP_READINESS_RESEARCH, UNCLE_INSTALL_UPDATE_SUPPORT_PLAN and security,
+recovery, monitoring and distribution documents support these IDs. Their historical
+claims do not automatically close current acceptance. New requests extend these IDs.
+
+Writer: this session only. Authority: integration/edgeview-v1-20261024, initially
+clean at 75e8cac. Research/review session owns no implementation. No review approval
+is inferred. The older edgeview-chatgpt worktree has an unfinished, independently
+reviewed package-content scanning candidate; preserve it without automatic merge.
+No live 3901 restart, operational-data mutation or publication is authorized merely
+by this plan. Synthetic isolated fixtures first.
+
+State vocabulary: planned / implementing / verified / blocked. Capability vocabulary:
+implemented / partially implemented / absent / unverified. Verified applies only to
+the cited acceptance scope, never automatically to the whole product.
+
+| ID / priority | Requirement; current state / capability | Code / commits / executed evidence | Remaining acceptance and dependencies |
+| --- | --- | --- | --- |
+| CC01 P0 | Company+country identity from upload to history; implementing / partial | company_identity.ts, db.ts, v1_identity.ts, job_manager.ts, contact_projection.ts; 75e8cac foreign-domain fix; prior reported four-case regression | Mixed global-domain fields, every admission/overlay/UI/export path; isolated reproduction then real-company rendered comparison |
+| CC02 P0 | Field-level local/parent/subsidiary/distributor attribution; implementing / partial | job_manager.ts projectDeterministicContactFields; v1_engine.ts accepted_claims include source_result_id/url/quote; source inspection finds domain-only contact admission | Kenya/Pakistan, Sudan/South Sudan, multi-office and distributor fixtures; country scoped claims and provenance, safe abstention; no blanket parent-domain rejection |
+| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; planned / partial | canonicalEntityIdentityKey; contact_projection_country_isolation.test.ts; historical_evidence_preservation.test.ts | Reproject old mixed runs under current policy; same-name/country aliases, missing/ambiguous scope and persistence/export checks |
+| CORE01 P0 | Bounded V1/provider capture, evidence and prior-good preservation; planned / implemented, runtime unverified here | v1_engine.ts, job_manager.ts; prior V1/atomic/blob tests in historical ledger | Enabled NVIDIA/Groq/Serper/Hunter real failure/recovery and complete source→UI truthsets; preserve raw failures and evidence; no retired autonomous stack |
+| DATA01 P0 | CSV/XLSX/NVL, importer scope, pagination/export/state; planned / partial | routes/upload.ts, db.ts, Contacts.tsx, FileViewer.tsx, appStore.ts; previous branch fixes not assumed all integrated | Reconcile actual importers/exporters/duplicates, UI controls, refresh/navigation races and accurate counts; no customer dataset writes during fixtures |
+| JOB01 P0 | Progress/cancel/retry, bounded waits and crash recovery; planned / partial | job_manager.ts, ResearchWorkspace.tsx, SHUTDOWN_RECOVERY.md, RESEARCH_READ_RECOVERY.md | Trace cancellation to transport/job persistence; kill/restart/retry and no spinner/lost state; fresh runtime/visible proof |
+| SEC01 P0 | Local Host/Origin, SSRF/DNS/redirect/credential origin and resource limits; planned / partial | server.ts, ai_providers.ts, url_safety.ts, routes/upload.ts, security tests | Reconcile exact current tests and deployed build; alias/raw requests and malformed/error cases; preserve safe loopback boundary |
+| SEC02 P0 | DPAPI secret authority/history/package scans; planned / partial | settings.ts, scan-history-gitleaks.mjs, CI; older branch package scan candidate uncommitted | Review/install current secret boundary; staged-content gate and old main alerts; never publish credentials or claim missing private GitHub features passed |
+| MON01 P0 | Privacy-safe Sentry/PostHog plus disabled/offline controls; planned / partial | monitoring.ts, shared/monitoring_privacy.ts; b5fe935, 365021c; prior transport/rejection tests | Visible user settings, frontend crash and startup/unhandled coverage; fresh intended-build delivery and privacy; optional/offline never blocks startup |
+| MON02 P0 | Account IP/location privacy; planned / partially verified externally | Backend/frontend IP prevention and extra location fields saved; PostHog discard-IP saved; older branch 8b7308d records fresh 365021c backend event c8c23746830143719cbf23c394688d2e with geography Filtered | Import evidence by review, not code merge. Backend event only; fresh frontend effect and exact current integration/live build remain unverified |
+| DIAG01 P1 | Honest diagnostics preview/export/retention/support; planned / partial | support_diagnostics.ts, SystemHealthPanel.tsx; 365021c; support_diagnostics.test.ts | Review actual overview/provider/resource/error states, visible preview/download, offline and redaction; no raw logs/content leakage; support contact requires genuine publisher details |
+| PRIV01 P0 | Accessible privacy notice and AI/search disclosures; planned / partial | monitoring allowlist exists; SettingsTabV1.tsx inspection pending | Explain provider company/country/query/content egress separately from monitoring, consent/disable behavior, replay OFF; no invented publisher/legal promises |
+| ID01 P1 | Installation identity distinct from licensing/HWID; planned / partial | install_identity.ts random UUID; prior identity/doctor tests | UUID is not cryptographic licensing. Inspect DPAPI/private-key authority and corruption/recovery. Raw HWID authentication deferred; no hardware analytics |
+| REL01 P0 | One integration line, narrow commits and version/build/schema/channel; implementing / partial | build_identity, build metadata, sql.js schema, Git/CI; integration at 75e8cac | Reconcile older branch fixes and Qoder launcher commits individually; exact package identity, pilot/stable promotion and changelog; no rebuilding different code on promotion |
+| CI01 P0 | CI, dependency/license/SBOM/secret/release evidence; planned / partial | .github/workflows, release-license-inventory, collect-license-texts, verify-release-evidence | Actual current commit jobs/artifacts, dependency advisories and license texts; native private-repo CodeQL/push protection availability not assumed |
+| STORE01 P0 | sql.js/JSON/evidence authority and integrity; planned / implemented, broader recovery unverified | sqlite.ts, sqlite_persistence.ts, v1_engine.ts; existing atomic/integrity tests | Old-version upgrades, failed writes, locking and interrupted runtime tests with exact schema evidence; no new persistence authority |
+| MIG01 P0 | Stable writable root and explicit legacy migration; planned / partial | shared/runtime_paths.mjs and c8019b7 opt-in EDGEVIEW_DATA_DIR, doctor/backup tests | No legacy migration claimed. Destination/link/junction checks, preflight/backup/journal, interrupted promotion/stale policy and ambiguity refusal; needed before installer |
+| REC01 P0 | Backup/transactional restore/schema-compatible rollback; planned / partial | backup-runtime.mjs, migration_backup_retention.ts, prior isolated tests | Rejected restore stays excluded. Executable matched app/data recovery, midway failures, integrity/restart and schema compatibility; package downgrade is not DB rollback |
+| DIST01 P0 | Bundled runtime and immutable customer payload; planned / absent customer distribution | package-windows/EdgeView.bat developer ZIP; Windows SDK located; c8019b7 data-root precursor | No customer Node/npm/Git/IDE; runtime-only licenses, stable launcher/data location and complete lifecycle; depends MIG01/REC01/REL01 |
+| MS01 P1 | Microsoft Store vs signed MSIX/feed decision; planned / unverified account | WINDOWS_DISTRIBUTION_DECISION.md is evaluation only | Current official eligibility/fees/publisher/account/signing/policy review and visible official account handoff if needed; user handles identity/payment/agreement/attestations. Choose one update authority |
+| UPD01 P0 | Trusted update acceptance and compatible recovery; planned / absent accepted updater | UNCLE_INSTALL_UPDATE_SUPPORT_PLAN.md, build recovery only | Package trust, channel/schema compatibility, preserved state, restart health/build/DB acceptance, last-known-good recovery; depends selected distribution route and migration |
+| UX01 P1 | Accessibility/About/notices/support; planned / partial | React UI, prior focused browser/a11y tests, license inventory | Keyboard/focus/dialog/forms/error/empty workflows, actual About/version/notices, genuine support details; no broad redesign |
+| PERF01 P1 | Offline/failure UX and target-device long performance; planned / partial | resource monitoring, prior smoke/soak JSON and bounded queues/logs | Fresh target idle/start/import/export/research/shutdown measurements; long repeated leak tests and disk/DB/permission/network failures; no scale claims from short smoke |
+| QA01 P0 | Rendered controls and real company truthsets; blocked / unverified for live instance | Playwright infrastructure exists; last supported Chrome local-origin access denied despite Always allow UI | No bypass/alternate port. External dashboards accessible; real Global Pharma/Thorne Berry/Emerchemie/Slim and Getz local-scope source→UI checks pending supported access |
+| PILOT01 P0 | Clean Windows install/update/recovery/uninstall pilot; planned / absent acceptance | Existing developer ZIP/Docker are not evidence | Exact frozen self-contained package on clean Windows; synthetic import/research/export/offline/restart/update/failure/retention; then authorized real-data step |
+| FINAL01 P0 | Freeze/three artifacts/report/uncle Stable deployment; planned / absent release acceptance | Existing release contract and preserved source/data architecture | Close dependent gates; exact source archive, private operational snapshot without casual credentials, runtime distribution/checksums/SBOM/notices/release notes; final READY/READY WITH WARNINGS/NOT READY from evidence |
+
+### Ordered implementation phases and review packets
+
+1. CC01–CC03 now: trace/adversarial mixed-country fixtures, narrow admission fixes,
+   field provenance and history checks. Commit each coherent concern. Full real-world
+   closure requires later rendered/source comparison, not passing fixtures alone.
+2. CORE01/DATA01/JOB01/SEC01/SEC02: reconcile prior working fixes and current
+   security/recovery paths. No blind branch/dirty-tree merge or revived legacy engine.
+3. MON01/MON02/DIAG01/PRIV01/ID01/UX01: existing adapters first, visible privacy and
+   honest support states; actual delivery and crash coverage, not installed SDK claims.
+4. REL01/CI01/STORE01/MIG01/REC01: current release identity/evidence and transactional
+   migration/recovery. Inspect main launcher commits 05d4e1f,5ab65a6,b8e0266,0ebb6f5,
+   8ad12f4 before accepting any; older release branch fixes remain pending reconciliation.
+5. DIST01/MS01/UPD01: verify official Store route/account and choose one distribution
+   authority, then runtime bundling/install/update trust and post-update acceptance.
+6. QA01/PERF01/PILOT01/FINAL01: actual rendered and target/clean-Windows acceptance,
+   retained exact artifacts and freeze/deploy only after gates genuinely close.
+
+Each phase checkpoint records goal IDs, exact commits/files, before/after behavior,
+executed commands/results, unresolved failures/limitations and next phase here.
+This matrix is a conservative reconciliation from source/history; historical test
+claims are identified as prior evidence and are not fresh execution in this handoff.
+
 ## Anonymous installation identity for diagnostics — 2026-10-24
 
 This path existed on no branch: `main` after the merge has no install identity and none of the
