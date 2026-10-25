@@ -2,6 +2,22 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### SEC02 exact committed package acceptance — 2026-10-25
+
+Scoped staged-credential publication finding verified at
+98bf418a5db129c1833c19fcd179a1f8afa34ddf. Actual all-local-ref Gitleaks scan PASS,
+findings 0; build/release smoke terminal PASS. Exact-commit disposable package
+check PASS: 137 manifest files, unchanged launch/privacy-file checks, ZIP SHA256
+e5dd2625d2377f779afc690e3b39699a7586b15b21a7572dba81c1d6bd242922,
+build 0c55ff3cfb9bbd2401e002fc13554a80e146018f38555de57c83df25dbbed38a.
+Package removed after QA. customerRuntimeReady=false, 106 development inputs;
+no customer installer, clean-Windows, live UI, signing or update claim.
+Standalone Codex Security evidence: hardening/windows-package-content-gate-20261025.md,
+SHA256 9859f644ae434bc494139419154c2364a23ead7e648bfffac74bc60d0b978cce.
+This closes this reproduced Windows-stage credential gate, not universal DLP,
+source-export sibling, key rotation or the whole SEC02/release goal. Hosted
+checks pending. Monitoring/account work resumes after this current slice.
+
 ### SEC02 staged-content gate — candidate verification, 2026-10-25
 
 Fresh independent boundary investigation confirmed generated allowed files could
