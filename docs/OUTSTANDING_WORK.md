@@ -2,6 +2,38 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### CC02/CORE01 Slim Pharma real-source leadership loss — implementing
+
+Fresh isolated exact company+Sri Lanka run run-mvo5cfpk-db4cf66328 resolved the
+right domain and captured management HTML/accepted claims, but projected only
+three people. Independent official-page comparison reproduced foreign biography
+geography leaking between adjacent cards; Gayan/Shamal were incorrectly withheld.
+Generic correction uses formal management cards plus explicit matching-publisher
+local Head/Registered Office evidence, with person and HQ references kept apart.
+It does not assert residence or use AI confidence. Current foreign/typed locations,
+conflicting/absent HQ, wrong publisher and named related employers block inference.
+Past geography cannot swallow a later current-foreign-location clause.
+Explicit foreign office headings override the HQ inference; country-shaped names
+are not office headings. Script/comment templates and uncarried model names are
+not published management cards. No arbitrary employer/DOM/language graph claimed.
+
+Red/green controls cover recall and negative cases. Same untouched real capture
+now projects seven published Pharmaceuticals leaders, while Healthcare's explicitly
+qualified CEO stays out of that profile. No expected real facts were injected.
+Canonical three shared phone numbers match the independent contact source;
+one address still appears with/without its office label (DATA01 follow-up).
+All raw evidence-tree bytes and original credential config stayed unchanged;
+temporary protected credential copies removed. Policy 26 requires normal offline
+revalidation of older projections without startup evidence replay/data deletion.
+Report: verification/SLIM_PHARMA_2026-10-25.md. Final checks, fresh post-fix repeat,
+durability/API/render/export and live/installed acceptance remain open.
+
+JOB01 next source finding (not yet a runtime failure proof): interactive
+/api/enrich/company assigns projected fields to ctxContact before awaiting
+persistV1ContactOverlay(..., true). Both integration and frozen original main
+show this ordering; normal batch already uses durable-before-publish. Investigate
+with a focused failure regression and fix separately after this country slice.
+
 ### CC01–CC03 structured office country isolation — verified scoped fix
 
 New adversarial fixture reproduced foreign contact promotion: a page with Kenyan

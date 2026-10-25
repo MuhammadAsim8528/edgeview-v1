@@ -72,6 +72,12 @@ function structuredScope(scripts: string[], sought: string, country: string) {
   return chosen ? { scope: chosen.scope, quote: quote(chosen.raw, chosen.hint) } : undefined;
 }
 
+export function structuredContactFactScope(source: Source, value: string, country: string) {
+  const scripts = [...String(source.html || '').matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
+  const sought = value.toLowerCase().replace(/\s+/g, ' ').trim();
+  return sought ? structuredScope(scripts, sought, country) : undefined;
+}
+
 /** Explicit evidence guard, not a complete entity resolver. Unknown country
  * stays explicit so legacy admission is distinguishable from local proof. */
 export function contactFactScope(source: Source, value: string, country: string, field?: string) {
@@ -80,6 +86,10 @@ export function contactFactScope(source: Source, value: string, country: string,
   const scripts = [...String(source.html || '').matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
   const structured = scripts.join('\n');
   const visibleHtml = visible(source.html || '');
+  // A typed person location/relationship is not overridden by a repeated name
+  // in a local footer or a visible card with no location of its own.
+  const typedLeader = field === 'leader' && sought && scripts.length ? structuredScope(scripts, sought, country) : undefined;
+  if (typedLeader && !['local', 'unknown'].includes(typedLeader.scope)) return typedLeader;
   if (sought && scripts.length && !contains(visibleHtml)) {
     const scoped = structuredScope(scripts, sought, country);
     if (scoped) return scoped;

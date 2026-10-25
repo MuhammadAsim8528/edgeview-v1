@@ -6,7 +6,8 @@ import { hasExplicitCountryCallingCode, isCountryCompatiblePhone } from './phone
 import { canonicalEntityIdentityKey } from './company_identity';
 import { normalizeV1ContactOverlay, V1_CONTACT_OVERLAY_VERSION } from '../shared/v1_contact_contract';
 import { OrderedFailureStreak } from './ordered_failure_tracker';
-import { contactFactScope, countryScopedFactSources } from './contact_country_scope';
+import { contactFactScope, countryScopedFactSources, structuredContactFactScope } from './contact_country_scope';
+import { localHeadquartersEvidence, managementPublisherMatches, relatedLeadershipEmployer, foreignCurrentLeadershipLocation, foreignManagementSection } from './leadership_affiliation';
 
 const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'] as const;
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
@@ -212,7 +213,8 @@ export function safeDecodeUriComponent(value: string): string {
   catch { return value; }
 }
 
-function structuredLeadersFromOfficialPages(pages: Array<any>, companyName: string) {
+type FormalLeadershipCard = { name: string; designation: string; source: any; text: string; quote: string; headings: string[]; headingsComplete: boolean };
+function structuredLeadersFromOfficialPages(pages: Array<any>, companyName: string, formalCards?: FormalLeadershipCard[]) {
   const leaders: Array<{ name: string; designation: string; source_url: string }> = [];
   const pair = /class=["'][^"']*(?:team|member|person)[-_ ]name[^"']*["'][^>]*>([\s\S]{1,240}?)<\/[^>]+>[\s\S]{0,1000}?class=["'][^"']*(?:team|member|person)[-_ ](?:job|role|position|title)[^"']*["'][^>]*>([\s\S]{1,240}?)<\/[^>]+>/gi;
   for (const page of pages) {
@@ -226,11 +228,24 @@ function structuredLeadersFromOfficialPages(pages: Array<any>, companyName: stri
         leaders.push({ name: normalized.name, designation: normalized.designation, source_url: String(page.url || '') });
       }
     }
-    for (const match of html.matchAll(pair)) {
+    const cardHtml = html.replace(/<!--[^]*?-->/g, ' ').replace(/<(?:script|style|nav)\b[\s\S]*?<\/(?:script|style|nav)>/gi, ' ');
+    const cards = [...cardHtml.matchAll(pair)].slice(0, 100);
+    const headings = [...cardHtml.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)];
+    const activeHeadings: Array<{ level: number; text: string }> = [];
+    let headingIndex = 0;
+    for (const [index, match] of cards.entries()) {
+      while (headingIndex < Math.min(2000, headings.length) && headings[headingIndex].index < match.index) {
+        const heading = headings[headingIndex++]; const level = Number(heading[1]);
+        while (activeHeadings.length && activeHeadings.at(-1)!.level >= level) activeHeadings.pop();
+        activeHeadings.push({ level, text: htmlText(heading[2]) });
+      }
       const name = htmlText(match[1]); const designation = htmlText(match[2]);
       const normalized = normalizeLeadershipPerson(name, designation, companyName);
       if (!normalized || !normalized.designation || normalized.designation.length > 120) continue;
       leaders.push({ name: normalized.name, designation: normalized.designation, source_url: String(page.url || '') });
+      formalCards?.push({ name: normalized.name, designation: normalized.designation, source: page,
+        text: htmlText(cardHtml.slice(match.index, Math.min(cards[index + 1]?.index ?? cardHtml.length, match.index + 8000))), quote: htmlText(match[0]),
+        headings: activeHeadings.map(item => item.text), headingsComplete: headings.length <= 2000 });
     }
   }
   return leaders;
@@ -345,7 +360,8 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   ])].slice(0, 10);
   const leaderMap = new Map<string, { name: string; designation: string; source_url: string; linkedin?: string }>();
   const companyName = String(run.company_name || '');
-  for (const leader of structuredLeadersFromOfficialPages(officialPages, companyName)) {
+  const formalCards: FormalLeadershipCard[] = [];
+  for (const leader of structuredLeadersFromOfficialPages(officialPages, companyName, formalCards)) {
     leaderMap.set(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), leader);
   }
   for (const leader of leadershipFromLinkedInResults(results, companyName)) {
@@ -379,7 +395,14 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   }
   const scopeEvidence: Array<Record<string, unknown>> = [];
   const unscopedFacts: Array<Record<string, unknown>> = [];
-  const admit = (field: string, value: string, sourceUrl?: string) => {
+  const headquarters = localHeadquartersEvidence(officialPages, addresses, companyName, String(run.country || ''));
+  const admit = (field: string, value: string, sourceUrl?: string, role = '') => {
+    if (field === 'leader' && relatedLeadershipEmployer(role, companyName, String(run.country || ''))) return false;
+    const card = field === 'leader' ? formalCards.find(item => item.name.toLowerCase() === value.toLowerCase() && item.source.url === sourceUrl) : undefined;
+    const typed = card && structuredContactFactScope(card.source, value, String(run.country || ''));
+    if (card && (foreignCurrentLeadershipLocation(role, card.text, String(run.country || ''))
+      || foreignManagementSection(card.headings, companyName, value, String(run.country || ''))
+      || (typed && !['local', 'unknown'].includes(typed.scope)))) return false;
     const sources = countryScopedFactSources(results, value, String(run.country || ''), sourceUrl, field);
     // Older immutable runs can retain already-admitted quoted claims without
     // their original normalized result. Keep that provenance explicitly scoped;
@@ -397,6 +420,21 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
         }
       }
     }
+    if (field === 'leader') {
+      // A name appearing only in a script/comment/template is not carried by
+      // visible text or supported structured evidence, even if a model claimed it.
+      for (let index = sources.length - 1; index >= 0; index--) if (!sources[index].quote) sources.splice(index, 1);
+    }
+    if (field === 'leader' && headquarters && !sources.some(source => source.scope === 'local' || source.scope === 'related_entity')) {
+      if (card && card.headingsComplete && managementPublisherMatches(card.source, companyName)
+        && (!typed || typed.scope === 'local' || typed.scope === 'unknown')) {
+        scopeEvidence.push({ field, value, source_result_id: card.source.id, source_url: card.source.url, scope: 'local',
+          target_country: run.country, quote: card.quote, scope_basis: 'local_head_office_management',
+          organization_country_source_result_id: headquarters.source_result_id, organization_country_source_url: headquarters.source_url,
+          organization_country_quote: headquarters.quote });
+        return true;
+      }
+    }
     // Domain ownership cannot override explicit foreign/other-entity evidence.
     // Unknown remains a marked legacy scope, not fabricated local-country proof.
     const local = sources.filter(source => source.scope === 'local'
@@ -409,7 +447,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     for (const source of eligible) scopeEvidence.push({ field, value, ...source, target_country: run.country || '' });
     return eligible.length > 0;
   };
-  const contact_persons = [...leaderMap.values()].filter(person => admit('leader', person.name, person.source_url)).slice(0, 50);
+  const contact_persons = [...leaderMap.values()].filter(person => admit('leader', person.name, person.source_url, person.designation)).slice(0, 50);
   const finalEmails = [...new Set([...emails, ...citedEmails])].filter(value => admit('email', value)).slice(0, 50);
   const finalPhones = [...new Set([...phones, ...citedPhones])].filter(value => admit('phone', value)).slice(0, 10);
   const scopedAddresses = addresses.filter(value => admit('address', value));
