@@ -5,6 +5,25 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+// The supported development/bootstrap range must cover the whole locked stack,
+// including PostHog (20.20 / 22.22) and ESLint (no Node 23), not only Vite.
+export const NODE_RANGE = 'Node.js 20.20+ on 20.x, 22.22+ on 22.x, or 24+';
+
+export function nodeVersionSupported(version = process.versions.node) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(version).trim());
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (major === 20) return minor >= 20;
+  if (major === 22) return minor >= 22;
+  return major >= 24;
+}
+
+export function assertSupportedNode(version = process.versions.node) {
+  if (nodeVersionSupported(version)) return;
+  throw new Error(`EdgeView needs ${NODE_RANGE} (found ${version}). Install a current Node.js LTS from https://nodejs.org and launch EdgeView again.`);
+}
+
 export function dependencyFingerprint(root) {
   return crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'package-lock.json')))
     .update(fs.readFileSync(path.join(root, 'package.json')))
@@ -64,6 +83,6 @@ export function ensureDependencies(root, install = () => {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { ensureDependencies(process.cwd()); }
+  try { assertSupportedNode(); ensureDependencies(process.cwd()); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }

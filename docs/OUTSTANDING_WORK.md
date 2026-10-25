@@ -2,6 +2,24 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Reviewed launcher runtime floor corrected against actual lock — 2026-10-25
+
+Reviewed main ae031d3 individually. KEEP WITH FIXES: its Vite-only floor accepts
+20.19 and 22.12, but locked posthog-node requires ^20.20.0 or >=22.22.0;
+locked ESLint tooling also excludes Node 23. Adopted only dependency-bootstrap
+and its tests, then set a coherent whole-stack policy ^20.20.0 || ^22.22.0 ||
+>=24.0.0 in manifest, root lock metadata, guard and operator instructions.
+No dependency versions changed. Local lock engine inspection found zero package
+engine conflicts at 20.20.0, 22.22.0 and 24.19.0 (not execution on those versions).
+Guard unit boundaries plus real CLI preload tests reject 20.18.3, 20.19.9,
+22.12.0, 22.21.9 and 23.2.0 before npm starts or node_modules is created.
+Dependency repair, npm-policy-isolation and Vite-install-boundary tests PASS.
+Local typecheck, lint, production build and isolated compiled release smoke PASS.
+Bundle-size warning remains. Build observed 159081c1606cd14f02a3e7b2524ca85a3f0183f75bba2c0cee16fb09e4cfbc17
+was made from this pre-commit working tree, not a frozen customer artifact.
+The developer ZIP still requires Node/npm; customer runtime bundling/installer
+acceptance is NOT complete. No live runtime or original-tree files replaced.
+
 ### Hosted body-budget failure reproduced and fixture corrected — 2026-10-25
 
 At b315a6c, hosted research-read and Docker passed and both typechecks passed.

@@ -15,7 +15,7 @@ Bulk enrichment is resumable. Importers, exporters, all companies, or a manual s
 
 ## Windows launch
 
-Requirements: Windows and Node.js 20 or newer.
+Requirements for the current developer package: Windows, npm and Node.js 20.20+ on 20.x, 22.22+ on 22.x, or 24+. A self-contained customer installer is not yet accepted.
 
 1. Extract the package to a writable folder.
 2. Double-click `EdgeView.bat`.

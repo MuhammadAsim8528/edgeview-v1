@@ -85,7 +85,7 @@ Close the older EdgeView launcher/server and start the desktop shortcut once. Do
 
 The launcher checks the running server's installation path. It reuses a healthy server only when that path matches its own folder; another EdgeView installation produces a clear conflict message and exit code 2.
 
-The Windows ZIP requires Node.js and npm. First launch installs dependencies if missing and therefore requires Internet access. It is not a standalone executable. Source changes are rebuilt on the next launch when no instance is already running; an existing running production instance must be stopped and relaunched to apply changes.
+The Windows ZIP requires npm and Node.js 20.20+ on 20.x, 22.22+ on 22.x, or 24+. The bootstrap rejects unsupported versions before installation. First launch installs dependencies if missing and therefore requires Internet access. It is not a standalone executable. Source changes are rebuilt on the next launch when no instance is already running; an existing running production instance must be stopped and relaunched to apply changes.
 
 ## Backup and restore
 
