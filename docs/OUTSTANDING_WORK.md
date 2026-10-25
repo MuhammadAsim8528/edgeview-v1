@@ -70,6 +70,40 @@ executed commands/results, unresolved failures/limitations and next phase here.
 This matrix is a conservative reconciliation from source/history; historical test
 claims are identified as prior evidence and are not fresh execution in this handoff.
 
+### Checkpoint — handoff reconciliation and Phase 1 reproduction
+
+Commit 2a4f352 reconciles this authoritative matrix/phase order; it completes the
+ledger-reconciliation subtask, not product release acceptance or all REL01 work.
+The integration worktree was clean at initial inspection, HEAD 75e8cac, and no
+other session is credited with implementing or approving this checkpoint.
+
+New in-progress fixture server/tests/company_country_field_scope.test.ts exercises
+the actual projectDeterministicContactFields function using isolated synthetic
+results on one shared domain. Executed:
+`node --import tsx server/tests/company_country_field_scope.test.ts` → exit 1,
+all four assertions fail: Kenya inherits Pakistan parent email; Sudan inherits
+South Sudan email; a global office page combines local/foreign email; a distributor
+reference supplies the entity mailbox. This is red reproduction evidence, not a
+passing regression or complete Phase 1 fix. No provider call, dataset write, live
+restart, telemetry transmission or manual contact injection occurred. The fixture
+remains in-progress and is not yet wired into the green V1 suite. Next patch must
+preserve legitimate Kenyan content on parent domains and field/source provenance,
+and must handle mixed-page and relationship scope rather than merely filter URLs.
+
+MS01 official-source check (2026-10-25): Microsoft currently states both Individual
+and Company registrations have no registration fee **in its new onboarding flow**,
+entered through https://storedeveloper.microsoft.com/. Individual/business account
+selection and required verification differ. This does not establish this owner's
+account, eligibility, business verification or publication approval. Official guide:
+https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/open-a-developer-account?tabs=individual
+Microsoft recommends MSIX and describes Store-hosted signing/hosting/update
+facilities: https://learn.microsoft.com/en-us/windows/apps/publish/get-started
+Provisional preference is Store-managed MSIX, subject to actual account/product
+acceptance; signed owned-feed MSIX remains an alternative, not a second updater
+to implement in parallel. No signup, agreement, submission or publisher attestation
+was performed. Sensitive account participation is deferred to the explicit browser
+handoff once packaging and account verification are the active dependency.
+
 ## Anonymous installation identity for diagnostics — 2026-10-24
 
 This path existed on no branch: `main` after the merge has no install identity and none of the
