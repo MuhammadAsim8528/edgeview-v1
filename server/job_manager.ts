@@ -374,7 +374,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const scopeEvidence: Array<Record<string, unknown>> = [];
   const unscopedFacts: Array<Record<string, unknown>> = [];
   const admit = (field: string, value: string, sourceUrl?: string) => {
-    const sources = countryScopedFactSources(results, value, String(run.country || ''), sourceUrl);
+    const sources = countryScopedFactSources(results, value, String(run.country || ''), sourceUrl, field);
     // Older immutable runs can retain already-admitted quoted claims without
     // their original normalized result. Keep that provenance explicitly scoped;
     // never use a claim as an escape hatch around a present foreign source.

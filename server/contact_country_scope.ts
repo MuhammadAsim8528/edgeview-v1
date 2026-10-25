@@ -19,7 +19,7 @@ function countryScope(text: string, country: string): ContactFactScope {
 
 /** Explicit evidence guard, not a complete entity resolver. Unknown country
  * stays explicit so legacy admission is distinguishable from local proof. */
-export function contactFactScope(source: Source, value: string, country: string) {
+export function contactFactScope(source: Source, value: string, country: string, field?: string) {
   const sought = value.toLowerCase().replace(/\s+/g, ' ').trim();
   const contains = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').includes(sought);
   const structured = [...String(source.html || '').matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).join('\n');
@@ -33,8 +33,14 @@ export function contactFactScope(source: Source, value: string, country: string)
     : source.markdown && contains(source.markdown) ? source.markdown
     : source.html && contains(source.html) ? htmlContext
     : source.text || source.markdown || htmlContext.trim() || `${source.title || ''}\n${source.snippet || ''}`;
-  const whole = countryScope(body, country);
-  const valueScope = countryScope(value, country);
+  // A person's given name may itself be a country (Jordan, Chad, Georgia).
+  // Mask only this exact person value when reading location context; do not
+  // remove actual office country labels elsewhere in the same source.
+  const personName = field === 'leader' && value.trim()
+    ? new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu') : null;
+  const contextualScope = (text: string) => countryScope(personName ? text.replace(personName, ' ') : text, country);
+  const whole = contextualScope(body);
+  const valueScope = field === 'leader' ? 'unknown' : countryScope(value, country);
   if (valueScope === 'foreign') return { scope: 'foreign' as const, quote: value };
   let active: ContactFactScope = whole;
   let relatedEntity = false;
@@ -42,7 +48,7 @@ export function contactFactScope(source: Source, value: string, country: string)
   for (const rawLine of body.split(/\r?\n/)) {
     const line = rawLine.replace(/\s+/g, ' ').trim();
     if (!line) continue;
-    const lineScope = countryScope(line, country);
+    const lineScope = contextualScope(line);
     if (lineScope !== 'unknown') active = lineScope;
     // A named distributor/partner contact is not automatically the company.
     // This does not reject an entity merely because it is itself a distributor.
@@ -58,10 +64,10 @@ export function contactFactScope(source: Source, value: string, country: string)
     quote: contains(body) ? value : '' };
 }
 
-export function countryScopedFactSources(results: Source[], value: string, country: string, sourceUrl?: string) {
+export function countryScopedFactSources(results: Source[], value: string, country: string, sourceUrl?: string, field?: string) {
   return results.filter(source => source.status === 'success' && (!sourceUrl || source.url === sourceUrl))
     .filter(source => {
       const content = `${source.text || ''}\n${source.markdown || ''}\n${source.html || ''}\n${source.snippet || ''}`.toLowerCase();
       return content.includes(value.toLowerCase()) || Boolean(source.links?.some(link => link.replace(/\/$/, '') === value.replace(/\/$/, '')));
-    }).map(source => ({ source_result_id: source.id, source_url: source.url, ...contactFactScope(source, value, country) }));
+    }).map(source => ({ source_result_id: source.id, source_url: source.url, ...contactFactScope(source, value, country, field) }));
 }

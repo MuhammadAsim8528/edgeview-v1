@@ -2,6 +2,22 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Country-shaped personal names: field-aware location evidence — 2026-10-25
+
+New regression failed because Jordan Fixture was interpreted as the foreign
+country Jordan even though the profile explicitly said Kenya. Corrected leader
+scope only: ignore the exact escaped person value when reading country context,
+not actual country labels elsewhere. Pass field identity through the existing
+admission path; no extra LLM or location store. Jordan/Chad/Georgia synthetic
+names now work with explicit Kenya, stay withheld without a location and fail
+with explicit Pakistan. An ordinary person located in Jordan remains foreign.
+Emails, phones and addresses retain existing country rules. Policy version 23
+requires safe revalidation of previous overlays. No hard-coded real contacts.
+Typecheck/lint, full V1 suite, cached-overlay policy, build and release smoke PASS;
+existing multi-country/distributor controls still PASS. A separate role-title
+format regression remains red and is the next unit, not included in this commit.
+This does not prove every name, country alias or real personal employment claim.
+
 ### Reviewed visible desktop-launch failure handling — 2026-10-25
 
 Adopted only the seven EdgeView.bat crash-handling lines from main b8e0266 after
