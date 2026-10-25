@@ -48,9 +48,42 @@ duplicate alert created. Changed repeat throttling from every trigger to one hou
 per issue; saved detail page reads "1 hour" and updated modification time. This
 proves rule triggering/configuration, not receipt in the owner's email inbox.
 
-Remaining: exact owner notification delivery, analytics/error retention and access assessment, visible customer
-monitoring controls, broader crash coverage, final packaged release delivery and
+Remaining: exact owner notification delivery, analytics/error retention and access assessment,
+broader crash coverage, final packaged release delivery and
 live rendered acceptance. No claim of full monitoring or release completion.
+
+## Customer monitoring choices (candidate implementation)
+
+Settings now has independently labelled error-reporting and usage-analytics
+checkboxes. Save uses `/api/monitoring/preferences`, strict two-boolean validation,
+one in-flight save and the existing atomic canonical settings/DPAPI store.
+It does not accept ingestion identifiers or provider credentials. Persisted
+choices load before monitoring initialization; unreadable preferences fail closed.
+The environment master switch remains an upper bound, not something this UI
+can override. Reset Settings preserves the monitoring choices rather than
+silently opting a user back in while resetting provider configuration.
+
+Disabled choices gate capture and SDK transport. Serialized transitions drain
+queued-but-unsent events without vendor requests before allowing re-enable.
+In-flight network requests cannot be recalled; historical dashboard data is not
+deleted. No opt-out event is sent. Resource cache is cleared on a choice change.
+The source-of-truth remains config.json; no browser-storage consent authority.
+
+Actual local SDK transport regression passed startup opt-out, independent vendor
+choices, pending analytics discard (including a network-failed in-flight batch)
+and no resurrection on re-enable. A disposable mutation removing the PostHog
+transport guard failed at the actual queued-event network assertion as required.
+Four
+isolated compiled-browser tests passed real UI/API save, invalid payloads, restart
+durability, installation-level disabled behavior, mocked 503 honest UI and
+keyboard disclosure/provider settings. These use synthetic empty storage and blocked external
+network access, not the policy-denied live 3901 UI. Final candidate checks pending.
+
+An additional adversarial identity case failed before correction: enabling a
+previously disabled vendor after rejected build identity showed
+CONFIGURED_UNVERIFIED despite no SDK initialization. Initialization errors are
+now retained and enabling a choice does not manufacture readiness; the regression
+passes with ERROR/INVALID_IDENTITY and no SDK/network access.
 
 ## Current routing/release correction
 

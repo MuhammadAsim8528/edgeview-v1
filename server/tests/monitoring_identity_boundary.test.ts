@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import * as Sentry from '@sentry/node';
 Object.assign(process.env,{EDGEVIEW_MONITORING_ENABLED:'1',EDGEVIEW_SENTRY_DSN:'https://public@o0.ingest.sentry.io/1',EDGEVIEW_POSTHOG_KEY:'phc_synthetic_identity'});
-const {initMonitoring,captureMonitoringEvent,getMonitoringStatus}=await import('../monitoring');
-initMonitoring({version:'PRIVATE_INVALID_BUILD_IDENTITY',build_id:'b'.repeat(64),channel:'beta',installation_id:'00000000-0000-4000-8000-000000000004'});
+const {initMonitoring,captureMonitoringEvent,getMonitoringStatus,applyMonitoringPreferences}=await import('../monitoring');
+initMonitoring({version:'PRIVATE_INVALID_BUILD_IDENTITY',build_id:'b'.repeat(64),channel:'beta',installation_id:'00000000-0000-4000-8000-000000000004'}, {errors:false,usage:false});
+assert.equal(getMonitoringStatus().sentry.state,'DISABLED');
+await applyMonitoringPreferences({errors:true,usage:true});
 assert.equal(Sentry.getClient(),undefined,'invalid identity cannot reach SDK configuration');
 const status=getMonitoringStatus();
 assert.equal(status.sentry.state,'ERROR');assert.equal(status.sentry.error_code,'INVALID_IDENTITY');

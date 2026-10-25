@@ -15,7 +15,7 @@ test('privacy disclosure is keyboard accessible and distinguishes research from 
   await expect(page.getByRole('heading', { name: 'Research requests', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Optional monitoring', exact: true })).toBeVisible();
   await expect(page.getByText(/Session replay is off\./)).toBeVisible();
-  await expect(page.getByText(/An in-app on\/off switch is not yet available/)).toBeVisible();
+  await expect(page.getByText(/Saved choices apply immediately and survive restart/)).toBeVisible();
   await expect(page.getByText(/Downloading does not upload/)).toBeVisible();
   await page.screenshot({ path: '.test-cache/e2e-artifacts/privacy-disclosure.png', fullPage: true });
   expect(errors).toEqual([]);

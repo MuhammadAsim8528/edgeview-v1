@@ -25,6 +25,10 @@ const sentryDsn = String(process.env.EDGEVIEW_SENTRY_DSN || '').trim();
 const posthogKey = String(process.env.EDGEVIEW_POSTHOG_KEY || '').trim();
 const posthogHost = String(process.env.EDGEVIEW_POSTHOG_HOST || 'https://us.i.posthog.com').trim();
 const allowInsecureLocal = process.env.EDGEVIEW_MONITORING_ALLOW_INSECURE_LOCAL === '1';
+export type MonitoringPreferences = { errors: boolean; usage: boolean };
+let preferences: MonitoringPreferences = { errors: true, usage: true };
+let preferenceTransition: Promise<void> = Promise.resolve();
+const allowed = (vendor: 'sentry' | 'posthog') => monitoringEnabled && preferences[vendor === 'sentry' ? 'errors' : 'usage'];
 
 let identity: MonitoringIdentity | null = null;
 let posthog: PostHog | null = null;
@@ -60,9 +64,11 @@ function safeUrl(value: string): boolean {
 }
 
 function markAttempt(vendor: 'sentry' | 'posthog') {
+  if (!allowed(vendor)) return;
   state[vendor].last_attempt_at = new Date().toISOString();
 }
 function markSuccess(vendor: 'sentry' | 'posthog') {
+  if (!allowed(vendor)) return;
   state[vendor].state = 'TRANSPORT_OK';
   state[vendor].last_transport_success_at = new Date().toISOString();
   state[vendor].error_code = null;
@@ -90,7 +96,8 @@ function sentryEvent(projected: SafeMonitoringEvent) {
   };
 }
 
-export function initMonitoring(nextIdentity: MonitoringIdentity): void {
+export function initMonitoring(nextIdentity: MonitoringIdentity, initialPreferences: MonitoringPreferences = { errors: true, usage: true }): void {
+  preferences = { errors: initialPreferences.errors === true, usage: initialPreferences.usage === true };
   identity = nextIdentity;
   latestResources = {}; resourceSampleAt = null;
   if (!monitoringEnabled) return;
@@ -124,6 +131,7 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
             return {
               flush: timeout => transport.flush(timeout),
               async send(envelope) {
+                if (!allowed('sentry')) return { statusCode: 204 };
                 try {
                   const response = await transport.send(envelope);
                   if (typeof response.statusCode === 'number' && response.statusCode >= 200 && response.statusCode < 300) markSuccess('sentry');
@@ -134,6 +142,7 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
             };
           },
           beforeSend(event) {
+            if (!allowed('sentry')) return null;
             const safe = projectMonitoringEvent(String(event.tags?.event ?? ''), { ...event.tags, ...event.extra }, nextIdentity);
             if (!safe || !isSentryEvent(safe.event)) return null;
             const rebuilt = sentryEvent(safe);
@@ -166,6 +175,11 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
     else {
       try {
         posthog = new PostHog(posthogKey, {
+          async fetch(url, options) {
+            // Suppress queued-but-unsent events as well as new captures.
+            if (!allowed('posthog')) return { status: 204, text: async () => '', json: async () => ({}) };
+            return fetch(url, options);
+          },
           host: posthogHost,
           flushAt: 10,
           flushInterval: 5000,
@@ -199,11 +213,36 @@ export function classifyMonitoringError(error: unknown): string {
 export function getMonitoringStatus() {
   return {
     enabled: monitoringEnabled,
-    sentry: { ...state.sentry },
-    posthog: { ...state.posthog },
+    preferences: { ...preferences },
+    sentry: { ...state.sentry, enabled: allowed('sentry') && state.sentry.configured, ...(!allowed('sentry') ? {state: 'DISABLED' as const} : {}) },
+    posthog: { ...state.posthog, enabled: allowed('posthog') && state.posthog.configured, ...(!allowed('posthog') ? {state: 'DISABLED' as const} : {}) },
     privacy_boundary: 'strict_allowlist_projection',
     replay: 'OFF',
   };
+}
+
+/** Canonical settings are persisted by the caller before changing runtime gates.
+ * Serialize transitions so an immediate re-enable cannot resend the old queue.
+ * Already-started network requests cannot be recalled. No opt-out event is sent.
+ */
+export function applyMonitoringPreferences(next: MonitoringPreferences): Promise<void> {
+  const transition = preferenceTransition.then(async () => {
+    const previous = preferences;
+    preferences = { errors: next.errors === true, usage: next.usage === true };
+    latestResources = {}; resourceSampleAt = null;
+    // SDK flush drains pre-existing queues through the disabled transport gate.
+    if (previous.errors && !preferences.errors && sentryInitialized) { try { await Sentry.flush(2000); } catch {} }
+    if (previous.usage && !preferences.usage && posthog) { try { await posthog.flush(); } catch {} }
+    for (const vendor of ['sentry', 'posthog'] as const) {
+      if (!allowed(vendor)) continue;
+      const initialized = vendor === 'sentry' ? sentryInitialized : posthog !== null;
+      if (initialized && !previous[vendor === 'sentry' ? 'errors' : 'usage']) {
+        state[vendor] = vendorInitial(state[vendor].configured);
+      }
+    }
+  });
+  preferenceTransition = transition.catch(() => {});
+  return transition;
 }
 
 export async function captureMonitoringEvent(name: string, properties: unknown = {}, flush = false) {
@@ -222,7 +261,7 @@ export async function captureMonitoringEvent(name: string, properties: unknown =
   let sentrySent = false;
   let posthogSent = false;
 
-  if (monitoringEnabled && sentryInitialized && isSentryEvent(projected.event)) {
+  if (allowed('sentry') && sentryInitialized && isSentryEvent(projected.event)) {
     markAttempt('sentry');
     state.sentry.state = 'CONFIGURED_UNVERIFIED';
     try {
@@ -235,7 +274,7 @@ export async function captureMonitoringEvent(name: string, properties: unknown =
     } catch { markFailure('sentry', 'TRANSPORT_FAILED'); }
   }
 
-  if (monitoringEnabled && posthog && isProductMonitoringEvent(projected.event)) {
+  if (allowed('posthog') && posthog && isProductMonitoringEvent(projected.event)) {
     markAttempt('posthog');
     try {
       posthog.capture({

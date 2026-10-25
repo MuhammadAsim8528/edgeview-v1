@@ -41,6 +41,8 @@ function configReadPath(): string {
 }
 
 export interface AppSettings {
+  monitoring_errors_enabled?: boolean;
+  monitoring_usage_enabled?: boolean;
   serper_api_key: string;
   firecrawl_api_key: string;
   nvidia_api_key: string;
@@ -87,6 +89,8 @@ const DEPRECATED_NVIDIA_MODELS = new Set([
 ]);
 
 const DEFAULT_SETTINGS: AppSettings = {
+  monitoring_errors_enabled: true,
+  monitoring_usage_enabled: true,
   serper_api_key: '',
   firecrawl_api_key: '',
   nvidia_api_key: '',
@@ -297,14 +301,17 @@ export function saveAppSettings(settings: Partial<AppSettings>): AppSettings {
 }
 
 export function resetAppSettings(): AppSettings {
+  // Resetting provider configuration must not silently opt a user back in.
+  const current = getAppSettings();
+  const defaults = { ...DEFAULT_SETTINGS, monitoring_errors_enabled: current.monitoring_errors_enabled === true, monitoring_usage_enabled: current.monitoring_usage_enabled === true };
   try {
     backupConfigForReset();
-    atomicWriteJson(getConfigPath(), DEFAULT_SETTINGS);
+    atomicWriteJson(getConfigPath(), defaults);
   } catch (err) {
     console.error('Error resetting config.json:', err);
     throw err;
   }
-  return DEFAULT_SETTINGS;
+  return defaults;
 }
 
 /** Call only after exclusive backend ownership, never from a read or launcher. */

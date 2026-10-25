@@ -2,6 +2,20 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### MON01/PRIV01 saved monitoring controls — implementing
+
+Separate error/usage choices now use the existing canonical settings store;
+strict two-boolean endpoint, atomic save before runtime change, one in-flight save,
+startup opt-out, capture/transport suppression and queued analytics discard.
+Launch-level disable cannot be overridden. Accessible Settings controls have
+bounded requests, explicit reload and honest unconfirmed-save feedback.
+Actual local SDK transport controls PASS; compiled isolated browser save/restart,
+invalid payloads, failed-save UI and disclosure checks PASS (three tests).
+Typecheck/E2E typecheck/lint, V1 and build/release smoke PASS on candidate;
+final exact source/package and updated browser run pending. No live replacement.
+See MONITORING_ACCEPTANCE_2026-10-25.md for boundaries and remaining account,
+crash-coverage, final package and live UI acceptance; wider country work retained.
+
 ### MON01 current-build dashboard receipt — verified scoped acceptance
 
 Source 5f33d838654218a702d6991fccd49a32832e628d, beta build
@@ -456,10 +470,10 @@ the cited acceptance scope, never automatically to the whole product.
 | JOB01 P0 | Progress/cancel/retry, bounded waits and crash recovery; planned / partial | job_manager.ts, ResearchWorkspace.tsx, SHUTDOWN_RECOVERY.md, RESEARCH_READ_RECOVERY.md | Trace cancellation to transport/job persistence; kill/restart/retry and no spinner/lost state; fresh runtime/visible proof |
 | SEC01 P0 | Local Host/Origin, SSRF/DNS/redirect/credential origin and resource limits; planned / partial | server.ts, ai_providers.ts, url_safety.ts, routes/upload.ts, security tests | Reconcile exact current tests and deployed build; alias/raw requests and malformed/error cases; preserve safe loopback boundary |
 | SEC02 P0 | DPAPI secret authority/history/package scans; planned / partial | settings.ts, scan-history-gitleaks.mjs, CI; older branch package scan candidate uncommitted | Review/install current secret boundary; staged-content gate and old main alerts; never publish credentials or claim missing private GitHub features passed |
-| MON01 P0 | Privacy-safe Sentry/PostHog plus disabled/offline controls; planned / partial | monitoring.ts, shared/monitoring_privacy.ts; b5fe935, 365021c; prior transport/rejection tests | Visible user settings, frontend crash and startup/unhandled coverage; fresh intended-build delivery and privacy; optional/offline never blocks startup |
-| MON02 P0 | Account IP/location privacy; planned / partially verified externally | Backend/frontend IP prevention and extra location fields saved; PostHog discard-IP saved; older branch 8b7308d records fresh 365021c backend event c8c23746830143719cbf23c394688d2e with geography Filtered | Import evidence by review, not code merge. Backend event only; fresh frontend effect and exact current integration/live build remain unverified |
+| MON01 P0 | Privacy-safe Sentry/PostHog plus disabled/offline controls; implementing / partial | 5f33d83 actual dashboard receipt recorded a112dac; current saved per-purpose Settings controls, actual queue/opt-out transport regression and isolated rendered restart/failure acceptance | Broader actual frontend crash and startup/unhandled coverage, target installation and final-package acceptance; no SDK-flush-only dashboard claims |
+| MON02 P0 | Account IP/location privacy; partially verified externally | a112dac/2b6b8d7: 5f33d83 synthetic dashboard receipt, Sentry backend geography filtered/IP prevention, PostHog GeoIP disabled/discard-IP, persisted autocapture OFF/replay OFF, existing error alert triggered/hourly throttle | Owner inbox delivery, access/retention, fresh separate frontend project effects and final release-wide acceptance remain unverified |
 | DIAG01 P1 | Honest diagnostics preview/export/retention/support; planned / partial | support_diagnostics.ts, SystemHealthPanel.tsx; 365021c; support_diagnostics.test.ts | Review actual overview/provider/resource/error states, visible preview/download, offline and redaction; no raw logs/content leakage; support contact requires genuine publisher details |
-| PRIV01 P0 | Accessible privacy notice and AI/search disclosures; implementing / partial | 960e95e PrivacyNotice.tsx in Settings; typecheck/lint/build/smoke and two isolated browser/keyboard tests PASS; screenshot inspected | Persistent customer monitoring on/off control, genuine publisher privacy/support URLs, About/notices/licensing and final package acceptance; live browser origin remains denied |
+| PRIV01 P0 | Accessible privacy notice and AI/search disclosures; implementing / partial | 960e95e PrivacyNotice.tsx, updated current MonitoringControls.tsx, per-purpose saved consent; isolated keyboard/save/restart/failure checks and screenshot inspected | Genuine publisher privacy/support URLs, About/notices/licensing and final package acceptance; live browser origin remains denied |
 | ID01 P1 | Installation identity distinct from licensing/HWID; planned / partial | install_identity.ts random UUID; prior identity/doctor tests | UUID is not cryptographic licensing. Inspect DPAPI/private-key authority and corruption/recovery. Raw HWID authentication deferred; no hardware analytics |
 | REL01 P0 | One integration line, narrow commits and version/build/schema/channel; implementing / partial | build_identity, build metadata, sql.js schema, Git/CI; integration at 75e8cac | Reconcile older branch fixes and Qoder launcher commits individually; exact package identity, pilot/stable promotion and changelog; no rebuilding different code on promotion |
 | CI01 P0 | CI, dependency/license/SBOM/secret/release evidence; planned / partial | .github/workflows, release-license-inventory, collect-license-texts, verify-release-evidence | Actual current commit jobs/artifacts, dependency advisories and license texts; native private-repo CodeQL/push protection availability not assumed |

@@ -13,7 +13,7 @@ export function PrivacyNotice() {
         <h3 className="font-semibold text-white">Optional monitoring</h3>
         <p>Sentry reports allowed error codes and PostHog records allowed usage events when monitoring is configured and enabled. Reports can include version, build, release channel and a random installation identifier. That identifier is not hardware licensing. Session replay is off.</p>
         <p>Monitoring must exclude imported rows, company or contact details, prompts, research bodies, credentials, private paths and raw exception text. Search and AI requests are separate from monitoring. The Remote monitoring panel shows observed configuration and delivery state; transport success does not prove dashboard receipt.</p>
-        <p>This candidate controls monitoring through launch configuration. An in-app on/off switch is not yet available; ask the person managing this installation to change it. Monitoring is not required for startup.</p>
+        <p>Use Monitoring preferences to allow or stop error reports and usage analytics separately. Saved choices apply immediately and survive restart. Launch configuration can also disable monitoring for the installation; these choices cannot override that restriction. Monitoring is not required for startup.</p>
         <h3 className="font-semibold text-white">Support sharing and retention</h3>
         <p>Preview support diagnostics before downloading or sharing them. Downloading does not upload the file to support. Research history and local backups are not included in that diagnostics download. No automatic deletion period for your local research is promised by this candidate; retain or remove files only through an agreed backup and recovery process.</p>
       </div>

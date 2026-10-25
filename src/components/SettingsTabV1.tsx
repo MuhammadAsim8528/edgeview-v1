@@ -4,6 +4,7 @@ import { safeFetchJson } from '../utils/safeFetch';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { LogsViewerPanel } from './LogsViewerPanel';
 import { PrivacyNotice } from './PrivacyNotice';
+import { MonitoringControls } from './MonitoringControls';
 
 interface SettingsTabProps {
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
@@ -155,6 +156,7 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
       </div>
     </div>
     <PrivacyNotice />
+    <MonitoringControls />
     <SystemHealthPanel />
     <LogsViewerPanel />
     <form onSubmit={save} className="rounded-xl border border-[#262626] bg-[#1a1a1a] p-6">

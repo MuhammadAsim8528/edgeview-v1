@@ -268,7 +268,7 @@ export const SystemHealthPanel: React.FC = () => {
           </div>
           <button
             onClick={testMonitoring}
-            disabled={isTestingMonitoring || !runtimeState.monitoring.enabled}
+            disabled={isTestingMonitoring || !runtimeState.monitoring.enabled || (!runtimeState.monitoring.sentry.enabled && !runtimeState.monitoring.posthog.enabled)}
             className="px-3 py-1.5 rounded-lg border border-[#3a3a3a] bg-[#242424] text-xs text-white disabled:opacity-40 hover:border-gray-500"
           >
             {isTestingMonitoring ? 'Testing delivery...' : 'Test monitoring delivery'}

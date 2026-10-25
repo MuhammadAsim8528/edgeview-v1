@@ -52,7 +52,7 @@ import { createShutdownController } from './server/shutdown';
 import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
 import { requiresOperationalDatabase } from './server/storage_mutation_guard';
 import { contactResearchCategory } from './shared/contact_research_scope';
-import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring, classifyMonitoringError } from './server/monitoring';
+import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring, classifyMonitoringError, applyMonitoringPreferences } from './server/monitoring';
 import { supportDiagnostics } from './server/support_diagnostics';
 
 const app = express();
@@ -63,7 +63,12 @@ const runningBuild = readBuildIdentity(getProjectRoot());
 const monitoringChannel: 'stable' | 'beta' | 'canary' = runningBuild.available && /-canary\./.test(runningBuild.version)
   ? 'canary' : runningBuild.available && /-(?:rc|beta)\./.test(runningBuild.version) ? 'beta' : 'stable';
 if (runningBuild.available) {
-  initMonitoring({ version: runningBuild.version, build_id: runningBuild.buildId, channel: monitoringChannel, installation_id: getInstallationId() });
+  let preferences = { errors: false, usage: false };
+  try {
+    const settings = getAppSettings();
+    preferences = { errors: settings.monitoring_errors_enabled === true, usage: settings.monitoring_usage_enabled === true };
+  } catch { /* Unreadable consent fails closed; do not block offline startup. */ }
+  initMonitoring({ version: runningBuild.version, build_id: runningBuild.buildId, channel: monitoringChannel, installation_id: getInstallationId() }, preferences);
 }
 const PORT = Number(process.env.PORT) || 3000;
 // Production/static mode is the safe default. Vite middleware must be opted
@@ -333,7 +338,27 @@ app.get('/api/diagnostics/support', (_req, res) => {
 });
 
 app.get('/api/monitoring/status', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, monitoring: getMonitoringStatus() });
+});
+
+let monitoringPreferenceSave = false;
+app.post('/api/monitoring/preferences', async (req, res) => {
+  const input = req.body;
+  if (!input || Array.isArray(input) || Object.keys(input).length !== 2 || typeof input.errors !== 'boolean' || typeof input.usage !== 'boolean') {
+    return res.status(400).json({ success: false, code: 'INVALID_MONITORING_PREFERENCES', message: 'Choose true or false for both monitoring options.' });
+  }
+  if (monitoringPreferenceSave) return res.status(409).json({ success: false, code: 'MONITORING_PREFERENCES_BUSY', message: 'A monitoring preference save is already running. Reload preferences shortly.' });
+  monitoringPreferenceSave = true;
+  try {
+    // One persistent authority: existing atomic settings/DPAPI path. No vendor
+    // ingestion identifiers or provider credentials are accepted by this route.
+    saveAppSettings({ monitoring_errors_enabled: input.errors, monitoring_usage_enabled: input.usage });
+    await applyMonitoringPreferences(input);
+    return res.json({ success: true, monitoring: getMonitoringStatus() });
+  } catch {
+    return res.status(503).json({ success: false, code: 'MONITORING_PREFERENCES_SAVE_FAILED', message: 'Monitoring preferences could not be saved. Retry after checking local storage.' });
+  } finally { monitoringPreferenceSave = false; }
 });
 
 app.post('/api/monitoring/test', async (_req, res) => {
@@ -750,6 +775,7 @@ app.post('/api/settings/reset', async (req, res) => {
     }
     const { resetAppSettings } = await import('./server/settings');
     const reset = resetAppSettings();
+    await applyMonitoringPreferences({ errors: reset.monitoring_errors_enabled === true, usage: reset.monitoring_usage_enabled === true });
     res.json({
       success: true,
       message: 'Settings reset to default values',
