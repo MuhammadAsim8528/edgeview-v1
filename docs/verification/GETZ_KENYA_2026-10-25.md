@@ -91,7 +91,7 @@ and the independently unverified personal-role limitations remain unchanged.
 Later projection cleanup removes the repeated person name from the role; this
 same capture now displays Muhammad Ashad / Country Manager. Field country scope
 also distinguishes country-shaped given names from actual location labels.
-Current overlay policy is 24; earlier policy numbers above are dated observations.
+Overlay policy at that checkpoint was 24; earlier policy numbers above are dated observations.
 
 Independent secondary report:
 https://radiogeneration.co.ke/health-and-wellness/111752/doctors-warn-of-rising-undiagnosed-diabetes
@@ -101,3 +101,22 @@ https://www.linkedin.com/advice/1/what-best-ways-prepare-medical-sales-pitch-ski
 Direct personal-profile retrieval timed out during independent checking.
 This is corroboration as of those public sources, not an employment guarantee
 for today. No personal email or direct number was inferred or manually inserted.
+
+## Structured-office follow-up (policy 25)
+
+A later synthetic regression found ISO-coded JSON-LD offices could inherit
+visible Kenya navigation: PK parent email/address/person wrongly became local.
+The corrected structured carrier isolates each object's address country, handles
+explicit ISO codes and textual addresses, and prevents graph-sibling or parent/
+distributor relation inheritance. Nationality is not employment-location proof.
+Parsing has explicit script/node/depth budgets; unsupported/malformed or
+over-budget structured-only facts abstain. It does not resolve arbitrary @id
+graphs or prove every office layout/relationship/language correct.
+
+Read-only reprojection of retained actual run run-mvny1m0m-b16760bc7c passed after
+this change: +254204261000 and 63 Westlands Road/Nairobi/Kenya retained, no guessed
+email or Pakistan/Karachi address; full retained evidence-tree hash unchanged.
+This used separate empty test config/JSON/SQLite paths. No live dataset rewrite,
+fresh provider run or rendered UI/export verification was performed in this check.
+Policy-24 overlays require the existing normal revalidation path; their stored
+records and original evidence are preserved.

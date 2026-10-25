@@ -2,6 +2,33 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### CC01–CC03 structured office country isolation — implementing
+
+New adversarial fixture reproduced foreign contact promotion: a page with Kenyan
+navigation and JSON-LD offices using PK/KE/KEN codes admitted the Pakistan parent
+mailbox as Kenyan. Projection controls also exercise addresses and people.
+Structured-only facts now use the matching
+object's address context, not visible navigation or graph siblings. Nested people
+inherit their organization context unless their own address overrides it;
+nationality/areaServed are not employment-location proof. Explicit distributor,
+partner/agent/supplier and parentOrganization branches stay related_entity even
+with the target country's address. Valid parent-hosted local office data remains.
+Textual structured addresses remain supported; a positive recall assertion caught
+and corrected an initial omission. Raw provider payloads are never rewritten.
+
+Work is bounded to 32 scripts, 256 KiB/script, 2048 nodes and depth 24 per scoped
+lookup; malformed/over-budget structured-only facts abstain rather than borrow
+navigation scope. Quotes are bounded excerpts of original JSON, not invented
+structured prose. No @id reference resolution, general relationship graph or
+complete multilingual/layout acceptance claimed. Overlay policy 25 withholds
+policy-24 caches pending normal offline revalidation, retaining stored recovery
+data and raw evidence. Focused structured/office/field/cached-startup/batch checks
+PASS. Actual retained Getz capture reprojects its independently checked Kenyan
+phone/address, no guessed email/foreign address, with whole evidence-tree hash
+unchanged. Typecheck/lint, full V1 and production build PASS on candidate;
+final exact-commit package and rendered acceptance pending. Original main tree
+read back clean at b6db239, untouched; no automatic reconciliation performed.
+
 ### MON01/PRIV01 saved monitoring controls — verified scoped implementation
 
 Separate error/usage choices now use the existing canonical settings store;
@@ -21,7 +48,9 @@ synthetic delivery observed in both actual dashboards with matching build/UUID;
 Sentry event 993f2f1641944cfb86a3bdb881f4ce2a. No live replacement.
 PostHog granular access controls require Boost on current account; no paid
 upgrade or permission expansion. Full retention/access and hosted release check
-remain open (Docker job passed; browser/verify still running at checkpoint).
+remain open. Docker passed on 05ab887; browser/verify later became cancelled
+after the documentation successor push, not PASS. Current successor CI still
+requires inspection; no stopped job is described as running indefinitely.
 See MONITORING_ACCEPTANCE_2026-10-25.md for boundaries and remaining account,
 crash-coverage, final package and live UI acceptance; wider country work retained.
 
