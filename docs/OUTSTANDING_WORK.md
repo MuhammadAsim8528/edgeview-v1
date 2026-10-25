@@ -2,6 +2,24 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Getz Kenya actual-provider comparison and office-boundary fix — 2026-10-25
+
+See [scoped verification record](verification/GETZ_KENYA_2026-10-25.md).
+Actual isolated Getz Pharma/Kenya provider run on 7baea6d resolved correct global
+official domain but lost captured Kenyan phone/address in projection. Reproduced
+flattened multi-office HTML with a red synthetic test, corrected shared field
+scope/context and generic labelled-address extraction; no company-specific facts
+hard-coded. Same saved real capture now projects official Kenyan phone/address,
+retains per-field source/quote and excludes Pakistan contacts. Durable overlay
+write/DB reopen/hydration verified on isolated state; raw capture unchanged.
+Overlay policy 22 invalidates older projections for ordinary safe revalidation.
+No local email inferred; projected personal leadership remains independently
+unverified. Live browser saved-origin permission still denies inspection; no
+workaround/restart/customer-data change attempted. UI/export/fresh post-fix/live
+full-dataset/installer acceptance stay open. Local required checks passed as
+recorded in the report; previous full hosted release checks PASS at exact
+7baea6d (40203275651), not yet this new correction. CC01–03 remain PARTIAL overall.
+
 ### Retained unscoped evidence repetition fix — 2026-10-25
 
 Reproduced requirement gap with 250 repeated historical-source entries followed

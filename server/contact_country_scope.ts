@@ -5,7 +5,7 @@ type Source = { id: string; status?: string; url: string; title?: string; snippe
 export type ContactFactScope = 'local' | 'foreign' | 'ambiguous' | 'related_entity' | 'unknown';
 
 function visible(value: string) {
-  return value.replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+  return value.replace(/<!--[^]*?-->/g, ' ').replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ')
     .replace(/<(?:br|\/p|\/div|\/section|\/article|\/li|\/h[1-6]|\/tr)\b[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&');
 }
@@ -26,7 +26,10 @@ export function contactFactScope(source: Source, value: string, country: string)
   const htmlContext = `${visible(source.html || '')}\n${structured}`;
   // Use the representation actually carrying the value: a short provider text
   // summary must not confer Kenyan scope on a Pakistan-only HTML contact.
-  const body = source.text && contains(source.text) ? source.text
+  // Direct retrieval may flatten every office into one text line. Prefer the
+  // full HTML's visible block boundaries when they actually carry this fact.
+  const body = source.html && contains(htmlContext) ? htmlContext
+    : source.text && contains(source.text) ? source.text
     : source.markdown && contains(source.markdown) ? source.markdown
     : source.html && contains(source.html) ? htmlContext
     : source.text || source.markdown || htmlContext.trim() || `${source.title || ''}\n${source.snippet || ''}`;
@@ -51,7 +54,8 @@ export function contactFactScope(source: Source, value: string, country: string)
   if (matches.length) return matches.find(match => match.scope !== 'unknown') || matches[0];
   // Structured addresses can combine several JSON fields and need not appear
   // as one contiguous string. An explicitly foreign value still failed above.
-  return { scope: valueScope === 'local' && whole !== 'foreign' ? 'local' as const : whole, quote: '' };
+  return { scope: valueScope === 'local' && whole !== 'foreign' ? 'local' as const : whole,
+    quote: contains(body) ? value : '' };
 }
 
 export function countryScopedFactSources(results: Source[], value: string, country: string, sourceUrl?: string) {

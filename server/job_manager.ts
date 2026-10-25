@@ -139,6 +139,9 @@ function structuredAddressesFromOfficialPages(pages: Array<any>): string[] {
       ].filter(Boolean).join(', '));
     }
     for (const match of html.matchAll(/<(?:address|div|p|span)\b[^>]*(?:itemprop=["']address["']|(?:class|id)=["'][^"']*(?:contact[-_ ]?address|office[-_ ]?address|postal[-_ ]?address)[^"']*["'])[^>]*>([\s\S]{1,800}?)<\/(?:address|div|p|span)>/gi)) add(match[1]);
+    // Labelled office blocks need not use a particular site's CSS vocabulary.
+    // Keep extraction separate from the field-level country admission below.
+    for (const match of html.matchAll(/<(?:div|p|address)\b[^>]*>\s*<span\b[^>]*>\s*(?:(?:registered|office|postal)\s+)?address\s*:?\s*<\/span>([\s\S]{1,800}?)<\/(?:div|p|address)>/gi)) add(match[1]);
   }
   return addresses.slice(0, 10);
 }

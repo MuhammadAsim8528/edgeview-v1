@@ -1,0 +1,72 @@
+# Getz Pharma Kenya: reproduced attribution/recall gap
+
+Date: 2026-10-25. Status: partial acceptance; NOT release approval.
+
+## Independent public-source comparison
+
+Official source: https://getzpharma.com/contact-us/
+The Kenya regional-office block publishes 63 Westlands Road, Nairobi, Kenya and
++254 20 426 1000. The same page also publishes Pakistan and other offices.
+https://getzpharma.com/global-presence/ independently describes Kenyan operations.
+A globally shared official domain is legitimate; it does not confer Kenyan scope
+on every contact from that domain. No Kenyan email was established in this check.
+
+## Actual provider run before correction
+
+Source base: integration 7baea6d. Exact input: Getz Pharma + Kenya.
+Run: run-mvny1m0m-b16760bc7c, isolated writable storage, no live runtime restart or
+customer dataset alteration. Source configuration read-only, SHA256 unchanged;
+only approved active provider secrets copied to a Windows-DPAPI protected temporary
+configuration. Monitoring disabled. No secrets entered source or this report.
+
+Observed real requests: NVIDIA query generation HTTP 200, four Serper searches
+HTTP 200, direct retrieval, two NVIDIA extraction responses HTTP 200. Hunter/Groq
+were configured but not called; their success is NOT implied. Provider failures
+included a retrieval timeout and unsupported PDF content. These remain recorded.
+Run status PARTIAL; resolved getzpharma.com. Captured contact-page HTML includes
+the Kenya phone/address, but original projection produced neither.
+
+Root cause: the field-scope guard chose a single flattened text representation
+over HTML retaining office boundaries, marking the contact ambiguous. Generic
+labelled address blocks also escaped deterministic address extraction.
+
+## Permanent correction and tests
+
+Prefer visible HTML carrying the actual fact, preserving block boundaries; strip
+script/style/comment content from that visible context. Retain text/markdown when
+HTML does not carry the value. Extract generic span-labelled address blocks,
+then apply existing country/identity checks. No Getz-specific URL, CSS, contact
+value or company exception was added. Overlay policy increments to 22 so older
+projections need revalidation rather than silently retaining prior policy.
+
+New synthetic office_html_country_scope.test.ts failed before correction and
+passes afterward: local mailbox/phone/address survive flattened global text;
+foreign parent facts stay excluded; raw input unchanged. Existing Kenya/Pakistan,
+Sudan/South Sudan, global-office, distributor and unscoped controls also pass.
+
+Reprojected the SAME immutable actual provider capture without another search:
+Kenyan phone/address now match the independently read official page. Local email
+remains empty. Source IDs, official URL and quoted evidence accompany admitted
+fields. Actual local SQLite durable write, DB reopen and hydration pass with this
+projection; original saved run remains byte-equivalent when hydrated. An initial
+acceptance harness omitted test mode and correctly hit the test-only DB-reset
+guard; corrected only the isolated harness before the successful repeat.
+
+## Observed checks and limits
+
+Typecheck, lint, full current test:v1, official-page body-budget, cached-overlay
+policy, offline batch-revalidation, production build and isolated release smoke
+pass. Expected synthetic ENOSPC test diagnostics are controlled failure evidence.
+Build warning: frontend chunk remains above 500 kB.
+
+A personal LinkedIn search result was projected as a country manager, but this
+check has NOT independently verified that person's present role. It must not be
+presented as an independently verified leadership truthset.
+
+Live Chrome tab 2115921035 was identified at http://127.0.0.1:3901/; supported
+getTab access was rejected by saved origin permission/managed policy. No alternate
+browser surface, port or indirect live-UI workaround was attempted. Rendered UI,
+actual download/export, a fresh post-fix provider run, full importer dataset and
+installed customer package remain NOT VERIFIED. Controlled DB hydration is not
+proof of any of those behaviors. Temporary real-run evidence is private and is
+not a distributable fixture or final operational backup.
