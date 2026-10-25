@@ -2,6 +2,18 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Reviewed Windows development-launch fix — 2026-10-25
+
+Independently reproduced main 31ccb24's bug on Windows: existing spawn of tsx.cmd
+throws EINVAL before the stub server runs. Adopted only scripts/dev-server.mjs
+and its endpoint-free synthetic test. Uses process.execPath --import tsx server.ts
+instead of launching a cmd shim; no shell workaround. Focused test now PASS:
+actual TypeScript enum loader, development flags/output, app exit 5 preserved,
+owned stub termination reported as failure. Tightened adopted test to register
+exit observation before kill and bound its wait to 10 seconds. Hosted Windows
+step added. No live backend was launched, stopped or replaced; this addresses
+npm run dev only, not installed-customer runtime or visual acceptance.
+
 ### Reviewed isolated rebuild decision coverage — 2026-10-25
 
 Adopted only scripts/build-if-needed.test.mjs from main 8ad12f4 after reading

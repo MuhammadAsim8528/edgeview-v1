@@ -60,6 +60,7 @@ jobs:
       - run: node --import tsx server/tests/directory_pagination_presentation.test.tsx
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/build-if-needed.test.mjs
+      - run: node scripts/dev-server.test.mjs
       - run: node scripts/build-metadata.test.mjs
       - run: node scripts/local-load-smoke.test.mjs
       - run: node --import tsx server/tests/build_identity_presentation.test.tsx
