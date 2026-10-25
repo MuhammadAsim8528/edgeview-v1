@@ -6,6 +6,19 @@
 
 ### Hosted SDK compatibility/privacy finding — 2026-10-25
 
+### Reviewed Qoder test reconciliation — SSRF precision
+
+Read final test changes at main 83c5dd2 and 9f0c4fa, compared the affected file
+against common ancestor 860b6e4 and confirmed integration had no divergent hunks
+there. Adopted only server/tests/ssrf_security_guard.test.ts, not the main tree
+or its mixed historical ledger. Actual standalone execution passes exact guard
+message assertions under isolated empty settings, unsaved synthetic keys,
+loopback aliases/0.0.0.0/fd00 controls and an allowed documentation-address literal.
+Corrected the output label: literal controls without a DNS lookup are not proof
+of DNS resolution/binding coverage. Qoder's reported mutation score is prior
+evidence, not an independently repeated mutation run here. Remaining main
+commits are still pending individual review; original tree remains untouched.
+
 Inspected actual GitHub runs at 30c7f9246c078de96a1f44636ae9ce52cb87ec0e:
 40200261970 (research read) failed typecheck; 40200261939 (release) failed Windows
 verify typecheck and Docker build. Browser-e2e succeeded; publish skipped.
