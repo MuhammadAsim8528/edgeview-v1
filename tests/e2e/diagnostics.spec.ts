@@ -1,5 +1,28 @@
 import { test, expect } from './fixtures';
 import { build } from 'esbuild';
+import { readFile } from 'node:fs/promises';
+
+test('support diagnostics previews and downloads local safe metadata, with retry after failure', async ({page,context,runtime}) => {
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  await page.goto('/'); await page.locator('#nav-tab-settings').click();
+  const panel=page.getByRole('region',{name:'Export support diagnostics',exact:true});
+  await expect(panel.getByRole('button',{name:'Download diagnostics',exact:true})).toHaveCount(0);
+  await page.route('**/api/diagnostics/support',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"PRIVATE_SUPPORT_ERROR"}'}));
+  await panel.getByRole('button',{name:'Preview diagnostics',exact:true}).click();
+  await expect(panel.getByRole('alert')).toContainText('Diagnostics could not be prepared');
+  await expect(panel.getByText('PRIVATE_SUPPORT_ERROR',{exact:true})).toHaveCount(0);
+  await page.unroute('**/api/diagnostics/support');
+  await panel.getByRole('button',{name:'Preview diagnostics',exact:true}).click();
+  const preview=panel.getByLabel('Diagnostics preview',{exact:true}); await expect(preview).toBeVisible();
+  const text=await preview.innerText(); const data=JSON.parse(text);
+  expect(data.format).toBe('edgeview-support-v1'); expect(data.build.build_id).toMatch(/^[a-f0-9]{64}$/);
+  expect(data.monitoring.enabled).toBe(false); expect(data.database.schema_version).toBeNull();
+  expect(text).not.toContain('project_root');expect(text).not.toContain('C:\\\\Users');expect(text).not.toContain('PRIVATE_SUPPORT_ERROR');
+  const downloadPromise=page.waitForEvent('download'); await panel.getByRole('button',{name:'Download diagnostics',exact:true}).click();
+  const download=await downloadPromise;expect(download.suggestedFilename()).toBe('EdgeView-Diagnostics.json');
+  const file=await download.path();expect(file).toBeTruthy();expect((await readFile(file!,'utf8')).trim()).toBe(text.trim());
+});
 
 test('actual React boundary recovers and sends only a fixed crash code to the real API', async ({ page, context, runtime }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));

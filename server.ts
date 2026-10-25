@@ -53,6 +53,7 @@ import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server
 import { requiresOperationalDatabase } from './server/storage_mutation_guard';
 import { contactResearchCategory } from './shared/contact_research_scope';
 import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring, classifyMonitoringError } from './server/monitoring';
+import { supportDiagnostics } from './server/support_diagnostics';
 
 const app = express();
 let closing = false;
@@ -327,6 +328,11 @@ app.post('/api/monitoring/frontend-error', (req, res) => {
   }
   void captureMonitoringEvent('runtime_error', { stage: 'render', outcome: 'failed', error_code: 'REACT_RENDER_FAILED' });
   return res.status(202).json({ success: true, delivery: 'NOT_CONFIRMED' });
+});
+
+app.get('/api/diagnostics/support', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(supportDiagnostics({ build: runningBuild, installationId: getInstallationId(), resources: sampleResources(), database: getOperationalDatabaseStatus(), monitoring: getMonitoringStatus(), node: process.version, platform: process.platform }));
 });
 
 app.get('/api/monitoring/status', (_req, res) => {

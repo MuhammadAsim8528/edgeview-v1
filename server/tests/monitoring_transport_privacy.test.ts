@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import * as Sentry from '@sentry/node';
 import { gunzipSync } from 'node:zlib';
 
 const requests: Array<{ url: string; body: Buffer; headers: http.IncomingHttpHeaders }> = [];
@@ -42,6 +43,9 @@ const markers = [
   `nvapi-${'Q'.repeat(64)}`, `gsk_${'R'.repeat(64)}`,
 ];
 const secret = markers.join(' ');
+// Accidental direct SDK calls do not bypass EdgeView's final projection.
+Sentry.captureException(new Error(secret));
+Sentry.captureEvent({ message: secret, logger: secret, transaction: secret, tags: { event: 'runtime_error', company: secret }, extra: { evidence: secret }, request: { url: secret } });
 const delivery = await captureMonitoringEvent('runtime_error', {
   provider: 'serper', stage: 'search', outcome: 'failed', error_code: 'PROVIDER_RATE_LIMITED',
   duration_ms: 321, http_status: 429, rss_bytes: 123456789,

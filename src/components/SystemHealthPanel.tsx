@@ -14,6 +14,7 @@ import { useEdgeViewRuntimeState } from '../hooks/useEdgeViewRuntimeState';
 import { safeFetchJson } from '../utils/safeFetch';
 import { formatObservedLatency, formatObservedRate, formatObservedCount } from '../utils/telemetryFormat';
 import { RuntimeResourcesPanel } from './RuntimeResourcesPanel';
+import { DiagnosticsExportPanel } from './DiagnosticsExportPanel';
 import { isProviderHealthReport, type ProviderHealth } from '../utils/providerHealth';
 export type { ProviderHealth } from '../utils/providerHealth';
 
@@ -257,6 +258,7 @@ export const SystemHealthPanel: React.FC = () => {
 
       {/* The V1 critical path intentionally exposes only approved providers. */}
       <RuntimeResourcesPanel />
+      <DiagnosticsExportPanel />
 
       <section className="rounded-xl border border-[#333333] bg-[#1a1a1a] p-4 space-y-3" aria-label="Remote monitoring status">
         <div className="flex flex-wrap items-center justify-between gap-3">

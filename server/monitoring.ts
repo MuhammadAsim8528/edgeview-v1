@@ -95,24 +95,41 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
           dsn: sentryDsn,
           release: `edgeview@${nextIdentity.version}`,
           environment: nextIdentity.channel,
+          defaultIntegrations: false,
           integrations: [],
+          sendDefaultPii: false,
           tracesSampleRate: 0,
+          transport(options) {
+            const transport = Sentry.makeNodeTransport(options);
+            return {
+              flush: timeout => transport.flush(timeout),
+              async send(envelope) {
+                try {
+                  const response = await transport.send(envelope);
+                  if (typeof response.statusCode === 'number' && response.statusCode >= 200 && response.statusCode < 300) markSuccess('sentry');
+                  else markFailure('sentry', 'TRANSPORT_REJECTED');
+                  return response;
+                } catch (error) { markFailure('sentry', 'TRANSPORT_FAILED'); throw error; }
+              },
+            };
+          },
           beforeSend(event) {
+            const safe = projectMonitoringEvent(String(event.tags?.event ?? ''), { ...event.tags, ...event.extra }, nextIdentity);
+            if (!safe) return null;
+            const rebuilt = sentryEvent(safe);
+            event.message = rebuilt.message;
+            event.tags = rebuilt.tags;
+            event.extra = rebuilt.extra;
             // Preserve the SDK's concrete ErrorEvent shape for compatibility, but
             // remove every field outside EdgeView's strict projected envelope.
             // captureMonitoringEvent only supplies message/tags/numeric extra, yet
             // this second boundary prevents SDK-added request/user/context data
             // from escaping if defaults change in a future SDK release.
-            delete event.breadcrumbs;
-            delete event.contexts;
-            delete event.request;
-            delete event.user;
-            delete event.exception;
-            delete event.transaction;
-            delete event.modules;
-            delete event.server_name;
-            delete event.fingerprint;
-            delete event.sdk;
+            for (const key of Object.keys(event)) {
+              if (!['event_id','timestamp','message','level','tags','extra','platform'].includes(key)) {
+                delete (event as unknown as Record<string, unknown>)[key];
+              }
+            }
             event.platform = 'node';
             return event;
           },
@@ -130,6 +147,8 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
           flushAt: 10,
           flushInterval: 5000,
           maxQueueSize: 100,
+          requestTimeout: 3000,
+          fetchRetryCount: 0,
           privacyMode: true,
           enableExceptionAutocapture: false,
           featureFlagsPollingInterval: null,
@@ -173,12 +192,12 @@ export async function captureMonitoringEvent(name: string, properties: unknown =
 
   if (monitoringEnabled && sentryInitialized) {
     markAttempt('sentry');
+    state.sentry.state = 'CONFIGURED_UNVERIFIED';
     try {
       Sentry.captureEvent(sentryEvent(projected));
       if (flush) {
         const ok = await Sentry.flush(5000);
-        if (!ok) throw new Error('flush timeout');
-        markSuccess('sentry');
+        if (!ok || getMonitoringStatus().sentry.state !== 'TRANSPORT_OK') throw new Error('delivery not confirmed');
       }
       sentrySent = true;
     } catch { markFailure('sentry', 'TRANSPORT_FAILED'); }

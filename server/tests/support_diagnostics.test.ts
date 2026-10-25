@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { supportDiagnostics } from '../support_diagnostics';
+const marker='SYNTHETIC_PRIVATE_CONTACT@example.test';
+const input={build:{available:true,version:'1.0.0-rc.2',buildId:'a'.repeat(64),gitCommit:'b'.repeat(40),root:marker},installationId:'00000000-0000-4000-8000-000000000001',node:'v24.19.0',platform:'win32',resources:{rssBytes:123,cpuPercent:0,heapUsedBytes:NaN,diskAvailableBytes:-1,message:marker},database:{status:'ok',path:marker},monitoring:{enabled:true,sentry:{configured:true,enabled:true,state:'TRANSPORT_OK',dashboard_verified:false,error:marker},posthog:{state:'DISABLED'},key:marker}};
+const result=supportDiagnostics(input);
+assert.equal(result.resources.rssBytes,123);assert.equal(result.resources.cpuPercent,0);
+assert.equal(result.resources.heapUsedBytes,null);assert.equal(result.resources.diskAvailableBytes,null);
+assert.equal(result.build.version,'1.0.0-rc.2');assert.equal(result.database.schema_version,null);
+assert.equal(result.monitoring.sentry.dashboard_verified,false);
+assert.ok(!JSON.stringify(result).includes(marker));
+const bad=supportDiagnostics({...input,installationId:marker,node:marker,platform:marker,build:{version:marker,buildId:marker,gitCommit:marker},database:{status:marker},monitoring:{sentry:{state:marker}}});
+assert.ok(!JSON.stringify(bad).includes(marker));assert.equal(bad.installation_id,null);
+assert.equal(bad.runtime.platform,'unknown');assert.equal(bad.monitoring.sentry.state,'UNKNOWN');
+assert.ok(JSON.stringify(result).length<6000,'support file stays bounded');
+console.log('PASS support export excludes private fields and invalid metadata, preserves measured zero and unknown values.');

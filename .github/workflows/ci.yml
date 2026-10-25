@@ -36,9 +36,11 @@ jobs:
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/engine_ai_destination.test.ts
+      - run: node --import tsx server/tests/support_diagnostics.test.ts
       - run: node --import tsx server/tests/frontend_crash_privacy.test.tsx
       - run: node --import tsx server/tests/monitoring_privacy.test.ts
       - run: node --import tsx server/tests/monitoring_transport_privacy.test.ts
+      - run: node --import tsx server/tests/monitoring_rejection.test.ts
       - run: node --import tsx server/tests/monitoring_error_classification.test.ts
       - run: node --import tsx server/tests/stored_file_export.test.ts
       - run: node --import tsx server/tests/contact_export_scope.test.ts
