@@ -30,6 +30,22 @@ version directories exist including10.0.26100.0. This does not prove tools absen
 usable, licensed, installed packaging support or trusted signing availability.
 No developer mode, certificate trust or OS security setting was changed.
 
+2026-10-25 follow-up: the actual SDK executable was located at
+`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe`.
+PATH absence is therefore not an SDK-absence blocker. No package installation,
+signing identity/trust or clean-machine acceptance follows from locating it.
+Integration commit c8019b7 separately introduces opt-in writable state; preserve
+and review that implementation rather than introducing a second path authority.
+
+Exact developer-package check at commit
+`c8db3ba23ffa3e4f9ebab8acdb11960cb34f6fb9` passed build, release smoke,
+isolated manifest/launch/private-file checks. Build ID:
+`ad7c0a2f7ac2a4a54f5de4ac341a0b4a8059b29b6b3b9202d5c274ddb3440913`.
+The disposable ZIP had 160 manifest files, 130 development files and SHA256
+`51e3f60aebe4b0c9c18e5558a6310504f8e84e4cc1c351e013224e043e7f317d`.
+It was removed after verification. customerRuntimeReady remains false: this
+is a Node/npm-dependent developer ZIP, not the requested customer installer.
+
 ## Options / selected next experiment
 
 1. MSIX full-trust desktop package with bundled supported Node runtime and a

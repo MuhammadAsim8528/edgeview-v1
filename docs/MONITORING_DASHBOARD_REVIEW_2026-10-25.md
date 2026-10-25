@@ -103,3 +103,18 @@ PASS for configuration persistence; effective new-event geography suppression
 remains NOT VERIFIED pending propagation and a fresh controlled event.
 Vendor guidance allows 5–15 minutes for propagation:
 https://www.sentry.help/en/articles/13964201-can-i-disable-ip-geolocation-for-gdpr-compliance
+
+### Post-propagation backend event verified
+
+After more than five minutes, sent another isolated controlled probe at
+2026-10-25T08:54:01.370Z from the same 365021c compiled artifact and b475 build.
+Both transports acknowledged delivery; temporary process/state cleanup completed.
+In Sentry, explicitly selected Latest rather than Recommended (which displayed
+the older unsanitized event). Fresh doctor_run event
+`c8c23746830143719cbf23c394688d2e` matched installation
+`d7ebf8c9-bb95-4b28-920c-5fe4af0bb514` and the exact build ID. Its Geography
+display is `[Filtered], [Filtered] ([Filtered])`.
+PASS for stored backend geography scrubbing in this controlled event. Frontend
+project configuration persistence is verified, but fresh frontend event effect
+is NOT VERIFIED. This does not claim no network-level IP processing, retroactive
+deletion, all-event privacy acceptance or live-app integration.

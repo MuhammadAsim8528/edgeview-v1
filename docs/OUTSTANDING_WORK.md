@@ -1,5 +1,21 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Stored backend geography scrubbing verified — 2026-10-25
+
+After propagation, actual Sentry Latest doctor_run event
+c8c23746830143719cbf23c394688d2e matched the fresh disposable installation and
+exact b475 build. Geography shows [Filtered] for city/region/country display.
+Both real transports acknowledged the new 08:54 UTC probe. Backend stored-event
+location scrubbing PASS for this artifact/event; fresh frontend effect remains
+NOT VERIFIED. Historical events are unchanged. See monitoring review for IDs,
+scope and controlled-build limitations.
+
+Exact c8db3ba developer-package verification also passed build, production smoke,
+manifest (160 files), unchanged launch and private-file exclusion. ZIP hash and
+customer-runtime limitations recorded in WINDOWS_DISTRIBUTION_DECISION.md.
+It remains a developer ZIP requiring Node/npm, with 130 development files;
+installer and clean-Windows gates remain open.
+
 ## Approved derived-location scrubbing persisted — 2026-10-25
 
 Both Sentry projects now have city/subdivision/region/country_code/ip_address
