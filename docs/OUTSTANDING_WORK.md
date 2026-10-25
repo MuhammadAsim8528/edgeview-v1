@@ -2,6 +2,20 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Leadership title cleanup with original rejection preserved — 2026-10-25
+
+Real Getz projection exposed role text containing the person's own name. A
+separate synthetic regression failed with Alice Fixture - Country Manager rather
+than Country Manager. Cleanup now removes only the exact name plus a separator,
+AFTER original institutional rejection. Hyphen/en-dash/pipe fixtures pass; local
+leadership stays available, foreign locations, generic headings and rejected
+institutional roles remain excluded. Policy 24 requires cache revalidation.
+Typecheck/lint, full current V1 suite, build/release smoke PASS. Same captured
+Getz evidence projects Kenyan phone/address and the cleaned role. Independent
+September public reporting corroborates the personal role, but direct profile
+retrieval timed out; report records dated corroboration, not current employment
+certainty. UI/export/installed-package and broad country correctness remain open.
+
 ### Country-shaped personal names: field-aware location evidence — 2026-10-25
 
 New regression failed because Jordan Fixture was interpreted as the foreign

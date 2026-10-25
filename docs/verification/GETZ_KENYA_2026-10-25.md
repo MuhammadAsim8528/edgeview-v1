@@ -85,3 +85,19 @@ DPAPI-encrypted credential configuration copies were removed after acceptance;
 source credentials untouched and private raw captures retained outside Git.
 This repeat closes the fresh-provider-run gap above; UI/export/installed-package
 and the independently unverified personal-role limitations remain unchanged.
+
+## Follow-up role presentation and corroboration
+
+Later projection cleanup removes the repeated person name from the role; this
+same capture now displays Muhammad Ashad / Country Manager. Field country scope
+also distinguishes country-shaped given names from actual location labels.
+Current overlay policy is 24; earlier policy numbers above are dated observations.
+
+Independent secondary report:
+https://radiogeneration.co.ke/health-and-wellness/111752/doctors-warn-of-rising-undiagnosed-diabetes
+(dated 2026-09-06) identifies Muhammad Ashad as Getz Pharma country manager for
+Kenya. A LinkedIn community contribution also displays that self-reported role:
+https://www.linkedin.com/advice/1/what-best-ways-prepare-medical-sales-pitch-skills-medical-sales
+Direct personal-profile retrieval timed out during independent checking.
+This is corroboration as of those public sources, not an employment guarantee
+for today. No personal email or direct number was inferred or manually inserted.

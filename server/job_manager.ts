@@ -95,6 +95,12 @@ function normalizeLeadershipPerson(nameValue: string, roleValue: string, company
   const personTokens = personKey.split(' ').filter(token => token.length >= 3);
   const companyOverlap = personTokens.length > 0 && personTokens.filter(token => companyTokens.has(token)).length / personTokens.length >= 0.6;
   if (!plausiblePersonName(name) || companyOverlap || hasInstitutionalRole(designation, name)) return null;
+  // Search titles often prepend the person's name to the role. Preserve the
+  // original institutional rejection above before cleaning this presentation.
+  if (designation.slice(0, name.length).toLowerCase() === name.toLowerCase()) {
+    const remainder = designation.slice(name.length);
+    if (/^\s*[-–—|:]\s*/u.test(remainder)) designation = cleanLeadershipRole(remainder.replace(/^\s*[-–—|:]\s*/u, ''));
+  }
   if (designation && !LEADERSHIP_ROLE.test(designation)) return null;
   return { name, designation, key: personKey };
 }
