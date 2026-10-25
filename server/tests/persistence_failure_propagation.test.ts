@@ -68,9 +68,12 @@ async function run() {
     fs.rmdirSync(recoverDir);
     fs.writeFileSync(recoverDir, 'temporarily blocks database directory', 'utf8');
     await recoverDb.run('INSERT INTO durability_probe (value) VALUES (?)', ['must-survive']);
-    let flushRejected = false;
-    try { await recoverDb.flush(); } catch { flushRejected = true; }
-    assert(flushRejected, 'flush must reject when a previously valid persistence path becomes unwritable');
+    let flushError: any = null;
+    try { await recoverDb.flush(); } catch (error) { flushError = error; }
+    assert(
+      ['DISK_FULL', 'PERSISTENCE_WRITE_FAILED'].includes(String(flushError?.code || '')),
+      'flush must reject with a durability code when a previously valid persistence path becomes unwritable'
+    );
 
     fs.rmSync(recoverDir, { force: true });
     fs.mkdirSync(recoverDir, { recursive: true });

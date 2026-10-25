@@ -2,6 +2,23 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Latest owner acceptance constraint and reviewed durability regression — 2026-10-25
+
+Clean release export is AFTER implementation acceptance and reconciliation into
+original development location. Preserve that project's data/configuration; export
+with an explicit allowlist into a new immutable candidate, independently verify
+empty storage/new identity and packaged behavior, then STOP for owner review
+before Store submission, public publication or public installer/feed uploads.
+Existing release blockers are unchanged; no final source copy was created.
+
+Original main is clean at b6db239 on readback. Reviewed only its persistence
+failure assertion: failed flush must return DISK_FULL or PERSISTENCE_WRITE_FAILED,
+not an arbitrary exception. Adopted server/tests/persistence_failure_propagation.test.ts
+and independently ran it: PASS including controlled write failure and repair.
+Expected injected ENOENT diagnostics are not an unexpected production failure.
+Qoder's reported mutation score was not independently rerun. No whole-tree merge,
+live restart, customer-data change or release approval is implied.
+
 ### Current coordination / organisation / shipping constraint
 
 ### Hosted SDK compatibility/privacy finding — 2026-10-25
