@@ -1,5 +1,18 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Existing monitoring dashboards reached — 2026-10-25
+
+Supported Chrome connection reached existing Sentry and PostHog projects.
+Real dashboard events bind an older controlled beta build to the integration
+branch's acceptance evidence, not this branch or live port 3901. Newer monitoring,
+React failure/support diagnostics and writable-state work already exists on the
+integration branch; preserve/reconcile rather than implement duplicates.
+Expanded PostHog event still carries a network-derived IP despite GeoIP disabled;
+Sentry backend IP-storage prevention is off. Owner approval requested to suppress
+future-event IP storage; no setting changed yet. Local origin access is explicitly
+denied by saved browser permission; no bypass attempted. See
+docs/MONITORING_DASHBOARD_REVIEW_2026-10-25.md for exact evidence and limitations.
+
 ## Export response false positive and truncated-prefix acceptance — 2026-10-25
 
 New independent response-contract controls initially failed 2/4: a valid CSV
