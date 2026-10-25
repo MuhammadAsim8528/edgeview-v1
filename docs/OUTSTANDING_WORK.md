@@ -2,7 +2,7 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
-### MON01/PRIV01 saved monitoring controls — implementing
+### MON01/PRIV01 saved monitoring controls — verified scoped implementation
 
 Separate error/usage choices now use the existing canonical settings store;
 strict two-boolean endpoint, atomic save before runtime change, one in-flight save,
@@ -11,8 +11,17 @@ Launch-level disable cannot be overridden. Accessible Settings controls have
 bounded requests, explicit reload and honest unconfirmed-save feedback.
 Actual local SDK transport controls PASS; compiled isolated browser save/restart,
 invalid payloads, failed-save UI and disclosure checks PASS (three tests).
-Typecheck/E2E typecheck/lint, V1 and build/release smoke PASS on candidate;
-final exact source/package and updated browser run pending. No live replacement.
+Source 05ab88719b3fb62cbe419d49b68ca5e1cbd31212, build
+e484900678b43aa1b4916cb7fc8992450bc48266453ed8e7a23cc072bd1a6b19:
+typecheck/E2E typecheck/lint, V1, config persistence, build/release smoke and final
+four isolated rendered checks PASS. Exact disposable package PASS (138 files),
+SHA256 bb11201957797beaeb0b343464ca8b4dee76cf67c538b475db54b62a4e84bbc5;
+customerRuntimeReady=false, 107 development inputs, removed after QA. Fresh
+synthetic delivery observed in both actual dashboards with matching build/UUID;
+Sentry event 993f2f1641944cfb86a3bdb881f4ce2a. No live replacement.
+PostHog granular access controls require Boost on current account; no paid
+upgrade or permission expansion. Full retention/access and hosted release check
+remain open (Docker job passed; browser/verify still running at checkpoint).
 See MONITORING_ACCEPTANCE_2026-10-25.md for boundaries and remaining account,
 crash-coverage, final package and live UI acceptance; wider country work retained.
 

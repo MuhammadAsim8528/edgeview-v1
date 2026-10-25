@@ -52,7 +52,38 @@ Remaining: exact owner notification delivery, analytics/error retention and acce
 broader crash coverage, final packaged release delivery and
 live rendered acceptance. No claim of full monitoring or release completion.
 
-## Customer monitoring choices (candidate implementation)
+## Customer monitoring choices — verified scoped candidate
+
+Committed source `05ab88719b3fb62cbe419d49b68ca5e1cbd31212`, build
+`e484900678b43aa1b4916cb7fc8992450bc48266453ed8e7a23cc072bd1a6b19`.
+Typecheck, E2E typecheck, lint, V1 suite, config persistence/runtime sync,
+transport privacy/routing/consent/identity/rejection, support diagnostics and
+probe no-send controls passed. Exact committed build and production smoke passed;
+four isolated rendered tests passed again, including preservation through
+provider-settings reset and backend restart. Screenshot inspected.
+
+Exact-source disposable package verification passed: 138 manifest files,
+unchanged-launch and privacy-file checks PASS, ZIP SHA256
+`bb11201957797beaeb0b343464ca8b4dee76cf67c538b475db54b62a4e84bbc5`.
+It was removed after testing. customerRuntimeReady=false, 107 development files;
+still requires installed Node/npm. Not an installer/clean-Windows/update proof.
+
+A fresh isolated real-vendor probe at 2026-10-25T17:47:28.823Z used installation
+`807678f2-4de1-4434-bd6f-56adf915ae8d`, no provider credentials/customer records.
+Actual dashboard receipt observed: Sentry backend issue 7811771267 event
+`993f2f1641944cfb86a3bdb881f4ce2a`, matching full build, release, beta channel,
+installation, REACT_RENDER_FAILED and filtered geography. PostHog expanded
+doctor_run matches build/installation, GeoIP disabled=true and sent_at
+2026-10-25T17:47:29.49Z; app_started also visible. This is controlled frontend-report
+API delivery, not an actual React crash or final-package coverage. Owned process
+and state were cleaned; live 3901 unchanged.
+
+PostHog project Access control page presents "Subscribe to the Boost addon" for
+granular controls; no subscription purchased/access expanded. Product analytics
+settings did not expose an event-retention control. Replay retention remains
+distinct from analytics retention; full membership/retention assessment open.
+Hosted inventory/read-contract workflows passed; release-check run 40218015237
+was still running (Docker QA passed, browser/verify pending) at this checkpoint.
 
 Settings now has independently labelled error-reporting and usage-analytics
 checkboxes. Save uses `/api/monitoring/preferences`, strict two-boolean validation,
@@ -73,11 +104,10 @@ Actual local SDK transport regression passed startup opt-out, independent vendor
 choices, pending analytics discard (including a network-failed in-flight batch)
 and no resurrection on re-enable. A disposable mutation removing the PostHog
 transport guard failed at the actual queued-event network assertion as required.
-Four
-isolated compiled-browser tests passed real UI/API save, invalid payloads, restart
+Four isolated compiled-browser tests passed real UI/API save, invalid payloads, restart
 durability, installation-level disabled behavior, mocked 503 honest UI and
 keyboard disclosure/provider settings. These use synthetic empty storage and blocked external
-network access, not the policy-denied live 3901 UI. Final candidate checks pending.
+network access, not the policy-denied live 3901 UI. Final installer/live acceptance remains open.
 
 An additional adversarial identity case failed before correction: enabling a
 previously disabled vendor after rejected build identity showed
