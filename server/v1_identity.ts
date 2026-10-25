@@ -210,7 +210,14 @@ export function resolveOfficialDomain(companyName: string, country: string, evid
     // company/domain match and near-complete identity evidence; generic-token
     // matches and directory/platform domains cannot qualify.
     const topRanked = items.some(item => Number(item.rank || 99) <= 3);
-    const exactGlobalIdentity = sufficientlySpecificDomain
+    // A foreign country-code domain is not geographically neutral. Require
+    // explicit target-country evidence before treating it as this local entity.
+    // A parent company's target-country page may still establish that link.
+    const suffix = domain.split('.').at(-1) || '';
+    const knownCountrySuffix = Object.values(COUNTRY_SUFFIXES).some(suffixes => suffixes.includes(suffix));
+    const foreignCountryDomain = knownCountrySuffix && !countrySuffixSupported(domain, country);
+    if (foreignCountryDomain && !geographicIdentity) reasons.push('foreign country-code domain lacks target-country evidence');
+    const exactGlobalIdentity = !foreignCountryDomain && sufficientlySpecificDomain
       && (compactMatch || coreCompactMatch || exactShortIndustryBrand)
       && identityRatio >= 0.75
       && topRanked
