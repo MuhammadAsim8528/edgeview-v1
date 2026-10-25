@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { verifyPackage } from './verify-package.mjs';
+import { withScanner } from './scan-history-gitleaks.mjs';
 
 const root = process.cwd();
 const deliverables = path.resolve(root, '..', '..', 'outputs');
@@ -91,6 +92,15 @@ function scanForBuilderPaths(directory, relative = '') {
 }
 scanForBuilderPaths(stage);
 if (leaked.length) throw new Error(`Package leaks a build-machine path in: ${leaked.join(', ')}. Remove the absolute path before packaging.`);
+
+// Scan the actual temporary deliverable, including generated/untracked bytes.
+// Scanner diagnostics/matches stay private; any uncertainty fails publication.
+try {
+  await withScanner(async (_history, scanDirectory) => {
+    const result = await scanDirectory(stage);
+    if (result.findings !== 0) throw new Error('PACKAGE_SECRET_SCAN_REJECTED');
+  });
+} catch { throw new Error('PACKAGE_SECRET_SCAN_REJECTED'); }
 
 const manifest = [];
 function hashTree(directory, relative = '') {

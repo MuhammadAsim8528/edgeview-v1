@@ -49,7 +49,9 @@ export function checkPackageIsolated(projectRoot = root) {
     fs.cpSync(path.join(projectRoot, 'dist'), path.join(locations.project, 'dist'), { recursive: true, errorOnExist: true, force: false });
     // Also detects runtime-affecting untracked files omitted by git archive.
     if (sourceDigest(locations.project) !== identity.sourceHash || artifactDigest(locations.project) !== identity.artifactHash) throw new Error('Committed snapshot/build content mismatch.');
-    execute(process.execPath, ['scripts/package-windows.mjs'], locations.project);
+    // Tool dependencies stay beside the committed development tool; payload
+    // inputs and all output paths remain in the isolated working directory.
+    execute(process.execPath, [path.join(projectRoot, 'scripts/package-windows.mjs')], locations.project);
     const verified = verifyPackage(locations.stage, { rejectUnexpected: true });
     execute(process.execPath, ['scripts/package-launch-check.test.mjs', locations.stage], locations.project);
     const manifest = JSON.parse(fs.readFileSync(path.join(locations.stage, 'PACKAGE_MANIFEST.json'), 'utf8'));

@@ -2,6 +2,51 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### SEC02 staged-content gate — candidate verification, 2026-10-25
+
+Fresh independent boundary investigation confirmed generated allowed files could
+carry credentials through filename/integrity audits. Parent reproduced actual
+publication of a never-issued credential canary before correction. Ported the
+previous scanner candidate selectively; preserved original working tree/candidate.
+Actual temporary stage now scanned before hashing/archive/publication, with pinned
+Gitleaks SHA/version, neutral filenames, isolated rules/ignore, inline-ignore
+suppression disabled, bounded payload/derived-copy/report sizes and static errors.
+UTF-16 LE/BE with and without BOM covered. New independent reviewer reproduced a
+gzip canary bypass; parent confirmed it. Current deliverable has no archive inputs,
+so recognized compressed/container bytes and archive suffixes now fail closed,
+including renamed gzip; no unbounded decompression added. Source-export sibling
+package-safe-source.mjs is NOT covered by this Windows package gate.
+
+Final actual packager regression PASS: benign multilingual ZIP; JS/map/shipped
+Markdown/lockfile/SVG/vendor-named credential canaries; UTF-16 variants; gzip,
+renamed gzip, ZIP and Brotli-suffix refusals; offline/HTTP/integrity/platform scan
+failures; prior stage/ZIP byte preservation; no secret/scanner-error disclosure.
+History controls PASS: benign, merge-only/deleted canaries, ignored/inline markers,
+shallow-history rejection and scanner integrity. Package exposure/preservation and
+isolated-path tests PASS; local typecheck/lint/current V1 suite PASS. Initial test
+port needed shipped Markdown/public fixtures because internal docs are excluded;
+encoding assertions prevent accidentally testing plain UTF-8 as UTF-16.
+
+Build/release smoke and actual all-local-ref history audit are running/pending
+terminal observation at this entry. Exact committed-source disposable package
+acceptance follows this candidate commit; do not call SEC02 or release complete.
+Scanner bootstrap currently requires Windows x64 and network; failure refuses
+packaging. It is not shipped or required for ordinary app startup. This is a
+heuristic credential gate, not universal DLP, trust signing or proof of absence
+of business data/unknown encodings. Clean customer distribution remains open.
+
+### Latest additive monitoring / clean-copy instruction — preserved
+
+Existing MON01/PRIV01/recovery/version/distribution gates remain in order after
+current security work. Verify existing owner projects and actual sanitized event
+receipt, privacy settings, alert noise, retention/access and real customer controls.
+Locked Sentry v11 removed sendDefaultPii: retain explicit all-false dataCollection
+and final outgoing allowlist, not an unsupported property/cast. No 100% tracing,
+replay or automatic collection added. No final clean copy before implementation
+and configuration acceptance; original project/data intact. Owner performs any
+identity/MFA/CAPTCHA/legal/payment step. Stop before Store submission/publication
+and public installer/feed upload, then deliver verified review packet.
+
 ### Current implementation checkpoint — 2026-10-25 (supersedes older coordination observations)
 
 Active reviewed code line is integration/edgeview-v1-20261024 at source checkpoint
