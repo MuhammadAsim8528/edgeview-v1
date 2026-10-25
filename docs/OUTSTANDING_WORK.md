@@ -2,6 +2,22 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Reviewed isolated rebuild decision coverage — 2026-10-25
+
+Adopted only scripts/build-if-needed.test.mjs from main 8ad12f4 after reading
+all cases and confirming its build gate/identity source has no integration
+divergence from common ancestor. Independent execution PASS: current reuse,
+stale version/source, tampered/missing/re-certified artifacts, corrupt metadata,
+ignored non-build inputs, hollow-success refusal, late build failure, prior-build
+byte restoration, removal of failed-build additions and backup retirement.
+Tests run the actual build gate with synthetic npm commands in owned temp roots;
+no live port, production dist, real customer files or published package touched.
+Wired into hosted Windows verify beside existing build-recovery coverage.
+This is development build recovery, NOT customer data rollback, installed update
+acceptance or proof of current live runtime build. Qoder's reported mutation
+counts were not independently repeated. Desktop .bat changes remain separately
+reviewed, not accepted simply because this suite passes.
+
 ### Reviewed launcher runtime floor corrected against actual lock — 2026-10-25
 
 Reviewed main ae031d3 individually. KEEP WITH FIXES: its Vite-only floor accepts
