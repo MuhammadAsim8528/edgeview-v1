@@ -2,6 +2,22 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Hosted body-budget failure reproduced and fixture corrected — 2026-10-25
+
+At b315a6c, hosted research-read and Docker passed and both typechecks passed.
+Windows release verification failed official_page_body_budget.test.ts at tail
+contact projection. Reproduced locally: its large HTML had no explicit country,
+so current unknown-scope abstention correctly withheld the mailbox. Corrected
+only this positive synthetic fixture with explicit Kenya office text at the tail;
+kept every capture, size, redirect, failure-record, persistence and projection
+assertion. No runtime country guard was relaxed. Focused test now PASS.
+company_country_field_scope and contact_projection_country_isolation PASS,
+including foreign parent, mixed office, distributor and ambiguous controls.
+Local typecheck/lint and complete current test:v1 command PASS. Local SDK types
+are still incomplete as recorded above; hosted exact-lock checks are stronger
+compatibility evidence. New hosted full workflow result remains pending.
+This is synthetic transport acceptance, not real company/UI/installer proof.
+
 ### Latest owner acceptance constraint and reviewed durability regression — 2026-10-25
 
 Clean release export is AFTER implementation acceptance and reconciliation into

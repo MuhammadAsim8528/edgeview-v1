@@ -19,7 +19,9 @@ fs.writeFileSync(process.env.EDGEVIEW_CONFIG, JSON.stringify({ serper_api_key: '
   hunter_enabled: false, nvidia_enabled: false, groq_enabled: false }));
 const original = { lookup: dns.lookup, http: http.request, https: https.request, fetch: globalThis.fetch };
 const MiB = 1024 * 1024;
-const tail = '<a href="/contact-us.php">Contact</a><a href="/leadership.php">Corporate management</a>'
+// Country attribution is independent of the transport body budget. This positive
+// fixture explicitly scopes its tail facts; a .co.ke URL alone is insufficient.
+const tail = '<p>Trustanchor Medical Limited Kenya office</p><a href="/contact-us.php">Contact</a><a href="/leadership.php">Corporate management</a>'
   + '<p>Contact: public@trustanchor.co.ke</p><script type="application/ld+json">'
   + '{"@type":"Person","name":"Alice Fixture","jobTitle":"Managing Director"}</script>';
 const largeHtml = '<html><body><!--' + 'x'.repeat(Math.floor(3.67 * MiB)) + '-->' + tail + '</body></html>';
