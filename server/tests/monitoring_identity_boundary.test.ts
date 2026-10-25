@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import * as Sentry from '@sentry/node';
+Object.assign(process.env,{EDGEVIEW_MONITORING_ENABLED:'1',EDGEVIEW_SENTRY_DSN:'https://public@o0.ingest.sentry.io/1',EDGEVIEW_POSTHOG_KEY:'phc_synthetic_identity'});
+const {initMonitoring,captureMonitoringEvent,getMonitoringStatus}=await import('../monitoring');
+initMonitoring({version:'PRIVATE_INVALID_BUILD_IDENTITY',build_id:'b'.repeat(64),channel:'beta',installation_id:'00000000-0000-4000-8000-000000000004'});
+assert.equal(Sentry.getClient(),undefined,'invalid identity cannot reach SDK configuration');
+const status=getMonitoringStatus();
+assert.equal(status.sentry.state,'ERROR');assert.equal(status.sentry.error_code,'INVALID_IDENTITY');
+assert.equal(status.posthog.state,'ERROR');assert.equal(status.posthog.error_code,'INVALID_IDENTITY');
+assert.deepEqual(await captureMonitoringEvent('app_started',{},true),{projected:false,sentry:false,posthog:false});
+console.log('PASS invalid build identity rejected before SDK initialization; no vendor request sent');

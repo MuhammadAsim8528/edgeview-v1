@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { PostHog } from 'posthog-node';
-import { projectMonitoringEvent, type SafeMonitoringEvent } from '../shared/monitoring_privacy';
+import { isProductMonitoringEvent, projectMonitoringEvent, type SafeMonitoringEvent } from '../shared/monitoring_privacy';
 
 export type MonitoringIdentity = {
   version: string;
@@ -29,6 +29,10 @@ const allowInsecureLocal = process.env.EDGEVIEW_MONITORING_ALLOW_INSECURE_LOCAL 
 let identity: MonitoringIdentity | null = null;
 let posthog: PostHog | null = null;
 let sentryInitialized = false;
+const RESOURCE_FIELDS = ['rss_bytes', 'heap_used_bytes', 'disk_free_bytes', 'uptime_seconds', 'cpu_percent'] as const;
+let latestResources: Record<string, number> = {};
+let resourceSampleAt: number | null = null;
+const isSentryEvent = (event: unknown) => event === 'runtime_error' || event === 'doctor_run';
 
 const state: { sentry: VendorStatus; posthog: VendorStatus } = {
   sentry: vendorInitial(Boolean(sentryDsn)),
@@ -81,20 +85,29 @@ function sentryEvent(projected: SafeMonitoringEvent) {
     level: projected.event === 'runtime_error' ? 'error' as const : 'info' as const,
     tags,
     extra,
+    release: `edgeview@${projected.version}+${projected.build_id}`,
+    environment: String(projected.channel),
   };
 }
 
 export function initMonitoring(nextIdentity: MonitoringIdentity): void {
   identity = nextIdentity;
+  latestResources = {}; resourceSampleAt = null;
   if (!monitoringEnabled) return;
+  const safeIdentity = projectMonitoringEvent('doctor_run', {}, nextIdentity);
+  if (!safeIdentity) {
+    identity = null;
+    markFailure('sentry', 'INVALID_IDENTITY'); markFailure('posthog', 'INVALID_IDENTITY');
+    return;
+  }
   if (sentryDsn) {
     if (!safeUrl(sentryDsn)) markFailure('sentry', 'INVALID_DSN');
     else {
       try {
         Sentry.init({
           dsn: sentryDsn,
-          release: `edgeview@${nextIdentity.version}`,
-          environment: nextIdentity.channel,
+          release: `edgeview@${safeIdentity.version}+${safeIdentity.build_id}`,
+          environment: String(safeIdentity.channel),
           defaultIntegrations: false,
           integrations: [],
           // SDK v11 removed sendDefaultPii and broadened defaults. Restrict
@@ -122,18 +135,21 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
           },
           beforeSend(event) {
             const safe = projectMonitoringEvent(String(event.tags?.event ?? ''), { ...event.tags, ...event.extra }, nextIdentity);
-            if (!safe) return null;
+            if (!safe || !isSentryEvent(safe.event)) return null;
             const rebuilt = sentryEvent(safe);
             event.message = rebuilt.message;
             event.tags = rebuilt.tags;
             event.extra = rebuilt.extra;
+            event.level = rebuilt.level;
+            event.release = rebuilt.release;
+            event.environment = rebuilt.environment;
             // Preserve the SDK's concrete ErrorEvent shape for compatibility, but
             // remove every field outside EdgeView's strict projected envelope.
             // captureMonitoringEvent only supplies message/tags/numeric extra, yet
             // this second boundary prevents SDK-added request/user/context data
             // from escaping if defaults change in a future SDK release.
             for (const key of Object.keys(event)) {
-              if (!['event_id','timestamp','message','level','tags','extra','platform'].includes(key)) {
+              if (!['event_id','timestamp','message','level','tags','extra','platform','release','environment'].includes(key)) {
                 delete (event as unknown as Record<string, unknown>)[key];
               }
             }
@@ -192,12 +208,21 @@ export function getMonitoringStatus() {
 
 export async function captureMonitoringEvent(name: string, properties: unknown = {}, flush = false) {
   if (!identity) return { projected: false, sentry: false, posthog: false };
-  const projected = projectMonitoringEvent(name, properties, identity);
+  let projected = projectMonitoringEvent(name, properties, identity);
   if (!projected) return { projected: false, sentry: false, posthog: false };
+  if (projected.event === 'resource_sample') {
+    latestResources = {};
+    for (const field of RESOURCE_FIELDS) if (typeof projected[field] === 'number') latestResources[field] = projected[field];
+    resourceSampleAt = performance.now();
+  }
+  if (projected.event === 'runtime_error' && resourceSampleAt !== null) {
+    const age = Math.max(0, performance.now() - resourceSampleAt);
+    if (age <= 360_000) projected = Object.freeze({ ...latestResources, ...projected, resource_sample_age_ms: age });
+  }
   let sentrySent = false;
   let posthogSent = false;
 
-  if (monitoringEnabled && sentryInitialized) {
+  if (monitoringEnabled && sentryInitialized && isSentryEvent(projected.event)) {
     markAttempt('sentry');
     state.sentry.state = 'CONFIGURED_UNVERIFIED';
     try {
@@ -210,7 +235,7 @@ export async function captureMonitoringEvent(name: string, properties: unknown =
     } catch { markFailure('sentry', 'TRANSPORT_FAILED'); }
   }
 
-  if (monitoringEnabled && posthog) {
+  if (monitoringEnabled && posthog && isProductMonitoringEvent(projected.event)) {
     markAttempt('posthog');
     try {
       posthog.capture({

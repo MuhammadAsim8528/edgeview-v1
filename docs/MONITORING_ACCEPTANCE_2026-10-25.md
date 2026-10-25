@@ -1,6 +1,43 @@
 # Monitoring connection acceptance — 2026-10-25 (Pakistan)
 
-## Verified scope
+## Current routing/release correction (dashboard acceptance pending)
+
+Actual account inspection found routine app_started/resource_sample events as
+Sentry issues. The adapter previously sent every projected event to both vendors.
+A new actual-transport regression reproduced app_started going to Sentry.
+Routing now follows the existing vendor-independent event allowlist:
+
+| Event | Destination / behavior |
+| --- | --- |
+| runtime_error | Sentry fixed error code/message only; no duplicate PostHog error tracking |
+| Allowed product events emitted by implemented paths | PostHog only; reserved event names do not prove a feature exists |
+| doctor_run | Both, only for explicit controlled diagnostic/delivery checks |
+| resource_sample | No standalone vendor event; retain at most five numeric resource values as short-lived error context |
+| operation_timing | Not forwarded as an issue or product event; performance-span integration is not complete |
+
+Latest resource context expires after six minutes (monotonic clock), carries a
+bounded age, and is not treated as a current reading after expiration. Explicit
+error measurements take precedence over the cached sample. No raw data retained
+in this cache. Release is reconstructed as edgeview@<version>+<full build hash>
+and environment as validated channel at both SDK initialization and final event
+projection. Invalid identity fails before SDK initialization. SDK v11 explicit
+all-false dataCollection, zero trace rate, disabled auto-integrations/replay and
+strict final field projection remain in force. No 100% tracing was enabled.
+
+Local observed checks: actual vendor routing/release/resource expiry regression,
+invalid-identity no-SDK/no-send control, transport privacy and rejection/offline/
+recovery tests PASS. Probe helper requires exact --send-real opt-in, official
+Sentry public-key DSN shape and US PostHog ingestion key, empty temporary local
+storage and verified child PID/build; normal controls send no real event. Real
+probe additionally submits the fixed frontend report code to the owned runtime;
+HTTP 202 is only accepted locally, never asserted as delivery or actual React
+crash. Current-build dashboard receipt, alert rules, retention/access and customer
+monitoring on/off controls still require acceptance.
+
+The older observations below are preserved historical evidence, not current
+release approval or proof of this corrected compiled build.
+
+## Historical verified scope
 
 The integration checkout is configured locally for Sentry project `edgeview-backend`
 in organization `dupido-technologies` and PostHog US project `682784`.

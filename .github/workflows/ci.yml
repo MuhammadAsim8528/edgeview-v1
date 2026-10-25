@@ -39,6 +39,9 @@ jobs:
       - run: node --import tsx server/tests/support_diagnostics.test.ts
       - run: node --import tsx server/tests/frontend_crash_privacy.test.tsx
       - run: node --import tsx server/tests/monitoring_privacy.test.ts
+      - run: node --import tsx server/tests/monitoring_vendor_routing.test.ts
+      - run: node --import tsx server/tests/monitoring_identity_boundary.test.ts
+      - run: node scripts/probe-existing-monitoring-build.test.mjs
       - run: node --import tsx server/tests/monitoring_transport_privacy.test.ts
       - run: node --import tsx server/tests/monitoring_rejection.test.ts
       - run: node --import tsx server/tests/monitoring_error_classification.test.ts

@@ -62,7 +62,7 @@ const delivery = await captureMonitoringEvent('runtime_error', {
 }, true);
 assert.equal(delivery.projected, true);
 assert.equal(delivery.sentry, true);
-assert.equal(delivery.posthog, true);
+assert.equal(delivery.posthog, false, 'errors use Sentry; analytics does not duplicate error tracking');
 
 await captureMonitoringEvent('research_completed', {
   stage: 'resolution', outcome: 'success', duration_ms: 456,

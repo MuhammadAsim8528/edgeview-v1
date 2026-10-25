@@ -2,6 +2,28 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### MON01 vendor routing and safe release identity — local verification
+
+Existing Sentry dashboard visibly showed app_started/resource_sample as issues.
+Actual source sent all projected events to both SDKs and final projection dropped
+SDK release/environment. New real local-transport regression failed before fix
+(app_started sent to Sentry), then passes: product events go to PostHog, fixed
+runtime errors to Sentry, explicit doctor_run exercises both, resource heartbeat
+is short-lived bounded error context rather than standalone vendor traffic.
+Shared allowlist remains authoritative; no auto-capture or new tracing enabled.
+Rebuild full-hash release/environment from validated identity, reject invalid
+identity before SDK initialization, keep strict outgoing projection and v11
+explicit collection restrictions. Tests verify actual payload routing, release,
+resource expiry and private marker exclusion; rejection/offline/recovery PASS.
+Typecheck/lint, full V1, production build/release smoke PASS. Copied/reviewed existing
+explicit opt-in isolated monitoring proof helper and no-send controls into this
+line; only four monitoring ingestion settings, no provider credentials/datasets,
+official public-key destination validation and PID/build ownership. Synthetic
+frontend-report HTTP 202 remains accepted locally, NOT asserted as delivery or
+actual React crash. Current corrected-artifact dashboard evidence, alerts, cloud
+retention/access and customer on/off control remain open. See existing monitoring
+acceptance document for event definitions; old account evidence marked historical.
+
 ### SEC02 exact committed package acceptance — 2026-10-25
 
 Scoped staged-credential publication finding verified at

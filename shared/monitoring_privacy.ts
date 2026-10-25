@@ -15,6 +15,9 @@ const PRODUCT_EVENTS = new Set([
   'diagnostics_opened', 'doctor_run', 'update_check', 'update_available',
   'update_started', 'update_success', 'update_failed', 'rollback_started', 'rollback_success',
 ]);
+export function isProductMonitoringEvent(name: unknown): boolean {
+  return typeof name === 'string' && PRODUCT_EVENTS.has(name);
+}
 const ERROR_MESSAGES = {
   UNEXPECTED_ERROR: 'Unexpected EdgeView error',
   REACT_RENDER_FAILED: 'EdgeView interface rendering failed',
@@ -39,6 +42,7 @@ const NUMBERS: Record<string, number> = {
   duration_ms: 3_600_000, http_status: 599, rss_bytes: 1024 ** 4,
   heap_used_bytes: 1024 ** 4, disk_free_bytes: 1024 ** 5,
   uptime_seconds: 315_576_000, cpu_percent: 25_600,
+  resource_sample_age_ms: 360_000,
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VERSION = /^(?:0|[1-9]\d{0,3})\.(?:0|[1-9]\d{0,3})\.(?:0|[1-9]\d{0,3})(?:-(?:rc|beta|canary)\.[1-9]\d{0,4})?$/;
