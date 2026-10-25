@@ -460,6 +460,17 @@ export function detectCountriesInFreeText(raw: string | null | undefined): strin
 /** Backward compatibility alias */
 export const detectCountryNamesInText = detectCountriesInFreeText;
 
+// Country-scope evidence must not interpret prose such as "contact us" or
+// "made in" as ISO codes. Longest non-overlapping names also keep South Sudan
+// distinct from Sudan (and Papua New Guinea distinct from Guinea).
+const explicitCountryNames = new Map(ISO_3166_1.map(([, , name]) => [name.toLowerCase(), name]));
+const explicitCountryPattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${[...explicitCountryNames.values()]
+  .sort((a, b) => b.length - a.length).map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+export function detectExplicitCountryNames(raw: string): string[] {
+  return [...new Set([...String(raw || '').matchAll(explicitCountryPattern)]
+    .map(match => explicitCountryNames.get(match[0].toLowerCase())!).filter(Boolean))];
+}
+
 /** Compares two country names for semantic equivalence */
 export function compareCountryOwnership(countryA?: string, countryB?: string): boolean {
   if (!countryA || !countryB) return false;

@@ -6,12 +6,13 @@ import { isCountryCompatiblePhone } from './phone_country';
 import { canonicalEntityIdentityKey } from './company_identity';
 import { normalizeV1ContactOverlay } from '../shared/v1_contact_contract';
 import { OrderedFailureStreak } from './ordered_failure_tracker';
+import { contactFactScope, countryScopedFactSources } from './contact_country_scope';
 
 const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'] as const;
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
 const emptyProviderUsage = (): Record<ResearchProvider, number> => Object.fromEntries(RESEARCH_PROVIDERS.map((id) => [id, 0])) as Record<ResearchProvider, number>;
 
-const V1_OVERLAY_VERSION = 18;
+const V1_OVERLAY_VERSION = 19;
 
 export function validPhone(value: string): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
@@ -367,12 +368,40 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     });
     if (profile) leader.linkedin = String(profile.url);
   }
-  const contact_persons = [...leaderMap.values()].slice(0, 50);
-  const finalEmails = [...new Set([...emails, ...citedEmails])].slice(0, 50);
-  const finalPhones = [...new Set([...phones, ...citedPhones])].slice(0, 10);
+  const scopeEvidence: Array<Record<string, unknown>> = [];
+  const admit = (field: string, value: string, sourceUrl?: string) => {
+    const sources = countryScopedFactSources(results, value, String(run.country || ''), sourceUrl);
+    // Older immutable runs can retain already-admitted quoted claims without
+    // their original normalized result. Keep that provenance explicitly scoped;
+    // never use a claim as an escape hatch around a present foreign source.
+    for (const claim of citedClaims.filter(claim => claim.field === field && (!sourceUrl || claim.source_url === sourceUrl)
+      && claim.value.toLowerCase().includes(value.toLowerCase())
+      && !results.some(result => result.id === claim.source_result_id || result.url === claim.source_url))) {
+      sources.push({ source_result_id: claim.source_result_id, source_url: claim.source_url,
+        ...contactFactScope({ id: claim.source_result_id, url: claim.source_url, text: claim.quote }, value, String(run.country || '')) });
+    }
+    if (field === 'address') {
+      for (const source of officialPages) {
+        if (structuredAddressesFromOfficialPages([source]).includes(value) && !sources.some(item => item.source_result_id === source.id)) {
+          sources.push({ source_result_id: source.id, source_url: source.url, ...contactFactScope(source, value, String(run.country || '')) });
+        }
+      }
+    }
+    // Domain ownership cannot override explicit foreign/other-entity evidence.
+    // Unknown remains a marked legacy scope, not fabricated local-country proof.
+    const local = sources.filter(source => source.scope === 'local');
+    const eligible = local.length ? local : sources.length && sources.every(source => source.scope === 'unknown') ? sources : [];
+    for (const source of eligible) scopeEvidence.push({ field, value, ...source, target_country: run.country || '' });
+    return eligible.length > 0;
+  };
+  const contact_persons = [...leaderMap.values()].filter(person => admit('leader', person.name, person.source_url)).slice(0, 50);
+  const finalEmails = [...new Set([...emails, ...citedEmails])].filter(value => admit('email', value)).slice(0, 50);
+  const finalPhones = [...new Set([...phones, ...citedPhones])].filter(value => admit('phone', value)).slice(0, 10);
+  const scopedAddresses = addresses.filter(value => admit('address', value));
+  const scopedSocials = social_links.filter(value => admit('social', value));
   const website = officialDomain ? `https://${officialDomain}` : '';
   const hasChannel = finalEmails.length > 0 || finalPhones.length > 0;
-  const hasOrganizationDetail = addresses.length > 0 || contact_persons.length > 0;
+  const hasOrganizationDetail = scopedAddresses.length > 0 || contact_persons.length > 0;
   return {
     schema_version: V1_OVERLAY_VERSION,
     emails_list: finalEmails,
@@ -380,14 +409,14 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     phones_list: finalPhones,
     phone: finalPhones[0] || '',
     website,
-    social_links,
-    addresses,
-    address: addresses[0] || '',
+    social_links: scopedSocials,
+    addresses: scopedAddresses,
+    address: scopedAddresses[0] || '',
     contact_persons,
     decision_makers: [],
     ceo: '',
     quality_status: website && hasChannel && hasOrganizationDetail ? 'COMPLETE' : website || hasChannel || hasOrganizationDetail ? 'PARTIAL' : 'NOT_FOUND',
-    evidence: citedClaims,
+    evidence: scopeEvidence,
   };
 }
 

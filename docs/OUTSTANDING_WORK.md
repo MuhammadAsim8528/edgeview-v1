@@ -72,6 +72,47 @@ claims are identified as prior evidence and are not fresh execution in this hand
 
 ### Checkpoint — handoff reconciliation and Phase 1 reproduction
 
+### Phase 1 first implementation packet — explicit source/field scope
+
+Goal IDs CC01/CC02/CC03: implementing, NOT wholly verified. This slice adds
+server/contact_country_scope.ts, updates job_manager.ts projection/overlay v19,
+adds explicit country-name matching in src/utils/countryNormalizer.ts and wires
+company_country_field_scope.test.ts into package.json test:v1. No other session
+has reviewed/approved this change. The initial four actual projection assertions
+failed before implementation; seven scenario assertions plus HTML/JSON carrier,
+address/leader/local-number, raw-preservation and provenance controls now pass.
+
+Behavior: explicit foreign/ambiguous/distributor source context can no longer be
+overridden merely by official-domain ownership. Local office sections remain
+eligible on a shared global page and on a foreign parent domain. Longest proper
+country names distinguish Sudan/South Sudan; natural-language US/IN-like words,
+URL and email identifiers do not become country proof. Projection adds per-fact
+result/URL/quote/scope references and reprojects historical raw runs through the
+same guard. Original provider captures and accepted/rejected extraction evidence
+are not rewritten. Existing valid social URL slash variants and older quoted
+claim-only leader normalization were initially broken by the candidate; corrected
+and their original expectations passed unchanged.
+
+Observed commands: npm run check (typecheck, lint, V1 suite including new cases),
+npm run build and npm run test:release all exit 0 on the final candidate; separate
+search_snippet_email_admission, official_phone_recall and
+historical_evidence_preservation checks pass. The expected injected ENOENT errors
+in persistence tests are controlled failure checks, not production DB errors.
+Frontend chunk-size warning remains. No live restart or operational-data writes.
+
+Remaining acceptance is substantial: unknown/unlabelled evidence still follows
+marked legacy admission (scope unknown, never labelled local); this does NOT
+complete required abstention policy. Proper-name matcher does not yet establish
+all aliases/languages/structured country codes. Distributor blocks conservatively
+stay related_entity for the rest of their source, possibly withholding later valid
+facts. Parent/global role versus subsidiary role, complex/flattened office layouts,
+matching facts repeated across representations, Hunter country scope, ingestion
+acceptance/chunk extraction and cached persisted overlays require further work.
+No real-company/provider, actual API/UI/export, restart-cache invalidation,
+packaged runtime or source-scoping performance acceptance is established here.
+Next slice: strict unknown-evidence admission and relationship/provenance contract,
+then isolated persisted API/export and rendered comparison. Keep CC01–CC03 open.
+
 Commit 2a4f352 reconciles this authoritative matrix/phase order; it completes the
 ledger-reconciliation subtask, not product release acceptance or all REL01 work.
 The integration worktree was clean at initial inspection, HEAD 75e8cac, and no
