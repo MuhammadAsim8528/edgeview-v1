@@ -82,8 +82,10 @@ PostHog project Access control page presents "Subscribe to the Boost addon" for
 granular controls; no subscription purchased/access expanded. Product analytics
 settings did not expose an event-retention control. Replay retention remains
 distinct from analytics retention; full membership/retention assessment open.
-Hosted inventory/read-contract workflows passed; release-check run 40218015237
-was still running (Docker QA passed, browser/verify pending) at this checkpoint.
+Hosted inventory/read-contract workflows passed. Release-check run 40218015237
+initially had Docker QA success and browser/verify pending; later readback found
+browser/verify cancelled after the documentation successor push. No full hosted
+release PASS is claimed for that exact source; successor checks need inspection.
 
 Settings now has independently labelled error-reporting and usage-analytics
 checkboxes. Save uses `/api/monitoring/preferences`, strict two-boolean validation,
