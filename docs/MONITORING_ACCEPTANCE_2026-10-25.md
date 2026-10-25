@@ -39,7 +39,16 @@ Hosted checks on this exact source passed: release checks `40215633218`,
 release evidence inventory `40215633265`, research read contracts `40215633196`.
 These are not clean-Windows or live browser QA.
 
-Remaining: alerts, analytics/error retention and access assessment, visible customer
+Existing Sentry backend error monitor `10733752` is connected by project to alert
+`6216926`, "Send a notification for high priority issues". History actually shows
+the controlled render failure triggering at 2026-10-25 17:16 UTC. Conditions cover
+new/existing high-priority issues; existing recipient policy is Suggested Assignees
+with Recently Active Members fallback. No recipient access was expanded and no
+duplicate alert created. Changed repeat throttling from every trigger to one hour
+per issue; saved detail page reads "1 hour" and updated modification time. This
+proves rule triggering/configuration, not receipt in the owner's email inbox.
+
+Remaining: exact owner notification delivery, analytics/error retention and access assessment, visible customer
 monitoring controls, broader crash coverage, final packaged release delivery and
 live rendered acceptance. No claim of full monitoring or release completion.
 

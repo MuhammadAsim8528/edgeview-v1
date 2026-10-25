@@ -10,6 +10,9 @@ fresh isolated synthetic error and product-event receipt observed in actual
 Sentry/PostHog dashboards with matching build and temporary installation UUID.
 Backend Sentry IP/location scrubbing and PostHog discard-IP read back enabled;
 PostHog web autocapture switched OFF and verified after reload, replay read OFF.
+Existing backend high-priority alert 6216926 actually triggered on the controlled
+render failure; repeat throttle saved/read back one hour per issue. Existing
+recipient policy retained; owner inbox receipt remains unverified.
 Exact event IDs, privacy observations and limitations are in
 MONITORING_ACCEPTANCE_2026-10-25.md. All three hosted workflows on this commit
 completed success. No live runtime replacement, real customer data or final
