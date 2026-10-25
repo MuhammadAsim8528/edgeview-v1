@@ -37,12 +37,21 @@ The newer integration implementation is not certified by the older delivery.
 
 ## Open actions / limits
 
-- Requested owner approval for future-event IP suppression; no setting changed.
+- Owner approved future-event IP suppression. Sentry backend and frontend
+  Prevent Storing of IP Addresses are now enabled; PostHog project 682784
+  Discard client IP data is enabled. All three values were read back after
+  reload. No historical events were deleted and no unrelated setting changed.
+- Independently reran integration commit c8019b7's actual SDK transport/privacy
+  and rejected/offline-delivery tests with an OS-only child environment. Both
+  passed; six local captured requests contained no private synthetic markers.
+  These used local test endpoints, not a new real-account delivery.
 - Need a fresh privacy-reviewed controlled event after that change and adoption
   of the intended exact integration build. Do not relabel historic events as new.
 - Browser acquisition of http://127.0.0.1:3901 was explicitly denied by a saved
   origin permission. No alternate browser, port, raw CDP, indirect execution or
   backend substitute was used to obtain the blocked page's state.
+  A new attempt after the owner reported changing permission returned the same
+  saved-origin denial. External Sentry/PostHog dashboard access remains usable.
 - No live app connection, frontend crash proof, replay/privacy acceptance,
   updater acceptance or customer-ready verdict follows from this review.
 

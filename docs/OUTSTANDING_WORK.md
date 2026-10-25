@@ -1,5 +1,18 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Approved vendor IP suppression saved — 2026-10-25
+
+Owner approval received. Enabled Sentry Prevent Storing of IP Addresses for
+edgeview-backend and edgeview-frontend, plus PostHog project 682784 Discard client
+IP data. Read back all three enabled values after reload. No historical deletion,
+new credentials, replay activation or unrelated account/security change.
+Independently reran integration c8019b7 SDK transport privacy (six captured local
+requests; private markers absent) and rejected/offline ingestion/recovery tests;
+both passed with an OS-only child environment. No writes to that source tree.
+Fresh real-vendor reception after these settings remains NOT VERIFIED.
+The owner reported enabling local access, but a supported exact-origin retry
+still returned saved permission denial for port 3901; no bypass attempted.
+
 ## Existing monitoring dashboards reached — 2026-10-25
 
 Supported Chrome connection reached existing Sentry and PostHog projects.
