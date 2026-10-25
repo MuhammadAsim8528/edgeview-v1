@@ -1,5 +1,35 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Export response false positive and truncated-prefix acceptance — 2026-10-25
+
+New independent response-contract controls initially failed 2/4: a valid CSV
+cell containing literal script/header tag text was misidentified as an HTML
+document, while one/two-byte PK prefixes were accepted as archive formats.
+HTML fallback and actual XLSX controls passed even before the correction.
+
+The shared response guard now inspects a decoded document prefix, allowing
+ordinary cell data while rejecting HTML shells after BOM/whitespace/comments
+or an XML prolog. ZIP-family checks require a minimum container length and a
+recognized four-byte signature. This is NOT full archive integrity or OOXML
+validation, and HTML-prefix heuristics are not a content-security sanitizer.
+
+Focused controls now pass 4/4, including four-byte truncation and real workbook
+compatibility; wired into Windows release CI. Rebuilt browser content scenario
+passed (8.1s): actual CSV literal retained, controlled malformed XLSX shown as
+error with no download, then genuine retry workbook retained the same cell.
+The seven-download format/directory scenario also passed in the same two-case
+run (2 expected, zero unexpected, 44.4s); error screenshot inspected. Typecheck,
+lint, test:v1, E2E typecheck and production build passed. Initial test code had
+an ExcelJS buffer declaration mismatch; corrected without an any-cast before
+the successful typecheck. No real operational dataset/provider result was used.
+
+Prior exact ede46be isolated package check passed: build
+6ed0919e6b9ea9046456df6dbee0e44249416e0114694d667e5ace3d4de95d32,
+159 manifest files, staged/extracted unchanged launch and privacy filename checks.
+Disposable ZIP SHA256 88dd52cbea2b20682f24beb3a3d309882b303de17c8981646d325c178d5753df.
+It was removed by the checker. CustomerRuntimeReady=false: Node/npm and source/
+development inputs remain; no customer installer or clean-Windows PASS inferred.
+
 ## DOCX structure/text defect found by download QA — 2026-10-25
 
 Rendered export QA downloaded real CSV/XLSX/DOCX from a two-row uploaded file.

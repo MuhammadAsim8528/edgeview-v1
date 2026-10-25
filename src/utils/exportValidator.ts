@@ -1,7 +1,8 @@
 /**
  * Export Response Validator
  * Validates HTTP export responses before attempting browser file downloads.
- * Prevents HTML error pages, application fallback shells, and corrupted binaries from being saved as files.
+ * Rejects common HTML fallback shells and obvious signature mismatches before download.
+ * This is not full archive integrity, OOXML schema or document-content validation.
  */
 
 export interface ValidatedExportResult {
@@ -78,18 +79,15 @@ export async function processAndValidateExportResponse(
   }
 
   const headerBytes = new Uint8Array(arrayBuffer.slice(0, Math.min(1024, arrayBuffer.byteLength)));
-  const headerStr = Array.from(headerBytes).map((b) => String.fromCharCode(b)).join('');
+  const headerStr = new TextDecoder().decode(headerBytes);
   const lowerHeader = headerStr.toLowerCase();
 
-  // Reject HTML error signatures in body
+  // Inspect the document prefix, not arbitrary CSV cells or binary contents.
+  // A leading BOM/whitespace/comment must not hide an HTML fallback shell.
+  const documentPrefix = headerStr.replace(/^(?:\s|<!--[\s\S]*?-->|<\?xml[\s\S]*?\?>)+/i, '');
   if (
-    lowerHeader.includes('<!doctype') ||
-    lowerHeader.includes('<html') ||
-    lowerHeader.includes('<head') ||
-    lowerHeader.includes('<style') ||
-    lowerHeader.includes('<script') ||
-    lowerHeader.includes('__aistudio_warmup_failed') ||
-    lowerHeader.includes('your application failed to start')
+    /^(?:<!doctype\b|<(?:html|head|body|style|script)\b)/i.test(documentPrefix) ||
+    /^(?:__aistudio_warmup_failed|your application failed to start)/i.test(documentPrefix)
   ) {
     throw new Error('Export failed. Server returned HTML error page instead of valid export file content.');
   }
@@ -102,8 +100,10 @@ export async function processAndValidateExportResponse(
       throw new Error('Export failed. Received file content is not a valid PDF document.');
     }
   } else if (format === 'xlsx' || format === 'docx' || format === 'all') {
-    // ZIP signature check: 0x50 0x4B ('PK')
-    if (headerBytes.length >= 2 && !(headerBytes[0] === 0x50 && headerBytes[1] === 0x4B)) {
+    // ZIP needs at least its 22-byte empty-directory structure, not just 'PK'.
+    // This remains a container-signature check, not full archive/OOXML validation.
+    if (arrayBuffer.byteLength < 22 || headerBytes[0] !== 0x50 || headerBytes[1] !== 0x4B
+      || !((headerBytes[2] === 0x03 && headerBytes[3] === 0x04) || (headerBytes[2] === 0x05 && headerBytes[3] === 0x06))) {
       throw new Error(`Export failed. Received file content is not a valid ${format.toUpperCase()} archive package.`);
     }
   } else if (format === 'csv') {
