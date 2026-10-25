@@ -57,3 +57,36 @@ The newer integration implementation is not certified by the older delivery.
 
 Official PostHog documentation distinguishes project IP capture policy from
 GeoIP enrichment: https://posthog.com/docs/product-analytics/privacy
+
+## Fresh controlled delivery after IP suppression
+
+Sent one controlled probe at 2026-10-25T08:37:03.879Z using the existing compiled
+integration artifact, commit 365021cc0dbad109901463e727edebe8c1e00be5, version
+1.0.0-rc.2. Build ID:
+`b475329a4f8032cfd4f6769ec24e1afb19760de78845774b2c8d8ee73a4f481a`.
+The disposable installation ID was `57e498c8-fd1b-46a6-ab7b-6cf90cd8086f`.
+No provider credentials or operational dataset were loaded. The process and
+temporary state were removed afterward; the compiled artifact remained unchanged.
+
+- PASS: both transports acknowledged delivery.
+- PASS: actual PostHog doctor_run event matched build/installation IDs and sent
+  timestamp 2026-10-25T08:37:04.721Z. With Hide null values turned off, its expanded
+  event showed no IP property.
+- PASS: actual Sentry doctor_run event `df8de2834c9e4f94b096d653eb5314ca`
+  in EDGEVIEW-BACKEND-2 matched the same build/installation IDs. No stored IP
+  field was visible in the event details.
+- WARN: Sentry still displays derived geography. IP suppression does not itself
+  remove that information. Owner approval for additional location scrubbing is
+  pending; historical events were not deleted.
+- NOT VERIFIED: live port 3901, this branch/current integration source, frontend
+  crashes, comprehensive doctor results, traces, update recovery and final privacy
+  acceptance. A controlled doctor_run event is a delivery signal, not proof of
+  all doctor checks or crash capture.
+
+The helper `scripts/probe-existing-monitoring-build.mjs` requires explicit
+`--send-real`, validates existing artifact identity, isolates state and suppresses
+credentials/child output. Its output deliberately leaves dashboardVerified false;
+the dashboard observations above were performed separately through Chrome.
+The latest supported local-tab acquisition still returns saved-origin denial
+despite the supplied Always allow screenshot. This remains a browser integration
+blocker, not evidence of EdgeView failure.

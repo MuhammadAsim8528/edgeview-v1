@@ -1,5 +1,20 @@
 # EdgeView completion ledger — 2026-10-20
 
+## Fresh actual monitoring delivery — 2026-10-25
+
+PASS for a controlled existing integration artifact at commit 365021c, build
+b475329a4f8032cfd4f6769ec24e1afb19760de78845774b2c8d8ee73a4f481a:
+both vendors acknowledged delivery and actual Sentry/PostHog dashboards showed
+matching doctor_run build/installation IDs. Expanded fresh events showed no IP
+property; PostHog null-value hiding was disabled for inspection. Sentry still
+shows derived geography; further scrubbing approval is pending. This supersedes
+the earlier fresh-delivery NOT VERIFIED statement only for this exact artifact.
+No operational data/provider credentials were used. This is not live port 3901,
+current-source, crash/tracing or comprehensive privacy acceptance. Exact evidence
+and scope: docs/MONITORING_DASHBOARD_REVIEW_2026-10-25.md.
+Local visual QA remains NOT VERIFIED: supported tab acquisition again returned
+saved-origin denial despite the owner's screenshot showing Always allow.
+
 ## Approved vendor IP suppression saved — 2026-10-25
 
 Owner approval received. Enabled Sentry Prevent Storing of IP Addresses for
