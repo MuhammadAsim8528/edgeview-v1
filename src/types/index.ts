@@ -151,6 +151,7 @@ export interface CompanyContact {
   isPartial?: boolean;
   quality_status?: CompanyQualityStatus;
   edgeview_v1_run_id?: string;
+  research_validation_status?: 'current' | 'needs_revalidation';
   evidence?: SourceEvidence[];
   unscoped_facts?: import('../../shared/v1_contact_contract').V1ContactOverlay['unscoped_facts'];
   research_trace?: any[];

@@ -1,3 +1,5 @@
+export const V1_CONTACT_OVERLAY_VERSION = 21;
+
 export interface V1CompanyAddress {
   address: string;
   type?: string;
@@ -26,6 +28,7 @@ export type V1ContactQuality = 'COMPLETE' | 'PARTIAL' | 'NOT_FOUND' | 'FAILED' |
 
 export interface V1ContactOverlay {
   schema_version?: number | string;
+  entity_key?: string;
   emails_list: string[];
   email: string;
   phones_list: string[];
@@ -172,6 +175,7 @@ export function normalizeV1ContactOverlay(input: any): V1ContactOverlay {
   const allowed = new Set<V1ContactQuality>(['COMPLETE','PARTIAL','NOT_FOUND','FAILED','PENDING','ENRICHING']);
   return {
     schema_version: input?.schema_version,
+    entity_key: typeof input?.entity_key === 'string' ? input.entity_key : undefined,
     emails_list: emails,
     email: emails[0] || '',
     phones_list: phones,

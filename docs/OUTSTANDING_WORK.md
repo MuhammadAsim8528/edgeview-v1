@@ -2,6 +2,53 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Current coordination / organisation / shipping constraint
+
+Owner explicitly requested a stop before shipping in the latest instruction.
+That supersedes earlier automatic-publication authorization: prepare and verify,
+then return a pre-shipping checkpoint before submission/public distribution.
+Qoder is still working in the original Pharma-AI directory; keep it read-only
+from this session until a clean handoff. A pause message was NOT sent: native
+control observed Qoder running, then could not access its minimized window.
+Do not represent draft text or a failed UI action as delivered coordination.
+Reviewed integration remains the temporary active line at 0f3f4d6; main was clean
+at 79b1784 on the latest read. Reconcile main's divergent launcher/packaging/docs/
+test tools individually after Qoder finishes; no blanket agreement or merge.
+
+Windows resolved Desktop to C:\Users\asimh\OneDrive\Desktop. Created EdgeView/
+README.md and empty Versions, Installers and Documentation audience subfolders
+(User-Guide, Installation-and-Updates, Privacy-and-Licenses, Support-and-Recovery,
+Engineering, Verification-Reports). Read back existence and README status.
+No populated source version, installer, customer data or operational snapshot was
+copied. No existing version was overwritten. Permanent development directory
+restoration, allowlisted scanned snapshots and documentation inventory/index
+remain open. This scaffold does not satisfy release/snapshot acceptance.
+
+### CC03 startup-overlay policy — implementation in progress
+
+Reproduced on the active hydrateV1ContactEnrichment SQLite path: an old v18 cache
+loaded a foreign email at startup. New shared overlay policy v21 binds persisted
+output to canonical company+country entity_key. Startup withholds older/unknown
+policy or mismatched-entity overlays, marks needs_revalidation and retains their
+stored rows and original run IDs. Current matching-entity overlays still hydrate.
+Interactive/batch research clears the warning and persists the entity binding.
+Missing contact-ID remapping uses identity headers rather than getV1Run full-body
+hydration; no competing persistence authority or synchronous full-history replay.
+
+Focused executed checks: cached_overlay_scope_policy initially failed before fix,
+then passed old/wrong-entity withholding, unchanged stored recovery row, current
+cache reopen and zero raw-body reads for matched contacts. Initial test cleanup
+left a pending save timer after deleting its temporary directory; corrected by
+flushing before reset/cleanup, rerun without that error. Static stale-profile
+notice/escaping and historical-evidence preservation tests pass. npm run check,
+npm run build and npm run test:release also pass on the final candidate; existing
+bundle warning remains. Packaged runtime, actual API/UI/export and large-history/
+startup performance acceptance remain pending. Original dataset-seeded fields
+are not deleted. Latest read-only main observation: ae031d3, with Qoder modifying
+server/tests/ssrf_security_guard.test.ts. Do not reconcile/switch its branch yet.
+This withholds stale output; it does not yet implement automatic bounded cache
+revalidation or prove every cached fact correct merely from a version/key match.
+
 This section is the single current goal/phase authority. Earlier dated entries
 below are retained evidence, not competing priorities. RECONCILIATION_2026-10-10_23,
 REAL_WORLD_APP_READINESS_RESEARCH, UNCLE_INSTALL_UPDATE_SUPPORT_PLAN and security,

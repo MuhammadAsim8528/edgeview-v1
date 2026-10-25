@@ -921,6 +921,7 @@ app.post('/api/enrich/company', async (req, res) => {
       const projected = projectHistoricalContactFields(run);
       Object.assign(ctxContact, projected, {
         edgeview_v1_run_id: run.id,
+        research_validation_status: 'current',
         last_updated: new Date().toISOString(),
       });
       await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);

@@ -55,6 +55,7 @@ jobs:
       - run: node --import tsx server/tests/activity_log_endpoint.test.ts
       - run: node --import tsx server/tests/contact_scope_presentation.test.tsx
       - run: node --import tsx server/tests/unscoped_contact_presentation.test.tsx
+      - run: node --import tsx server/tests/cached_overlay_scope_policy.test.ts
       - run: node --import tsx server/tests/directory_pagination_presentation.test.tsx
       - run: node scripts/build-recovery.test.mjs
       - run: node scripts/build-metadata.test.mjs

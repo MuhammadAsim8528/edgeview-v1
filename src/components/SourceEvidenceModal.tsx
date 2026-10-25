@@ -274,6 +274,11 @@ export const SourceEvidenceModal: React.FC<SourceEvidenceModalProps> = ({
                 </div>
               </section>
 
+              {contact.research_validation_status === 'needs_revalidation' && (
+                <p role="status" className="rounded-lg border border-amber-800 bg-amber-950/20 p-4 text-sm text-amber-200">
+                  Previous research needs company-country revalidation. Its cached contact fields are withheld; original captured results remain available. Run research again to apply the current rules.
+                </p>
+              )}
               {!!contact.unscoped_facts?.length && (
                 <details className="rounded-lg border border-amber-800 bg-amber-950/20 p-4">
                   <summary className="cursor-pointer text-sm font-semibold text-amber-200">

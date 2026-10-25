@@ -4,7 +4,7 @@ import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
 import { hasInstitutionalRole } from './corporate_validation';
 import { hasExplicitCountryCallingCode, isCountryCompatiblePhone } from './phone_country';
 import { canonicalEntityIdentityKey } from './company_identity';
-import { normalizeV1ContactOverlay } from '../shared/v1_contact_contract';
+import { normalizeV1ContactOverlay, V1_CONTACT_OVERLAY_VERSION } from '../shared/v1_contact_contract';
 import { OrderedFailureStreak } from './ordered_failure_tracker';
 import { contactFactScope, countryScopedFactSources } from './contact_country_scope';
 
@@ -12,7 +12,7 @@ const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', '
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
 const emptyProviderUsage = (): Record<ResearchProvider, number> => Object.fromEntries(RESEARCH_PROVIDERS.map((id) => [id, 0])) as Record<ResearchProvider, number>;
 
-const V1_OVERLAY_VERSION = 20;
+const V1_OVERLAY_VERSION = V1_CONTACT_OVERLAY_VERSION;
 
 export function validPhone(value: string): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
@@ -410,6 +410,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const hasOrganizationDetail = scopedAddresses.length > 0 || contact_persons.length > 0;
   return {
     schema_version: V1_OVERLAY_VERSION,
+    entity_key: canonicalEntityIdentityKey(run.company_name, run.country),
     emails_list: finalEmails,
     email: finalEmails[0] || '',
     phones_list: finalPhones,
@@ -458,6 +459,7 @@ export function projectHistoricalContactFields(run: V1Run) {
   const hasOrganizationDetail = addresses.length > 0 || contactPersons.length > 0;
   return normalizeV1ContactOverlay({
     schema_version: V1_OVERLAY_VERSION,
+    entity_key: canonicalEntityIdentityKey(run.company_name, run.country),
     emails_list: emails.slice(0, 50), email: emails[0] || '',
     phones_list: phones.slice(0, 10), phone: phones[0] || '',
     website,
@@ -488,17 +490,25 @@ export async function hydrateV1ContactEnrichment(): Promise<number> {
   const rows = await database.all('SELECT company_id, run_id, overlay_json, updated_at FROM v1_contact_enrichment');
   const { db: pharmaDb } = await import('./db');
   let hydrated = 0;
+  let runIdentityById: Map<string, { company_name: string; country: string }> | undefined;
   for (const row of rows) {
     let contact = pharmaDb.getContactById(String(row.company_id || '')) as any;
-    let migrationRun: V1Run | null = null;
     if (!contact) {
-      migrationRun = getV1Run(String(row.run_id || ''));
-      const key = migrationRun ? canonicalEntityIdentityKey(migrationRun.company_name, migrationRun.country) : '';
+      runIdentityById ||= new Map(listV1RunIdentityHeaders().map(header => [header.id, header]));
+      const header = runIdentityById.get(String(row.run_id || ''));
+      const key = header ? canonicalEntityIdentityKey(header.company_name, header.country) : '';
       contact = key ? pharmaDb.companyNameIndex.get(key) as any : null;
     }
     if (!contact) continue;
     try {
       const storedOverlay = JSON.parse(String(row.overlay_json || '{}'));
+      const entityKey = canonicalEntityIdentityKey(contact.company_name, contact.country);
+      if (storedOverlay.schema_version !== V1_OVERLAY_VERSION || storedOverlay.entity_key !== entityKey) {
+        // Keep the stored overlay and immutable run intact for revalidation.
+        // Never certify old policy output or another entity by loading it.
+        Object.assign(contact, { edgeview_v1_run_id: row.run_id, research_validation_status: 'needs_revalidation' });
+        continue;
+      }
       // Normalize old persisted field aliases/shapes exactly once at the
       // storage boundary. Active UI/backend code sees only the V1 contract.
       const overlay = normalizeV1ContactOverlay(storedOverlay);
@@ -506,7 +516,7 @@ export async function hydrateV1ContactEnrichment(): Promise<number> {
       // multi-gigabyte immutable run history here kept port 3901 offline for
       // minutes. A fresh enrichment reprojects the complete indexed history
       // and persists the current schema without blocking application launch.
-      Object.assign(contact, overlay, { edgeview_v1_run_id: row.run_id, last_updated: row.updated_at });
+      Object.assign(contact, overlay, { edgeview_v1_run_id: row.run_id, last_updated: row.updated_at, research_validation_status: 'current' });
       if (String(row.company_id || '') !== String(contact.id || '')) {
         await persistV1ContactOverlay(String(contact.id), String(row.run_id || ''), overlay);
         await database.run('DELETE FROM v1_contact_enrichment WHERE company_id = ?', [String(row.company_id || '')]);
@@ -884,6 +894,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
               contact.contact_persons = projected.contact_persons;
               contact.evidence = projected.evidence;
               contact.unscoped_facts = projected.unscoped_facts;
+              contact.research_validation_status = 'current';
               contact.edgeview_v1_run_id = run.id;
               const hasChannel = projected.emails_list.length > 0 || projected.phones_list.length > 0;
               const hasIdentity = Boolean(projected.website);
@@ -904,6 +915,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
                 evidence: contact.evidence,
                 unscoped_facts: contact.unscoped_facts,
                 schema_version: projected.schema_version,
+                entity_key: projected.entity_key,
                 quality_status: contact.quality_status,
               });
             }

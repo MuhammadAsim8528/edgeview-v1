@@ -17,4 +17,7 @@ assert.ok(markup.includes('&lt;img'));
 assert.ok(!markup.includes('<img src=x'));
 assert.ok(!markup.includes('mailto:unscoped@'));
 assert.equal(contact.email, '', 'viewing unscoped evidence cannot fill the trusted email field');
+const stale = renderToStaticMarkup(<SourceEvidenceModal isOpen onClose={() => {}} contact={{ ...contact, unscoped_facts: [], research_validation_status: 'needs_revalidation' }} />);
+assert.ok(stale.includes('Previous research needs company-country revalidation'));
+assert.ok(stale.includes('role="status"'));
 console.log('PASS static modal notice, escaped retained facts and no local-email promotion; browser interaction NOT VERIFIED');
