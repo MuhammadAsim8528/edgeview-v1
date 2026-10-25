@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getJsonPersistencePath, getProjectRoot, isTestProcess } from './db_paths';
+import { getJsonPersistencePath, getRuntimeDataRoot, isTestProcess } from './db_paths';
 
 const INSTALLATION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -31,7 +31,7 @@ let cachedInstallationId: string | null = null;
 // identity follows the same isolation as the rest of the writable runtime files.
 export function getInstallationIdentityPath(): string {
   if (isTestProcess()) return path.join(path.dirname(getJsonPersistencePath()), 'installation.json');
-  return path.join(getProjectRoot(), 'data', 'installation.json');
+  return path.join(getRuntimeDataRoot(), 'data', 'installation.json');
 }
 
 export function getInstallationId(): string {

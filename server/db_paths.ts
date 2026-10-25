@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
 
 function resolveProjectRoot(): string {
   const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
@@ -23,6 +24,9 @@ function resolveProjectRoot(): string {
 }
 
 const PROJECT_ROOT = resolveProjectRoot();
+const RUNTIME_DATA_ROOT = isTestProcess() ? PROJECT_ROOT : resolveRuntimeDataRoot(PROJECT_ROOT);
+
+export function getRuntimeDataRoot(): string { return RUNTIME_DATA_ROOT; }
 
 export function getProjectRoot(): string {
   return PROJECT_ROOT;
@@ -66,7 +70,7 @@ function testOverrideOrIsolated(envKey: string, prodPath: string, fileName: stri
 }
 
 export function getSqlitePath(): string {
-  const prodPath = path.join(PROJECT_ROOT, 'edgeview.db');
+  const prodPath = path.join(RUNTIME_DATA_ROOT, 'edgeview.db');
   if (isTestProcess()) {
     return testOverrideOrIsolated(
       'EDGEVIEW_SQLITE_DB',
@@ -75,11 +79,11 @@ export function getSqlitePath(): string {
       'REFUSING TEST WRITE TO PRODUCTION DATABASE'
     );
   }
-  return prodPath;
+  return ensureWritablePath(prodPath);
 }
 
 export function getJsonPersistencePath(): string {
-  const prodPath = path.join(PROJECT_ROOT, 'edgeview_db.json');
+  const prodPath = path.join(RUNTIME_DATA_ROOT, 'edgeview_db.json');
   if (isTestProcess()) {
     return testOverrideOrIsolated(
       'EDGEVIEW_JSON_DB',
@@ -88,10 +92,10 @@ export function getJsonPersistencePath(): string {
       'REFUSING TEST WRITE TO PRODUCTION JSON PERSISTENCE'
     );
   }
-  return prodPath;
+  return ensureWritablePath(prodPath);
 }
 
 export function getJsonLegacyPersistencePath(): string {
   if (isTestProcess()) return '';
-  return path.join(PROJECT_ROOT, 'pharma_db.json');
+  return path.join(RUNTIME_DATA_ROOT, 'pharma_db.json');
 }

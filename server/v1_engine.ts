@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { getAppSettings } from './settings';
-import { getProjectRoot } from './db_paths';
+import { getRuntimeDataRoot } from './db_paths';
 import { isSafeExternalUrl, safeFetchOutboundText, safeFetchProviderRequest } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
@@ -102,7 +102,7 @@ const RUN_TIMEOUT_MS = 120_000;
 const PROVIDER_TIMEOUT_MS = 25_000;
 const dataDir = process.env.EDGEVIEW_V1_DATA_DIR
   ? path.resolve(process.env.EDGEVIEW_V1_DATA_DIR)
-  : path.join(getProjectRoot(), 'data', 'v1-runs');
+  : path.join(getRuntimeDataRoot(), 'data', 'v1-runs');
 const identityIndexPath = path.join(dataDir, 'identity-index.jsonl');
 const providerMetricsPath = path.join(dataDir, 'provider-metrics.json');
 const activeRuns = new Map<string, Promise<V1Run>>();

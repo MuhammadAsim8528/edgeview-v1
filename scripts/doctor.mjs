@@ -3,9 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readBuildIdentity, sourceDigest, artifactDigest } from '../shared/build_identity.mjs';
+import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
 
 const installation = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export async function runDoctor({ root = installation, full = false, request = fetch, execute } = {}) {
+export async function runDoctor({ root = installation, full = false, request = fetch, execute, environment = process.env } = {}) {
   const checks = [];
   const add = (id, status, message) => checks.push({ id, status, message });
   let manifest;
@@ -41,7 +42,11 @@ export async function runDoctor({ root = installation, full = false, request = f
   }
   add('secret_store', 'SKIPPED', 'No credential file values are read or exported by doctor.');
   add('python_webview', 'SKIPPED', 'Current release is Node/React in a browser, not a Python/WebView host.');
-  const identityFile = path.join(root, 'data', 'installation.json');
+  let dataRoot;
+  try { dataRoot = resolveRuntimeDataRoot(root, environment); }
+  catch { add('runtime_storage', 'FAIL', 'Configured writable data root is invalid or overlaps application files.'); return { format: 1, checks, exitCode: 1 }; }
+  add('runtime_storage', 'PASS', dataRoot === path.resolve(root) ? 'Legacy application-root storage selected.' : 'Separate writable data root selected; migration is not inferred.');
+  const identityFile = path.join(dataRoot, 'data', 'installation.json');
   const hasIdentityFile = fs.existsSync(identityFile);
   let identityId = null;
   try {
@@ -71,6 +76,8 @@ export async function runDoctor({ root = installation, full = false, request = f
     const sameRoot = typeof health.app?.project_root === 'string' && normalize(health.app.project_root) === normalize(root);
     if (health.app?.name !== 'edgeview' || !sameRoot) throw new Error();
     add('local_backend', health.status === 'ok' ? 'PASS' : 'FAIL', 'Responding EdgeView backend belongs to this installation.');
+    const matchingData = typeof health.app.data_root === 'string' ? normalize(health.app.data_root) === normalize(dataRoot) : null;
+    add('running_storage', matchingData === null ? 'WARN' : matchingData ? 'PASS' : 'FAIL', matchingData === null ? 'Running data-root identity is unavailable.' : matchingData ? 'Running backend uses the selected writable data root.' : 'Running backend uses a different writable data root; do not migrate or back up based on this process.');
     const liveBuild = health.app?.build;
     add('running_build', !localBuild.available || !liveBuild?.available ? 'WARN' : localBuild.buildId === liveBuild.buildId ? 'PASS' : 'FAIL',
       !localBuild.available || !liveBuild?.available ? 'Live or local build identity is unavailable; deployment NOT VERIFIED.' : localBuild.buildId === liveBuild.buildId ? 'Running backend captured the current build identity at startup.' : 'Running backend belongs to a different build; normal restart required.');

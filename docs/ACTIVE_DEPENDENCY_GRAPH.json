@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-20T18:33:05.240Z",
+  "generated_at": "2026-10-25T05:52:53.165Z",
   "backend": {
     "files": [
       "server.ts",
@@ -14,12 +14,17 @@
       "server/db_paths.ts",
       "server/docx_report.ts",
       "server/docx_stream.ts",
+      "server/export_blocks.ts",
       "server/export_manager.ts",
+      "server/export_temp.ts",
       "server/export_validation.ts",
       "server/fatal_errors.ts",
       "server/grouping.ts",
+      "server/install_identity.ts",
       "server/international_importer_directory.ts",
       "server/job_manager.ts",
+      "server/migration_backup_retention.ts",
+      "server/monitoring.ts",
       "server/official_site_crawl.ts",
       "server/ordered_failure_tracker.ts",
       "server/parsers.ts",
@@ -36,6 +41,8 @@
       "server/stats_router.ts",
       "server/storage_mutation_guard.ts",
       "server/summary.ts",
+      "server/support_diagnostics.ts",
+      "server/text_parse_budget.ts",
       "server/trade_relationship_resolver.ts",
       "server/url_safety.ts",
       "server/utils/header_encoder.ts",
@@ -43,19 +50,27 @@
       "server/v1_engine.ts",
       "server/v1_identity.ts",
       "shared/build_identity.mjs",
+      "shared/contact_research_scope.ts",
+      "shared/country_overview.ts",
+      "shared/monitoring_privacy.ts",
       "shared/provider_telemetry.ts",
+      "shared/runtime_paths.mjs",
       "shared/v1_contact_contract.ts",
       "src/utils/countryNormalizer.ts"
     ],
-    "count": 44,
-    "lines": 15241
+    "count": 55,
+    "lines": 16228
   },
   "frontend": {
     "files": [
+      "shared/contact_research_scope.ts",
+      "shared/country_overview.ts",
+      "shared/provider_telemetry.ts",
       "src/App.tsx",
       "src/components/BatchEnrichmentModal.tsx",
       "src/components/Contacts.tsx",
       "src/components/CountryView.tsx",
+      "src/components/DiagnosticsExportPanel.tsx",
       "src/components/ErrorBoundary.tsx",
       "src/components/ExportReportModal.tsx",
       "src/components/FileViewer.tsx",
@@ -78,21 +93,31 @@
       "src/index.css",
       "src/main.tsx",
       "src/store/appStore.ts",
+      "src/utils/activityLogs.ts",
+      "src/utils/batchSnapshot.ts",
+      "src/utils/countryDetails.ts",
       "src/utils/countryNormalizer.ts",
+      "src/utils/directoryPagination.ts",
+      "src/utils/exportRequest.ts",
       "src/utils/exportValidator.ts",
+      "src/utils/filePage.ts",
       "src/utils/formatters.ts",
+      "src/utils/latestResearchRequest.ts",
+      "src/utils/providerHealth.ts",
+      "src/utils/reportFrontendCrash.ts",
+      "src/utils/researchRunValidation.ts",
       "src/utils/safeFetch.ts",
-      "src/utils/telemetryFormat.ts"
+      "src/utils/telemetryFormat.ts",
+      "src/utils/viewPreferences.ts"
     ],
-    "count": 31,
-    "lines": 10548
+    "count": 46,
+    "lines": 11114
   },
   "retired_inputs": 0,
   "archive": {
-    "verified": true,
-    "files": 148,
-    "sha256": "16df37792decac386c420334440c64b4fc385de300b804e006c98bd94fec3fc6"
+    "verified": false,
+    "reason": "Local archive not present; CI still verifies no retired imports or source paths."
   },
-  "supplemental_archive_verified": true,
+  "supplemental_archive_verified": false,
   "note": "esbuild dependency closure including literal dynamic imports; CSS excluded from source line count. No runtime data read."
 }

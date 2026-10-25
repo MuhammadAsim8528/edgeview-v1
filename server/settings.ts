@@ -1,19 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import { config as loadDotEnv } from 'dotenv';
-import { getProjectRoot, isTestProcess } from './db_paths';
+import { getRuntimeDataRoot, isTestProcess } from './db_paths';
 import { assertSafeHeaderValue } from './utils/header_encoder';
 import { readProviderResponse, validateProviderEnvelope } from './provider_response';
 import { CredentialStorageError, decodeCredentials, encodeCredentials } from './credential_store';
 
 // Use the same validated, executable-first root as databases and health identity.
 // An unrelated working directory must not supply credentials or receive saves.
-const REPO_ROOT = getProjectRoot();
+const DATA_ROOT = getRuntimeDataRoot();
 
 // Optionally load a local .env (AI Studio secrets / local dev). Never overrides
 // already-exported environment variables and never breaks startup if absent.
 try {
-  if (!isTestProcess()) loadDotEnv({ path: path.join(REPO_ROOT, '.env'), quiet: true, override: false });
+  if (!isTestProcess()) loadDotEnv({ path: path.join(DATA_ROOT, '.env'), quiet: true, override: false });
 } catch {
   // .env is optional.
 }
@@ -31,7 +31,7 @@ export function getConfigPath(): string {
     const dir = process.env.EDGEVIEW_TEST_DB_DIR || path.join(process.cwd(), '.test-cache');
     return path.join(dir, 'config.json');
   }
-  return path.join(REPO_ROOT, 'config.json');
+  return path.join(DATA_ROOT, 'config.json');
 }
 
 // Reads and writes share one canonical target. Missing files never fall through

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import initSqlJs from 'sql.js';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-backup-'));
 const script = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(new URL('./backup-runtime.mjs', import.meta.url));
-const run = (...args) => spawnSync(process.execPath, [...args, script], { cwd: root, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
+const run = (...args) => spawnSync(process.execPath, [...args, script], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '' }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
 try {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'not-edgeview' }));
   assert.notEqual(run().status, 0, 'wrong working directory must not be backed up');

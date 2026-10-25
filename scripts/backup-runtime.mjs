@@ -2,8 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = process.cwd();
-if (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
+import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
+const appRoot = process.cwd();
+if (JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
+const root = resolveRuntimeDataRoot(appRoot);
 const requireStopped = () => {
   if (fs.existsSync(path.join(root, 'edgeview.db.lock'))) throw new Error('Stop EdgeView normally before backup. Backup never removes an existing backend lock.');
 };

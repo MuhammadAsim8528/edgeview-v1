@@ -65,6 +65,7 @@ jobs:
       - run: node scripts/backup-runtime.test.mjs
       - run: node --experimental-strip-types server/tests/resource_snapshot.test.ts
       - run: node scripts/doctor.test.mjs
+      - run: node scripts/runtime-paths.test.mjs
       - run: node scripts/generate-sbom.test.mjs
       - run: node scripts/package-preservation.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts
@@ -113,6 +114,7 @@ jobs:
       - run: node scripts/build-identity-runtime.test.mjs
       - run: node scripts/telemetry-runtime.test.mjs
       - run: node scripts/history-production-runtime.test.mjs
+      - run: node scripts/separate-data-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release
       - run: npm run package:windows

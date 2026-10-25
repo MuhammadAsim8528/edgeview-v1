@@ -37,7 +37,7 @@ import { buildContactReport } from './server/contact_report_model';
 import { buildContactBlocksHtml } from './server/export_blocks';
 import { ExportValidationError, resolveStoredFileExport } from './server/export_validation';
 import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/utils/header_encoder';
-import { getBackendLockPath, getProjectRoot, getSqlitePath, isTestProcess } from './server/db_paths';
+import { getBackendLockPath, getProjectRoot, getRuntimeDataRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { getInstallationId } from './server/install_identity';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey } from './server/company_identity';
@@ -57,7 +57,7 @@ import { supportDiagnostics } from './server/support_diagnostics';
 
 const app = express();
 let closing = false;
-const sampleResources = createResourceSampler(getProjectRoot());
+const sampleResources = createResourceSampler(getRuntimeDataRoot());
 // Capture identity once: rebuilding files must not relabel an older live process.
 const runningBuild = readBuildIdentity(getProjectRoot());
 const monitoringChannel: 'stable' | 'beta' | 'canary' = runningBuild.available && /-canary\./.test(runningBuild.version)
@@ -84,7 +84,7 @@ const V1_SETTING_FIELDS = new Set([
   'nvidia_temperature','groq_temperature','nvidia_max_tokens','groq_max_tokens','api_timeout_seconds',
 ]);
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
-if (!isTestProcess()) installRuntimeLogging(getProjectRoot());
+if (!isTestProcess()) installRuntimeLogging(getRuntimeDataRoot());
 if (!isTestProcess()) installFatalErrorHandlers();
 
 function boundedText(value: unknown, field: string, maxLength: number, required = false): string | undefined {
@@ -229,11 +229,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const uploadDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
+// Uploads use memoryStorage; no cwd-dependent upload directory is required.
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -305,6 +301,7 @@ app.get('/api/health', (req, res) => {
       // any hardware-derived or account-linked value.
       installation_id: getInstallationId(),
       project_root: getProjectRoot(),
+      data_root: getRuntimeDataRoot(),
       node: process.version,
       port: PORT,
       env: process.env.NODE_ENV || 'development',
