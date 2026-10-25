@@ -2,6 +2,26 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Retained unscoped evidence repetition fix — 2026-10-25
+
+Reproduced requirement gap with 250 repeated historical-source entries followed
+by distinct evidence: old canonical projection returned 200 duplicates and hid
+later facts (test failed 200 versus expected 6). Shared canonical normalization
+now deduplicates before its 200-unique-entry bound, using field/value/source URL/
+source passage/target country. First raw result reference survives; distinct
+sources/passages/countries remain separate. No trusted-contact admission change.
+Input raw runs are not changed and original references remain discoverable there.
+New unscoped_fact_retention.test.ts also executes actual historical projection
+over two persisted immutable synthetic runs: one displayed fact, no local email,
+both stored runs unchanged. Canonical JSON round-trip and 1,000-entry unique cap
+pass. Initial fixture used invalid run IDs; corrected fixture to required run-*
+format before historical execution. Test wired in test:v1. Typecheck, lint,
+complete current V1 suite, production build and isolated release smoke PASS.
+Build dbcd0a624b1e3751dd2e862c1c680000f0b3033b1604bbcb38c58231c1c242dc
+is pre-commit verification, not frozen customer release. Bundle-size warning
+remains. Actual UI/export/large real-history/resource acceptance remains open;
+this closes the reproduced duplicate projection case, not all provenance goals.
+
 ### Reviewed Windows development-launch fix — 2026-10-25
 
 Independently reproduced main 31ccb24's bug on Windows: existing spawn of tsx.cmd

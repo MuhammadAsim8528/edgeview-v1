@@ -165,6 +165,27 @@ export function normalizeV1ContactPeople(value: unknown): V1ContactPerson[] {
   return out;
 }
 
+function normalizeUnscopedFacts(input: unknown): V1ContactOverlay['unscoped_facts'] {
+  const facts: V1ContactOverlay['unscoped_facts'] = [];
+  const seen = new Set<string>();
+  for (const item of Array.isArray(input) ? input : []) {
+    if (!item || typeof item.value !== 'string' || item.scope !== 'unknown'
+      || item.reason !== 'COUNTRY_SCOPE_UNPROVEN') continue;
+    const fact = { field: String(item.field || '').slice(0, 24), value: item.value.slice(0, 1000),
+      source_result_id: String(item.source_result_id || '').slice(0, 200), source_url: String(item.source_url || '').slice(0, 2000),
+      quote: String(item.quote || '').slice(0, 1000), scope: 'unknown' as const,
+      reason: 'COUNTRY_SCOPE_UNPROVEN' as const, target_country: String(item.target_country || '').slice(0, 100) };
+    // Repeated crawls assign new result IDs. Keep the first reference while
+    // preserving distinct sources/passages/countries; raw runs remain immutable.
+    const key = JSON.stringify([fact.field, fact.value, fact.source_url, fact.quote, fact.target_country]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    facts.push(fact);
+    if (facts.length >= 200) break;
+  }
+  return facts;
+}
+
 export function normalizeV1ContactOverlay(input: any): V1ContactOverlay {
   const emails = uniqueStrings([...(Array.isArray(input?.emails_list) ? input.emails_list : []), input?.email], 50);
   const phones = uniquePhones([...(Array.isArray(input?.phones_list) ? input.phones_list : []), input?.phone], 10);
@@ -190,11 +211,6 @@ export function normalizeV1ContactOverlay(input: any): V1ContactOverlay {
     ceo: String(input?.ceo || '').trim(),
     quality_status: allowed.has(quality as V1ContactQuality) ? quality as V1ContactQuality : 'NOT_FOUND',
     evidence: Array.isArray(input?.evidence) ? input.evidence : [],
-    unscoped_facts: (Array.isArray(input?.unscoped_facts) ? input.unscoped_facts : [])
-      .filter((item: any) => item && typeof item.value === 'string' && item.scope === 'unknown' && item.reason === 'COUNTRY_SCOPE_UNPROVEN')
-      .slice(0, 200).map((item: any) => ({ field: String(item.field || '').slice(0, 24), value: item.value.slice(0, 1000),
-        source_result_id: String(item.source_result_id || '').slice(0, 200), source_url: String(item.source_url || '').slice(0, 2000),
-        quote: String(item.quote || '').slice(0, 1000), scope: 'unknown' as const,
-        reason: 'COUNTRY_SCOPE_UNPROVEN' as const, target_country: String(item.target_country || '').slice(0, 100) })),
+    unscoped_facts: normalizeUnscopedFacts(input?.unscoped_facts),
   };
 }
