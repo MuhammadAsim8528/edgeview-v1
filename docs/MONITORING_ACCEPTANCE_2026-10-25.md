@@ -1,6 +1,49 @@
 # Monitoring connection acceptance — 2026-10-25 (Pakistan)
 
-## Current routing/release correction (dashboard acceptance pending)
+## Current isolated artifact: actual dashboard receipt
+
+Verified source `5f33d838654218a702d6991fccd49a32832e628d`, version
+`1.0.0-rc.2`, beta build
+`2219c29203493cf7c3c3faad437fc966ea85cc5d86e95532639035941893d186`.
+The opt-in probe started at 2026-10-25T17:16:51.380Z using empty temporary
+storage, no provider credentials/dataset, installation UUID
+`aad22c93-6b13-4675-b545-3456cbb677ec`. Its owned runtime was stopped afterward.
+The existing live port 3901 was not restarted.
+
+Actual authenticated browser observations (not inferred from SDK flush):
+
+- Sentry backend project `4512304043065344`, organization `dupido-technologies`:
+  issue `7811771267` / `EDGEVIEW-BACKEND-5`, event
+  `0059dbf45dfb48a081458d0e0621ca98`. Fixed message "EdgeView interface rendering
+  failed", `REACT_RENDER_FAILED`, matching build/installation and beta environment.
+  Release includes version and full build hash. Geography displays filtered fields;
+  replay/attachments absent. This exercises the controlled frontend report API,
+  not an actual React render crash or every fatal startup path.
+- PostHog US project `682784`: expanded doctor_run and app_started entries match
+  the same build/installation. Doctor event UUID
+  `01a17410-ad4a-7076-a8ad-5e12a0e1cb84`; sent_at
+  `2026-10-25T17:16:52.428Z`. GeoIP disabled=true; expanded properties show no
+  IP/location or business payload. Displayed event timestamp differs by about
+  twenty seconds; exact clock/ingestion adjustment was not investigated.
+- Sentry backend privacy readback: data scrubber/default scrubbers/IP prevention
+  enabled, additional sensitive fields city/subdivision/region/country_code/
+  ip_address; safe fields empty. PostHog discard-client-IP enabled.
+- PostHog web autocapture was enabled: switched OFF, success toast observed,
+  reloaded and verified aria-checked=false. Web-vitals/dead-click autocapture off.
+  Session replay page explicitly shows Record user sessions=0 and Recording is
+  disabled. Disabled console/network replay subcontrols retain enabled defaults;
+  replay is not enabled to edit these and no active replay collection is claimed.
+  Replay retention UI shows 30 days, which is not analytics/error retention proof.
+
+Hosted checks on this exact source passed: release checks `40215633218`,
+release evidence inventory `40215633265`, research read contracts `40215633196`.
+These are not clean-Windows or live browser QA.
+
+Remaining: alerts, analytics/error retention and access assessment, visible customer
+monitoring controls, broader crash coverage, final packaged release delivery and
+live rendered acceptance. No claim of full monitoring or release completion.
+
+## Current routing/release correction
 
 Actual account inspection found routine app_started/resource_sample events as
 Sentry issues. The adapter previously sent every projected event to both vendors.

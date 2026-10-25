@@ -2,6 +2,21 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### MON01 current-build dashboard receipt — verified scoped acceptance
+
+Source 5f33d838654218a702d6991fccd49a32832e628d, beta build
+2219c29203493cf7c3c3faad437fc966ea85cc5d86e95532639035941893d186:
+fresh isolated synthetic error and product-event receipt observed in actual
+Sentry/PostHog dashboards with matching build and temporary installation UUID.
+Backend Sentry IP/location scrubbing and PostHog discard-IP read back enabled;
+PostHog web autocapture switched OFF and verified after reload, replay read OFF.
+Exact event IDs, privacy observations and limitations are in
+MONITORING_ACCEPTANCE_2026-10-25.md. All three hosted workflows on this commit
+completed success. No live runtime replacement, real customer data or final
+package involved. Alerts, retention/access, customer controls, full crash coverage
+and final-release acceptance remain open. Company-country wider acceptance also
+remains open; this monitoring checkpoint does not supersede it.
+
 ### MON01 vendor routing and safe release identity — local verification
 
 Existing Sentry dashboard visibly showed app_started/resource_sample as issues.
