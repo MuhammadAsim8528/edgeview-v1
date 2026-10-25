@@ -2,7 +2,7 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
-### CC01–CC03 structured office country isolation — implementing
+### CC01–CC03 structured office country isolation — verified scoped fix
 
 New adversarial fixture reproduced foreign contact promotion: a page with Kenyan
 navigation and JSON-LD offices using PK/KE/KEN codes admitted the Pakistan parent
@@ -25,8 +25,16 @@ policy-24 caches pending normal offline revalidation, retaining stored recovery
 data and raw evidence. Focused structured/office/field/cached-startup/batch checks
 PASS. Actual retained Getz capture reprojects its independently checked Kenyan
 phone/address, no guessed email/foreign address, with whole evidence-tree hash
-unchanged. Typecheck/lint, full V1 and production build PASS on candidate;
-final exact-commit package and rendered acceptance pending. Original main tree
+unchanged. Source 70d7d38eaceb891f075cd01e15c8e47220c7a381, build
+4c9a89561ab6f2831e92c114c40c53ae6fb2f1b3e91743222ad75e1e1ef98278:
+typecheck/lint, full V1, cached-startup/offline batch and build PASS. Smoke was
+rerun PASS after the build finished; an overlapping earlier smoke is not used.
+Two compiled isolated rendered workflows PASS (contact/export selection and
+synthetic upload/paging/CSV/country keyboard/restart), not real-company rendering.
+Exact disposable package PASS, 138 files, unchanged-launch/privacy PASS, ZIP SHA256
+a7b083290efe0d258743987dde9ef3f2b3d69021b6527770b14e0399be46b500;
+customerRuntimeReady=false, 107 development files; removed after QA. Hosted,
+fresh real-company UI/export and installed acceptance remain open. Original main tree
 read back clean at b6db239, untouched; no automatic reconciliation performed.
 
 ### MON01/PRIV01 saved monitoring controls — verified scoped implementation
@@ -501,8 +509,8 @@ the cited acceptance scope, never automatically to the whole product.
 | ID / priority | Requirement; current state / capability | Code / commits / executed evidence | Remaining acceptance and dependencies |
 | --- | --- | --- | --- |
 | CC01 P0 | Company+country identity from upload to history; implementing / partial | 75e8cac, 22a7879, 18d6ffb, adfd099; identity/country fixtures and actual Getz Kenya provider comparison; verification/GETZ_KENYA_2026-10-25.md | Remaining complex layouts/aliases, every cache/API/UI/export path and additional real-company rendered acceptance; no whole-product correctness claim |
-| CC02 P0 | Field-level local/parent/subsidiary/distributor attribution; implementing / partial | contact_country_scope.ts, job_manager.ts; 18d6ffb office HTML + labelled-address recall; adfd099 personal-name/location disambiguation; 5689c7f role cleanup; local/foreign/ambiguous/distributor controls PASS | Broader parent-versus-local leadership, related-entity relations, diverse office layouts and per-field real UI/export evidence; avoid overstating public-source certainty |
-| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; implementing / partial | 3a9672e stale-overlay withholding, 30c7f92 ordinary offline revalidation, 7baea6d unscoped dedup; cached policy/batch tests and real-capture durable reopen PASS; overlay policy 24 | Large real-history cost, interrupted/retried jobs, aliases and actual current dataset/API/UI/export acceptance; preserve original raw runs |
+| CC02 P0 | Field-level local/parent/subsidiary/distributor attribution; implementing / partial | 18d6ffb office HTML recall; adfd099 personal-name/location; 5689c7f role cleanup; 70d7d38 structured per-object ISO office/related-entity scope, malformed/budget abstention; fixtures and retained actual Getz reprojection PASS | Broader visible office/parent leadership layouts, general relationship and @id graphs, multilingual names and per-field real UI/export evidence; no whole-product accuracy claim |
+| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; implementing / partial | 3a9672e stale-overlay withholding, 30c7f92 offline revalidation, 7baea6d unscoped dedup; 70d7d38 policy 25, policy-24 matching-entity withholding with stored recovery preservation and cached batch PASS | Large real-history cost, interrupted/retried jobs, aliases and actual current dataset/API/UI/export acceptance; preserve original raw runs |
 | CORE01 P0 | Bounded V1/provider capture, evidence and prior-good preservation; implementing / partial | v1_engine.ts, job_manager.ts; actual NVIDIA query/extraction 200 and four Serper search 200 requests in each Getz acceptance run; direct failure records retained | Groq/Hunter real operations/failure/recovery not proven by configuration; full source-to-render truthsets, limitations and whole-dataset workflow remain open |
 | DATA01 P0 | CSV/XLSX/NVL, importer scope, pagination/export/state; planned / partial | routes/upload.ts, db.ts, Contacts.tsx, FileViewer.tsx, appStore.ts; previous branch fixes not assumed all integrated | Reconcile actual importers/exporters/duplicates, UI controls, refresh/navigation races and accurate counts; no customer dataset writes during fixtures |
 | JOB01 P0 | Progress/cancel/retry, bounded waits and crash recovery; planned / partial | job_manager.ts, ResearchWorkspace.tsx, SHUTDOWN_RECOVERY.md, RESEARCH_READ_RECOVERY.md | Trace cancellation to transport/job persistence; kill/restart/retry and no spinner/lost state; fresh runtime/visible proof |

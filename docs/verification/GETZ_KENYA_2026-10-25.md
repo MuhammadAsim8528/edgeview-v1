@@ -104,6 +104,11 @@ for today. No personal email or direct number was inferred or manually inserted.
 
 ## Structured-office follow-up (policy 25)
 
+Implemented in 70d7d38eaceb891f075cd01e15c8e47220c7a381. Exact build
+4c9a89561ab6f2831e92c114c40c53ae6fb2f1b3e91743222ad75e1e1ef98278
+passed production smoke and disposable developer-package verification. This is
+not a customer installer or proof of Getz fields rendered in the live UI.
+
 A later synthetic regression found ISO-coded JSON-LD offices could inherit
 visible Kenya navigation: PK parent email/address/person wrongly became local.
 The corrected structured carrier isolates each object's address country, handles
