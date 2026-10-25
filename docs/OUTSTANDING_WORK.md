@@ -2,6 +2,25 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### PRIV01 accessible current-flow disclosure — 2026-10-25
+
+Added PrivacyNotice.tsx to Settings: native collapsible keyboard disclosure,
+local-data boundaries, company/country/search and selected-page AI egress,
+provider connection requests/IP visibility, separate optional monitoring and
+pseudonymous identity, replay off, review-before-sharing diagnostics and honest
+retention/support limits. Explicitly discloses that an in-app monitoring on/off
+control is not implemented; no invented support contact, licence or legal claim.
+No new network call, polling, mutable state, analytics or third-party UI library.
+Reviewed changed TSX against React skill: direct imports, native disclosure and
+focus indication, no duplicate hooks/listeners or heavy component dependency.
+Typecheck, lint, production build and release smoke PASS. Isolated compiled-app
+Playwright privacy + settings-accessibility tests PASS (2/2): keyboard open/close,
+separate disclosures, missing-control truth, no page errors. Screenshot actually
+viewed: readable dark UI, visible focus and disclosure; default is collapsed.
+This is isolated empty-data Chromium, NOT denied live Chrome/3901 QA. PRIV01 is
+PARTIAL: persistent customer monitoring control, publisher privacy/support URLs,
+About/notices/licensing and final package/account acceptance remain open.
+
 ### Fresh real-provider confirmation of office correction — 2026-10-25
 
 Ran exact 18d6ffbf35ff41b1461acf5ce52affcb3c34bd0f in a distinct isolated storage

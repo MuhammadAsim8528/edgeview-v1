@@ -3,6 +3,7 @@ import { CheckCircle2, Cpu, KeyRound, RefreshCw, Save, Search, ShieldCheck } fro
 import { safeFetchJson } from '../utils/safeFetch';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { LogsViewerPanel } from './LogsViewerPanel';
+import { PrivacyNotice } from './PrivacyNotice';
 
 interface SettingsTabProps {
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
@@ -153,6 +154,7 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
         ].map(([label, value, color]) => <div key={String(label)} className="rounded-lg border border-[#333] bg-[#242424] p-3"><div className="text-gray-400">{label}</div><div className={`mt-1 text-lg font-semibold ${color}`}>{value}</div></div>)}
       </div>
     </div>
+    <PrivacyNotice />
     <SystemHealthPanel />
     <LogsViewerPanel />
     <form onSubmit={save} className="rounded-xl border border-[#262626] bg-[#1a1a1a] p-6">
