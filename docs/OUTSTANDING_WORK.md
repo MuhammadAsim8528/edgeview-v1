@@ -74,7 +74,15 @@ claims are identified as prior evidence and are not fresh execution in this hand
 
 ### Phase 1 first implementation packet — explicit source/field scope
 
-### Phase 1 follow-up packet — unknown evidence abstention (candidate)
+### Phase 1 follow-up packet — unknown evidence abstention
+
+Implementation commit: 3ee7731369e4528c417f0f91016079f6fe7c8f80. Exact built
+artifact 02b5e00dc160c3ed39c35dd0119c93aa29ca12cd408c73f987de3a43aa54f768
+passed isolated developer-package checks (136 manifest files; unchanged launch
+and private-file check). Disposable ZIP SHA256:
+eb3a9dc2682449f88a63f7b9abef35cc4416e6fe18b4f356265bc321f8c02b97.
+Removed afterward; 105 development files and required Node/npm mean
+customerRuntimeReady=false. No installed/live/browser or clean-Windows acceptance.
 
 CC01/CC02 remain implementing; CC03 startup/cache acceptance remains open.
 The first follow-up regression failed on 22a7879 because an unlabelled same-domain
