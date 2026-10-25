@@ -2,7 +2,7 @@ import { getDb } from './sqlite';
 import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, type V1Run } from './v1_engine';
 import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
 import { hasInstitutionalRole } from './corporate_validation';
-import { isCountryCompatiblePhone } from './phone_country';
+import { hasExplicitCountryCallingCode, isCountryCompatiblePhone } from './phone_country';
 import { canonicalEntityIdentityKey } from './company_identity';
 import { normalizeV1ContactOverlay } from '../shared/v1_contact_contract';
 import { OrderedFailureStreak } from './ordered_failure_tracker';
@@ -12,7 +12,7 @@ const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', '
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
 const emptyProviderUsage = (): Record<ResearchProvider, number> => Object.fromEntries(RESEARCH_PROVIDERS.map((id) => [id, 0])) as Record<ResearchProvider, number>;
 
-const V1_OVERLAY_VERSION = 19;
+const V1_OVERLAY_VERSION = 20;
 
 export function validPhone(value: string): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
@@ -369,6 +369,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     if (profile) leader.linkedin = String(profile.url);
   }
   const scopeEvidence: Array<Record<string, unknown>> = [];
+  const unscopedFacts: Array<Record<string, unknown>> = [];
   const admit = (field: string, value: string, sourceUrl?: string) => {
     const sources = countryScopedFactSources(results, value, String(run.country || ''), sourceUrl);
     // Older immutable runs can retain already-admitted quoted claims without
@@ -389,8 +390,13 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     }
     // Domain ownership cannot override explicit foreign/other-entity evidence.
     // Unknown remains a marked legacy scope, not fabricated local-country proof.
-    const local = sources.filter(source => source.scope === 'local');
-    const eligible = local.length ? local : sources.length && sources.every(source => source.scope === 'unknown') ? sources : [];
+    const local = sources.filter(source => source.scope === 'local'
+      || (source.scope === 'unknown' && field === 'phone' && hasExplicitCountryCallingCode(value, String(run.country || ''))))
+      .map(source => source.scope === 'unknown' ? { ...source, scope: 'local' as const, scope_basis: 'explicit_phone_country_code' } : source);
+    const unknown = sources.length && sources.every(source => source.scope === 'unknown') ? sources : [];
+    const eligible = local.length ? local : !run.country ? unknown : [];
+    if (!eligible.length) for (const source of unknown) unscopedFacts.push({ field, value, ...source,
+      target_country: run.country || '', reason: 'COUNTRY_SCOPE_UNPROVEN' });
     for (const source of eligible) scopeEvidence.push({ field, value, ...source, target_country: run.country || '' });
     return eligible.length > 0;
   };
@@ -417,6 +423,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     ceo: '',
     quality_status: website && hasChannel && hasOrganizationDetail ? 'COMPLETE' : website || hasChannel || hasOrganizationDetail ? 'PARTIAL' : 'NOT_FOUND',
     evidence: scopeEvidence,
+    unscoped_facts: unscopedFacts,
   };
 }
 
@@ -460,6 +467,7 @@ export function projectHistoricalContactFields(run: V1Run) {
     decision_makers: [], ceo: '',
     quality_status: website && hasChannel && hasOrganizationDetail ? 'COMPLETE' : website || hasChannel || hasOrganizationDetail ? 'PARTIAL' : 'NOT_FOUND',
     evidence: projections.flatMap((projection: any) => projection.evidence || []),
+    unscoped_facts: projections.flatMap((projection: any) => projection.unscoped_facts || []),
   });
 }
 
@@ -875,6 +883,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
               contact.address = projected.address;
               contact.contact_persons = projected.contact_persons;
               contact.evidence = projected.evidence;
+              contact.unscoped_facts = projected.unscoped_facts;
               contact.edgeview_v1_run_id = run.id;
               const hasChannel = projected.emails_list.length > 0 || projected.phones_list.length > 0;
               const hasIdentity = Boolean(projected.website);
@@ -893,6 +902,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
                 address: contact.address,
                 contact_persons: contact.contact_persons,
                 evidence: contact.evidence,
+                unscoped_facts: contact.unscoped_facts,
                 schema_version: projected.schema_version,
                 quality_status: contact.quality_status,
               });

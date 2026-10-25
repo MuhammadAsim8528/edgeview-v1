@@ -40,6 +40,8 @@ export interface V1ContactOverlay {
   ceo: string;
   quality_status: V1ContactQuality;
   evidence: unknown[];
+  unscoped_facts: Array<{ field: string; value: string; source_result_id: string; source_url: string;
+    quote: string; scope: 'unknown'; reason: 'COUNTRY_SCOPE_UNPROVEN'; target_country: string }>;
 }
 
 function uniqueStrings(values: unknown[], limit: number): string[] {
@@ -184,5 +186,11 @@ export function normalizeV1ContactOverlay(input: any): V1ContactOverlay {
     ceo: String(input?.ceo || '').trim(),
     quality_status: allowed.has(quality as V1ContactQuality) ? quality as V1ContactQuality : 'NOT_FOUND',
     evidence: Array.isArray(input?.evidence) ? input.evidence : [],
+    unscoped_facts: (Array.isArray(input?.unscoped_facts) ? input.unscoped_facts : [])
+      .filter((item: any) => item && typeof item.value === 'string' && item.scope === 'unknown' && item.reason === 'COUNTRY_SCOPE_UNPROVEN')
+      .slice(0, 200).map((item: any) => ({ field: String(item.field || '').slice(0, 24), value: item.value.slice(0, 1000),
+        source_result_id: String(item.source_result_id || '').slice(0, 200), source_url: String(item.source_url || '').slice(0, 2000),
+        quote: String(item.quote || '').slice(0, 1000), scope: 'unknown' as const,
+        reason: 'COUNTRY_SCOPE_UNPROVEN' as const, target_country: String(item.target_country || '').slice(0, 100) })),
   };
 }

@@ -152,6 +152,7 @@ export interface CompanyContact {
   quality_status?: CompanyQualityStatus;
   edgeview_v1_run_id?: string;
   evidence?: SourceEvidence[];
+  unscoped_facts?: import('../../shared/v1_contact_contract').V1ContactOverlay['unscoped_facts'];
   research_trace?: any[];
   objectives?: Record<string, any>;
   claims?: IntelligenceClaim[];

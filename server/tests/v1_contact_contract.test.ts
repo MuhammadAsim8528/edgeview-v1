@@ -48,3 +48,9 @@ assert.equal(canonical.addresses[0].source_url, 'https://example.com/contact');
 assert.equal(canonical.contact_persons[0].linkedin_url, 'https://linkedin.com/in/ali-example');
 
 console.log('PASS canonical V1 contact contract and legacy overlay adaptation');
+
+const unscoped = normalizeV1ContactOverlay({ emails_list: [], unscoped_facts: [{ field: 'email', value: 'unknown@scopeanchor.test',
+  source_result_id: 'source-1', source_url: 'https://scopeanchor.test/contact', quote: 'Contact unknown@scopeanchor.test',
+  scope: 'unknown', reason: 'COUNTRY_SCOPE_UNPROVEN', target_country: 'Kenya' }] });
+assert.deepEqual(unscoped.emails_list, [], 'retaining unscoped evidence cannot promote it to local contacts');
+assert.deepEqual(normalizeV1ContactOverlay(JSON.parse(JSON.stringify(unscoped))), unscoped, 'withheld facts survive canonical JSON round-trip');

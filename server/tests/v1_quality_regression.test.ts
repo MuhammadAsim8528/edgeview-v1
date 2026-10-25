@@ -157,7 +157,7 @@ const publicProfileCorroboration = projectDeterministicContactFields({
   identity_resolution: { official_domain: 'emerchemie.lk', confidence: 'high', candidates: [] },
   results: [
     { provider: 'serper', status: 'success', url: 'https://emerchemie.lk/contact-us.php', title: 'Emerchemie NB Ceylon Limited Contact', snippet: '', metadata: {} },
-    { provider: 'apify', status: 'success', url: 'https://facebook.com/emerchemieNB/', title: 'Emerchemie NB Ceylon Limited', text: 'Emerchemie NB Ceylon Limited\n60, Maligawatte Road, Colombo 10\ninteract@emerchemie.lk', links: [] },
+    { provider: 'apify', status: 'success', url: 'https://facebook.com/emerchemieNB/', title: 'Emerchemie NB Ceylon Limited', text: 'Emerchemie NB Ceylon Limited\nSri Lanka office\n60, Maligawatte Road, Colombo 10\ninteract@emerchemie.lk', links: [] },
   ] as any,
 });
 assert.deepEqual(publicProfileCorroboration.emails_list, ['interact@emerchemie.lk'], 'an exact company public profile may corroborate an email on the already-resolved official domain');
@@ -169,7 +169,7 @@ const linkedInManagement = projectDeterministicContactFields({
   identity_resolution: { official_domain: 'emerchemie.lk', confidence: 'high', candidates: [] },
   results: [
     { provider: 'serper', status: 'success', url: 'https://emerchemie.lk/about', title: 'Emerchemie NB Ceylon Limited', snippet: 'Sri Lanka', metadata: {} },
-    { provider: 'linkup', status: 'success', url: 'https://linkedin.com/in/jonathan-benjamin-9804b9302', title: '', snippet: '# Jonathan Benjamin\n### Modern Trade Manager at Emerchemie NB (Ceylon) Limited', metadata: {} },
+    { provider: 'linkup', status: 'success', url: 'https://linkedin.com/in/jonathan-benjamin-9804b9302', title: '', snippet: '# Jonathan Benjamin\nSri Lanka\n### Modern Trade Manager at Emerchemie NB (Ceylon) Limited', metadata: {} },
     { provider: 'linkup', status: 'success', url: 'https://linkedin.com/in/ordinary-person-123456', title: '', snippet: '# Ordinary Person\n### Sales Representative at Emerchemie NB (Ceylon) Limited', metadata: {} },
     { provider: 'serper', status: 'success', url: 'https://linkedin.com/in/unrelated-manager-123456', title: 'Unrelated Manager', snippet: 'General Manager at Another Company', metadata: {} },
   ] as any,

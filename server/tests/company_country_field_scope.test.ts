@@ -83,3 +83,8 @@ const parentHostedLocal = projectDeterministicContactFields({ company_name: 'Sco
 });
 assert.deepEqual(parentHostedLocal.emails_list, ['kenya@scopeanchor.pk'], 'valid local evidence on a foreign parent domain remains usable');
 console.log('PASS HTML/structured carrier, field-level leader/address/local-phone scope, provenance and raw preservation');
+
+const unknownCountry = project('Kenya', [page('unknown-contact', 'Contact: unscoped@scopeanchor.test')]);
+assert.deepEqual(unknownCountry.emails_list, [], 'absence of foreign evidence is not proof of Kenyan scope');
+assert.ok((unknownCountry as any).unscoped_facts?.some((fact: any) => fact.value === 'unscoped@scopeanchor.test'
+  && fact.reason === 'COUNTRY_SCOPE_UNPROVEN' && fact.source_result_id === 'unknown-contact'), 'withheld fact remains attributable and observable');

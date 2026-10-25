@@ -72,8 +72,13 @@ assert.equal(failedDomain.website, '', 'failed result cannot establish official-
 assert.deepEqual(failedDomain.emails_list, [], 'successful snippet cannot borrow domain authority from a failed result');
 
 const officialFreeMail = projectDeterministicContactFields({ ...base, results: [official, result({
-  provider: 'direct-http', url: 'https://trustanchor.co.ke/contact', snippet: '', text: 'Contact us: published.company@gmail.com',
+  provider: 'direct-http', url: 'https://trustanchor.co.ke/contact', snippet: '', text: 'Kenya office contact: published.company@gmail.com',
 })] });
 assert.ok(officialFreeMail.emails_list.includes('published.company@gmail.com'), 'explicitly published official-site free-mail contact remains supported');
+const unscopedFreeMail = projectDeterministicContactFields({ ...base, results: [official, result({
+  provider: 'direct-http', url: 'https://trustanchor.co.ke/contact', snippet: '', text: 'Contact us: published.company@gmail.com',
+})] });
+assert.deepEqual(unscopedFreeMail.emails_list, [], 'local-domain ownership does not replace missing field-country evidence');
+assert.ok(unscopedFreeMail.unscoped_facts.some(fact => fact.value === 'published.company@gmail.com'));
 assert.equal(base.results.length, 2, 'projection does not erase raw result history');
 console.log('PASS snippet admission: successful company-domain evidence only; failed/unknown results, unrelated free-mail and lookalike domains rejected; official-page free-mail preserved');

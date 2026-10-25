@@ -274,6 +274,23 @@ export const SourceEvidenceModal: React.FC<SourceEvidenceModalProps> = ({
                 </div>
               </section>
 
+              {!!contact.unscoped_facts?.length && (
+                <details className="rounded-lg border border-amber-800 bg-amber-950/20 p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-amber-200">
+                    Country scope not established ({contact.unscoped_facts.length})
+                  </summary>
+                  <p className="mt-2 text-xs text-gray-300">These captured facts have not been attributed to this country. They are kept for inspection and are not listed as local contacts.</p>
+                  <ul className="mt-3 space-y-2 text-xs text-gray-300">
+                    {contact.unscoped_facts.slice(0, 50).map((fact, index) => (
+                      <li key={`${fact.source_result_id}-${fact.field}-${index}`} className="break-words">
+                        <strong>{fact.field}: </strong>{fact.value}
+                        <div className="text-gray-400">Source: {fact.source_url || fact.source_result_id}</div>
+                      </li>
+                    ))}
+                  </ul>
+                  {contact.unscoped_facts.length > 50 && <p className="mt-2 text-xs text-gray-400">Showing the first 50 retained facts. Full original evidence remains in captured results.</p>}
+                </details>
+              )}
               {researchAssessment && (
                 <section className="grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Trusted intelligence assessment">
                   {[

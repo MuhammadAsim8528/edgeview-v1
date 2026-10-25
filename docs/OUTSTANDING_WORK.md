@@ -74,6 +74,48 @@ claims are identified as prior evidence and are not fresh execution in this hand
 
 ### Phase 1 first implementation packet — explicit source/field scope
 
+### Phase 1 follow-up packet — unknown evidence abstention (candidate)
+
+CC01/CC02 remain implementing; CC03 startup/cache acceptance remains open.
+The first follow-up regression failed on 22a7879 because an unlabelled same-domain
+mailbox entered the Kenyan profile. Overlay v20 now withholds unknown-country
+facts for country-specified runs and retains them as bounded unscoped_facts with
+source/result/quote, target country and COUNTRY_SCOPE_UNPROVEN. Historical
+projection, batch persistence and canonical JSON normalization carry that field.
+No second store or rewritten raw capture. Existing no-country legacy test callers
+remain compatible; real enrichment requires the exact country at its input boundary.
+
+Explicit matching international phone prefixes provide number-country evidence
+only when source scope was unknown; they do not override foreign/distributor
+scope. This establishes the number's calling-code scope, not legal incorporation,
+subsidiary status, or a person's workplace. Unknown mappings/local numbers provide
+no such positive proof. SourceEvidenceModal has a collapsed, text-escaped notice
+showing up to 50 retained unscoped facts; canonical retention is bounded to 200,
+with full raw evidence still available in captured results. This is distinct from
+verified local contact fields and does not add these facts to local-contact exports.
+
+Positive public-profile/LinkedIn/free-mail fixtures previously omitted country
+context. They now explicitly supply local-country evidence; a paired negative
+preserves the original unscoped free-mail case and asserts withholding/retention.
+This is an intentional stricter policy, not unchanged compatibility. Original
+phone recall/history expectations passed unchanged. Unit check proves canonical
+JSON round-trip does not promote retained unknown mailboxes to trusted email.
+Static rendered markup test proves notice, escaped hostile text and no mailto
+promotion, but browser expand/keyboard/API/UI behavior remains NOT VERIFIED.
+
+Executed candidate checks: npm run check, build and test:release pass; separate
+unscoped_contact_presentation, search_snippet_email_admission, official_phone_recall,
+historical_evidence_preservation and contact contract checks pass. Earlier failures
+are retained above, not relabelled as passing baselines. Existing bundle warning
+remains. No port 3901 restart, actual-company calls or customer data changes.
+
+Still open: previously persisted overlays are hydrated directly at startup without
+v20 reprojection; a schema bump alone does not fix them. Safe bounded revalidation
+and visible stale-validation policy are the next CC03 unit. Unknown facts need
+deduplication/retention validation across repeated historical runs, broader country
+aliases/languages and relationship extraction, actual persisted API/export and
+rendered behavior, and performance measurement. No whole Phase 1 completion claim.
+
 Goal IDs CC01/CC02/CC03: implementing, NOT wholly verified. This slice adds
 server/contact_country_scope.ts, updates job_manager.ts projection/overlay v19,
 adds explicit country-name matching in src/utils/countryNormalizer.ts and wires
