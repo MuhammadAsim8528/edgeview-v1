@@ -97,7 +97,14 @@ export function initMonitoring(nextIdentity: MonitoringIdentity): void {
           environment: nextIdentity.channel,
           defaultIntegrations: false,
           integrations: [],
-          sendDefaultPii: false,
+          // SDK v11 removed sendDefaultPii and broadened defaults. Restrict
+          // collection explicitly; the final allowlist projection remains.
+          dataCollection: {
+            userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false,
+            genAI: { inputs: false, outputs: false }, mcp: { inputs: false, outputs: false },
+            graphQL: { document: false, variables: false }, databaseQueryData: false,
+            queues: false, stackFrameVariables: false, frameContextLines: 0,
+          },
           tracesSampleRate: 0,
           transport(options) {
             const transport = Sentry.makeNodeTransport(options);

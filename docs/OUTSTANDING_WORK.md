@@ -4,6 +4,34 @@
 
 ### Current coordination / organisation / shipping constraint
 
+### Hosted SDK compatibility/privacy finding — 2026-10-25
+
+Inspected actual GitHub runs at 30c7f9246c078de96a1f44636ae9ce52cb87ec0e:
+40200261970 (research read) failed typecheck; 40200261939 (release) failed Windows
+verify typecheck and Docker build. Browser-e2e succeeded; publish skipped.
+Inventory 40200261965 succeeded. These are scoped results, not overall PASS.
+Annotations identify server/monitoring.ts:100: sendDefaultPii is not a NodeOptions
+property in locked @sentry/node/core 11.9.0. Local package metadata says 11.9.0
+but declared build/types/index.d.ts is missing: local typecheck silently treated
+the SDK as untyped, so previous local passes did not prove SDK compatibility.
+Do not suppress/cast away the CI error or weaken the typecheck gate.
+
+Official v11 migration guide replaces sendDefaultPii with dataCollection and
+warns of more permissive defaults:
+https://github.com/getsentry/sentry-javascript/blob/develop/MIGRATION.md
+Candidate explicitly disables user/cookie/header/body/query, AI/MCP/GraphQL,
+database/queue payload, stack variable and source-context collection. Default
+integrations remain off and final safe-event projection remains in place.
+Actual SDK-options regression failed before the change (undefined), then passes;
+captured Sentry/PostHog transport test emitted six requests without private
+synthetic markers; rejection/offline/recovery test passes. Clean exact-lock
+temporary install completed and restored declared SDK types. The isolated tsc
+reported no SDK option error, but failed because the validation-copy allowlist
+omitted scripts/test-server-port.mjs imported by three endpoint tests. That setup
+failure is NOT a full clean-typecheck PASS. Hosted complete-checkout acceptance
+and local dependency-tree repair remain pending. No real-account
+event was sent by these tests and no claim of prior private-data leakage is made.
+
 Owner explicitly requested a stop before shipping in the latest instruction.
 That supersedes earlier automatic-publication authorization: prepare and verify,
 then return a pre-shipping checkpoint before submission/public distribution.

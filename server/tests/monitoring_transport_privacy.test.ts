@@ -36,6 +36,12 @@ const identity = {
   installation_id: 'a5ac169c-5820-4f77-b50d-678e2f243237',
 };
 initMonitoring(identity);
+assert.deepEqual(Sentry.getClient()?.getOptions().dataCollection, {
+  userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false,
+  genAI: { inputs: false, outputs: false }, mcp: { inputs: false, outputs: false },
+  graphQL: { document: false, variables: false }, databaseQueryData: false,
+  queues: false, stackFrameVariables: false, frameContextLines: 0,
+}, 'the locked SDK must receive explicit collection restrictions, not a removed privacy option');
 
 const markers = [
   'SYNTHETIC_PRIVATE_COMPANY', 'private-contact@example.test', '+254700000000',
