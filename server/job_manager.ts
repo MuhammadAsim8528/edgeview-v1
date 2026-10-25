@@ -816,9 +816,20 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           // company again. Force Fetch is the explicit refresh override.
           if (!forceFetch && contact?.edgeview_v1_run_id) {
             const cachedRun = getV1Run(String(contact.edgeview_v1_run_id));
-            if (cachedRun && (cachedRun.status === 'COMPLETED' || cachedRun.status === 'PARTIAL')) {
+            if (cachedRun && (cachedRun.status === 'COMPLETED' || cachedRun.status === 'PARTIAL')
+              && canonicalEntityIdentityKey(cachedRun.company_name, cachedRun.country) === canonicalEntityIdentityKey(companyName, country)) {
+              const revalidated = contact.research_validation_status !== 'current';
+              if (revalidated) {
+                const projected = projectHistoricalContactFields(cachedRun);
+                // Reuse retained evidence without calling providers. Persist
+                // before claiming completion or replacing the live projection.
+                await persistV1ContactOverlay(companyId, cachedRun.id, projected, true);
+                Object.assign(contact, projected, { research_validation_status: 'current',
+                  edgeview_v1_run_id: cachedRun.id, last_updated: new Date().toISOString() });
+              }
               companyState.status = 'completed';
-              companyState.stage = `Reused existing V1 ${cachedRun.status} enrichment; Force Fetch to refresh`;
+              companyState.stage = revalidated ? 'Revalidated retained V1 evidence under current company-country rules; no provider calls'
+                : `Reused existing V1 ${cachedRun.status} enrichment; Force Fetch to refresh`;
               companyState.error = undefined;
               companyState.outcome = String(contact.quality_status || '').toUpperCase() === 'COMPLETE' ? 'COMPLETE' : 'PARTIAL';
               companyState.resourceUsage = emptyProviderUsage();

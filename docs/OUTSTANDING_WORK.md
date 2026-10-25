@@ -26,6 +26,36 @@ remain open. This scaffold does not satisfy release/snapshot acceptance.
 
 ### CC03 startup-overlay policy — implementation in progress
 
+Startup guard committed as 3a9672ee1e1d21f979ff3b84f274091f9c40789b and pushed.
+Exact isolated package checks passed at build
+ff32dc33f8017f1a4d1a5e5b90f6366de28693733c3f092d9c5c1b70061315a3;
+136 manifest files, unchanged launch/private-file checks PASS, disposable ZIP
+SHA256 9497fb6efd5fac1f0064dc3ca467a566e8811995781aacb62697dcf648bec53a.
+This developer package has 105 development files and needs Node/npm; not an installer.
+
+### CC03 ordinary-batch retained-evidence revalidation — follow-up
+
+Actual createJob/runJobLoop regression initially completed a job without restoring
+withheld cached fields: normal reuse skipped the new policy entirely. Ordinary
+non-forced reuse now first verifies exact saved-run company+country identity;
+stale contact output is reprojected from retained history, durably persisted and
+then assigned/marked current. No new provider call is needed for this path.
+Force Fetch remains the explicit new-retrieval path. Current valid caches still
+reuse normally; a foreign saved-run ID cannot authorize another entity's cache.
+
+Executed actual isolated job-loop test passes completion, durable entity-key
+binding and zero http/https/fetch calls. Injected overlay-write ENOSPC yields a
+FAILED job, retains the previous in-memory contact and needs_revalidation flag,
+and still makes zero network calls. Its logged synthetic fatal-loop error is
+intentional test evidence, not a production crash. npm run check, build and
+test:release pass for the runtime candidate; startup cache guard also passes.
+The new job-loop regression is wired in CI. No live/customer batch executed.
+
+Still open: large per-company history can make offline reprojection expensive;
+bounded/background revalidation performance, interruption/resume, actual API/UI
+and export flow, broad entity relationships and real-company acceptance remain
+release gates. This does not automatically revalidate every stale cache at startup.
+
 Reproduced on the active hydrateV1ContactEnrichment SQLite path: an old v18 cache
 loaded a foreign email at startup. New shared overlay policy v21 binds persisted
 output to canonical company+country entity_key. Startup withholds older/unknown
