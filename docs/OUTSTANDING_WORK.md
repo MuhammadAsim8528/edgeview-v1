@@ -72,6 +72,27 @@ This is not a bundled runtime or clean-Windows/MSIX install acceptance.
 Follow-up: legacy demo literals still exist in the active seed function and must
 be replaced with plainly synthetic examples before customer payload acceptance.
 
+### PKG01 explicit demonstration payload — verified scoped source fix
+
+The old opt-in sample function contained real company/trade names and unsupported
+compliance/audit claims. It is replaced with five clearly labelled in-memory
+synthetic format examples. No customer data/persisted rows are removed or migrated.
+The explicit sample action remains available only under its existing developer
+opt-in. A regression covers empty default state, five formats, synthetic content,
+immediately usable indexes, repeat safety and unrelated uploaded-file retention.
+Focused test, typecheck/lint and full V1 PASS. Build/package acceptance pending.
+This removes those demo literals, not a universal private-data/source export scan.
+
+### SEC01 fresh dependency audit — remaining two moderate findings
+
+2026-10-26 npm audit --json exit 1 on this integration tree: 0 critical/high,
+2 moderate (exceljs and transitive uuid 8.3.2). Advisory GHSA-w5hq-g745-h8pq
+affects uuid <11.1.1; the ExcelJS call site observed uses CJS v4 without a buffer.
+This reachability observation is not a security PASS or dependency exemption.
+Do not apply npm's suggested major ExcelJS downgrade without compatibility review.
+The default branch still has eight hosted alerts; integration audit and default
+branch alerts are distinct evidence. Review a compatible bounded remediation next.
+
 ### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
 
 2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:

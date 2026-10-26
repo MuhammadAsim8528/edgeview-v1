@@ -148,292 +148,34 @@ class PharmaDatabase {
   }
 
   public seedInitialData() {
-    // 1. Initial Sample NVL File
-    const sampleNVLRows = [
-      {
-        BE_LINK: 'IPAE-1112',
-        BE_DATE: '20230713',
-        HS_CODE: '3004.9099',
-        ITEM: 'Icon 100mg Cap Nico Tab 10mg Rifaxa 200mg & 550mg Tab Sitagen 25mg Tab Clarion125mg Susp',
-        IMPORTER: 'Emerchemie NB Ceylon Limited',
-        EXPORTER: 'FEROZSONS LABORATRIES LIMITED',
-        TOT_FC: 184120.86,
-        AGENT_NAME: 'KHALID-MUG',
-        COUNTRY: 'Sri Lanka',
-        QTY: 2541.0,
-        UNT: 'KG',
-        Date: '2023-07-13',
-        Item: 'Icon 100mg Cap Nico Tab 10mg Rifaxa 200mg & 550mg Tab Sitagen 25mg Tab Clarion125mg Susp',
-        Country: 'Sri Lanka',
-        Importer: 'Emerchemie NB Ceylon Limited',
-        Exporter: 'FEROZSONS LABORATRIES LIMITED',
-        'Total Value (USD)': 184120.86,
-        Agent: 'KHALID-MUG',
-      },
-      {
-        BE_LINK: 'IPAE-1176',
-        BE_DATE: '20230714',
-        HS_CODE: '3004.9099',
-        ITEM: '50-CARTONS MEDICINES ( Calcibet ointment KETOVAL ACNE CREAM AS PER INVOICE )',
-        IMPORTER: 'SLIM PHARMACEUTICALS PVT LTD',
-        EXPORTER: 'M/S VALOR PHARMACEUTICALS',
-        TOT_FC: 17850.0,
-        AGENT_NAME: 'KHALID-MUG',
-        COUNTRY: 'Sri Lanka',
-        QTY: 10500.0,
-        UNT: 'KG',
-        Date: '2023-07-14',
-        Item: '50-CARTONS MEDICINES ( Calcibet ointment KETOVAL ACNE CREAM AS PER INVOICE )',
-        Country: 'Sri Lanka',
-        Importer: 'SLIM PHARMACEUTICALS PVT LTD',
-        Exporter: 'M/S VALOR PHARMACEUTICALS',
-        'Total Value (USD)': 17850.0,
-        Agent: 'KHALID-MUG',
-      },
-      {
-        BE_LINK: 'IPAE-1237',
-        BE_DATE: '20230714',
-        HS_CODE: '3004.9099',
-        ITEM: 'Icon Caps,Flosure 0.4mg cap,Rifaxa 550mg Tab,Novapressin(BF) other detail as per invoice.',
-        IMPORTER: 'SURGILINKS LIMITED',
-        EXPORTER: 'FEROZSONS LABORATRIES LIMITED',
-        TOT_FC: 46628.4,
-        AGENT_NAME: 'KHALID-MUG',
-        COUNTRY: 'Kenya',
-        QTY: 488.0,
-        UNT: 'KG',
-        Date: '2023-07-14',
-        Item: 'Icon Caps,Flosure 0.4mg cap,Rifaxa 550mg Tab,Novapressin(BF) other detail as per invoice.',
-        Country: 'Kenya',
-        Importer: 'SURGILINKS LIMITED',
-        Exporter: 'FEROZSONS LABORATRIES LIMITED',
-        'Total Value (USD)': 46628.4,
-        Agent: 'KHALID-MUG',
-      },
-      {
-        BE_LINK: 'IPAE-2153',
-        BE_DATE: '20230720',
-        HS_CODE: '3004.9099',
-        ITEM: 'Aspralin 25mg tab Baclin 10mg & 20mg tab Derotine XR 12.5mg 25mg tab Rivroxa 10mg Tab.',
-        IMPORTER: 'HYPERPHARM LTD',
-        EXPORTER: 'GENOME PHARMACEUTICALS (PVT.) LIMITED',
-        TOT_FC: 21784.68,
-        AGENT_NAME: 'KHALID-MUG',
-        COUNTRY: 'Mauritius',
-        QTY: 138.0,
-        UNT: 'KG',
-        Date: '2023-07-20',
-        Item: 'Aspralin 25mg tab Baclin 10mg & 20mg tab Derotine XR 12.5mg 25mg tab Rivroxa 10mg Tab.',
-        Country: 'Mauritius',
-        Importer: 'HYPERPHARM LTD',
-        Exporter: 'GENOME PHARMACEUTICALS (PVT.) LIMITED',
-        'Total Value (USD)': 21784.68,
-        Agent: 'KHALID-MUG',
-      },
-      {
-        BE_LINK: 'IPAE-2960',
-        BE_DATE: '20230725',
-        HS_CODE: '3003.1000',
-        ITEM: '6000 DAPAXIGA 10 MG TABLETS MFG 05.07.23 EXP 04.07.26 BATCH NO M6048',
-        IMPORTER: 'ZILLION INTERNATIONAL TRADING PTE LTD',
-        EXPORTER: 'M/S WELMARK PHARMACEUTIALS',
-        TOT_FC: 12000.0,
-        AGENT_NAME: 'KHALID-MUG',
-        COUNTRY: 'Thailand',
-        QTY: 6000.0,
-        UNT: 'KG',
-        Date: '2023-07-25',
-        Item: '6000 DAPAXIGA 10 MG TABLETS MFG 05.07.23 EXP 04.07.26 BATCH NO M6048',
-        Country: 'Thailand',
-        Importer: 'ZILLION INTERNATIONAL TRADING PTE LTD',
-        Exporter: 'M/S WELMARK PHARMACEUTIALS',
-        'Total Value (USD)': 12000.0,
-        Agent: 'KHALID-MUG',
-      },
+    // Explicit demo-only examples: no real trade rows, company names, contacts,
+    // financial/compliance claims or developer/customer operational records.
+    const columns = ['Date', 'Importer', 'Country', 'Exporter', 'Item', 'TOT_FC'];
+    const formats: Array<{ suffix: string; type: FileRecord['file_type']; extension: string }> = [
+      { suffix: 'nvl', type: 'NVL', extension: 'nvl' },
+      { suffix: 'dbf', type: 'DBF', extension: 'dbf' },
+      { suffix: 'xlsx', type: 'Excel', extension: 'xlsx' },
+      { suffix: 'csv', type: 'CSV', extension: 'csv' },
+      { suffix: 'docx', type: 'DOCX', extension: 'docx' },
     ];
-
-    const nvlCols = Object.keys(sampleNVLRows[0]);
-    const nvlSummary = computeSummary(nvlCols, sampleNVLRows);
-
-    const nvlFile: FileRecord = {
-      id: 'file-sample-nvl-1',
-      name: 'pharma_imports_2026.nvl',
-      file_type: 'NVL',
-      size: 4210,
-      upload_time: new Date('2026-07-28T02:15:00Z').toISOString(),
-      columns: nvlCols,
-      rows: sampleNVLRows,
-      summary: nvlSummary,
-      raw_text: sampleNVLRows
-        .map((r) => Object.entries(r).map(([k, v]) => `${k} = "${v}"`).join('\n'))
-        .join('\n\n---\n\n'),
-    };
-    this.files.set(nvlFile.id, nvlFile);
-
-    // 2. Initial Sample DBF File
-    const sampleDBFRows = [
-      {
-        REC_ID: '1001',
-        SUPPLIER_NAME: 'Bayer AG Leverkusen',
-        BUYER_NAME: 'CVS Caremark Wholesale',
-        CAT_NUMBER: 'BAY-9081',
-        VAL_USD: 512000.0,
-        SHIP_DATE: '2026-05-10',
-        STATUS: 'CLEARED',
-      },
-      {
-        REC_ID: '1002',
-        SUPPLIER_NAME: 'AstraZeneca UK',
-        BUYER_NAME: 'Walgreens Boots Alliance',
-        CAT_NUMBER: 'AZ-3342',
-        VAL_USD: 780000.0,
-        SHIP_DATE: '2026-05-14',
-        STATUS: 'IN_TRANSIT',
-      },
-      {
-        REC_ID: '1003',
-        SUPPLIER_NAME: 'Novartis Pharma AG',
-        BUYER_NAME: 'CVS Caremark Wholesale',
-        CAT_NUMBER: 'NOV-1120',
-        VAL_USD: 340000.0,
-        SHIP_DATE: '2026-05-20',
-        STATUS: 'CLEARED',
-      },
-      {
-        REC_ID: '1004',
-        SUPPLIER_NAME: 'Roche Diagnostics',
-        BUYER_NAME: 'AmerisourceBergen',
-        CAT_NUMBER: 'ROC-7781',
-        VAL_USD: 915000.0,
-        SHIP_DATE: '2026-05-28',
-        STATUS: 'IN_TRANSIT',
-      },
-    ];
-    const dbfCols = Object.keys(sampleDBFRows[0]);
-    const dbfFile: FileRecord = {
-      id: 'file-sample-dbf-1',
-      name: 'shipments_q2.dbf',
-      file_type: 'DBF',
-      size: 8912,
-      upload_time: new Date('2026-07-28T02:30:00Z').toISOString(),
-      columns: dbfCols,
-      rows: sampleDBFRows,
-      summary: computeSummary(dbfCols, sampleDBFRows),
-    };
-    this.files.set(dbfFile.id, dbfFile);
-
-    // 3. Initial Sample Excel File
-    const sampleXlsxRows = [
-      {
-        Supplier_Name: 'AstraZeneca UK',
-        Customer_Name: 'Cardinal Health Inc',
-        Drug_Class: 'Oncology Biologicals',
-        Batch_Number: 'BN-882190',
-        Invoice_Value: 1250000.0,
-        Country_Origin: 'United Kingdom',
-        Target_Market: 'United States',
-      },
-      {
-        Supplier_Name: 'Merck Sharp & Dohme',
-        Customer_Name: 'McKesson Corporation',
-        Drug_Class: 'Immuno-Oncology Pembrolizumab',
-        Batch_Number: 'MSD-44109',
-        Invoice_Value: 1890000.0,
-        Country_Origin: 'Germany',
-        Target_Market: 'United States',
-      },
-      {
-        Supplier_Name: 'Eli Lilly & Company',
-        Customer_Name: 'Cardinal Health Inc',
-        Drug_Class: 'Glucagon-like Peptide 1 (Tirzepatide)',
-        Batch_Number: 'LLY-99211',
-        Invoice_Value: 2450000.0,
-        Country_Origin: 'United States',
-        Target_Market: 'European Union',
-      },
-    ];
-    const xlsxCols = Object.keys(sampleXlsxRows[0]);
-    const xlsxFile: FileRecord = {
-      id: 'file-sample-xlsx-1',
-      name: 'suppliers_master.xlsx',
-      file_type: 'Excel',
-      size: 15420,
-      upload_time: new Date('2026-07-28T02:45:00Z').toISOString(),
-      columns: xlsxCols,
-      rows: sampleXlsxRows,
-      summary: computeSummary(xlsxCols, sampleXlsxRows),
-    };
-    this.files.set(xlsxFile.id, xlsxFile);
-
-    // 4. Initial Sample CSV File
-    const sampleCsvRows = [
-      {
-        Shipper: 'Dr. Reddy Labs',
-        Consignee: 'PrimeRx Supply Chain',
-        HS_Code: '3004.90',
-        Total_Amount_USD: 185000.0,
-        Port_Origin: 'Chennai, India',
-        Port_Destination: 'Newark, USA',
-      },
-      {
-        Shipper: 'Cipla Quality Chemical',
-        Consignee: 'PrimeRx Supply Chain',
-        HS_Code: '3004.20',
-        Total_Amount_USD: 310000.0,
-        Port_Origin: 'Kampala, Uganda',
-        Port_Destination: 'London, UK',
-      },
-    ];
-    const csvCols = Object.keys(sampleCsvRows[0]);
-    const csvFile: FileRecord = {
-      id: 'file-sample-csv-1',
-      name: 'trade_manifest.csv',
-      file_type: 'CSV',
-      size: 2048,
-      upload_time: new Date('2026-07-28T03:00:00Z').toISOString(),
-      columns: csvCols,
-      rows: sampleCsvRows,
-      summary: computeSummary(csvCols, sampleCsvRows),
-      raw_text: `Shipper,Consignee,HS_Code,Total_Amount_USD,Port_Origin,Port_Destination\nDr. Reddy Labs,PrimeRx Supply Chain,3004.90,185000.0,Chennai, India,Newark, USA\nCipla Quality Chemical,PrimeRx Supply Chain,3004.20,310000.0,Kampala, Uganda,London, UK`,
-    };
-    this.files.set(csvFile.id, csvFile);
-
-    // 5. Initial Sample DOCX File
-    const docxFile: FileRecord = {
-      id: 'file-sample-docx-1',
-      name: 'compliance_audit_report.docx',
-      file_type: 'DOCX',
-      size: 24500,
-      upload_time: new Date('2026-07-28T03:10:00Z').toISOString(),
-      columns: ['Vendor Name', 'Audit Score', 'GMP Certified', 'Risk Rating', 'Annual Cost USD'],
-      rows: [
-        { 'Vendor Name': 'Novartis Pharma AG', 'Audit Score': '98/100', 'GMP Certified': 'YES', 'Risk Rating': 'LOW', 'Annual Cost USD': 384750 },
-        { 'Vendor Name': 'Pfizer Global Supply', 'Audit Score': '95/100', 'GMP Certified': 'YES', 'Risk Rating': 'LOW', 'Annual Cost USD': 392000 },
-        { 'Vendor Name': 'Sun Pharma Advanced Research', 'Audit Score': '88/100', 'GMP Certified': 'PENDING', 'Risk Rating': 'MEDIUM', 'Annual Cost USD': 646000 },
-      ],
-      summary: computeSummary(['Vendor Name', 'Audit Score', 'GMP Certified', 'Risk Rating', 'Annual Cost USD'], [
-        { 'Vendor Name': 'Novartis Pharma AG', 'Annual Cost USD': 384750 },
-        { 'Vendor Name': 'Pfizer Global Supply', 'Annual Cost USD': 392000 },
-        { 'Vendor Name': 'Sun Pharma Advanced Research', 'Annual Cost USD': 646000 },
-      ]),
-      raw_text: `PHARMA AI COMPLIANCE & AUDIT REPORT 2026\n\nExecutive Summary:\nThis report details the global pharmaceutical manufacturing audit conducted across top tier active pharmaceutical ingredient (API) exporters and importers. All inspected facilities comply with standard EU/FDA Good Manufacturing Practice (GMP) guidelines.\n\nKey Findings:\n- Total verified vendors: 12\n- Average compliance score: 94.2%\n- Critical non-conformances identified: 0\n- High risk supply bottlenecks mitigated: 3`,
-      doc_tables: [
-        {
-          title: 'Table 1: Verified Exporter Compliance Matrix',
-          rows: [
-            ['Vendor Name', 'Audit Score', 'GMP Certified', 'Risk Rating', 'Annual Cost USD'],
-            ['Novartis Pharma AG', '98/100', 'YES', 'LOW', '$384,750'],
-            ['Pfizer Global Supply', '95/100', 'YES', 'LOW', '$392,000'],
-            ['Sun Pharma Advanced Research', '88/100', 'PENDING', 'MEDIUM', '$646,000'],
-          ],
-        },
-      ],
-    };
-    this.files.set(docxFile.id, docxFile);
-
-    // Sync all companies into Contacts list
+    for (const format of formats) {
+      const rows = [{ Date: '2026-01-01', Importer: 'Synthetic Demo Buyer', Country: 'Kenya',
+        Exporter: 'Synthetic Demo Supplier', Item: 'Synthetic demonstration product', TOT_FC: 10 }];
+      const raw = [columns.join(','), ...rows.map(row => columns.map(column => String(row[column as keyof typeof row])).join(','))].join('\n');
+      const file: FileRecord = {
+        id: 'file-sample-' + format.suffix + '-1',
+        name: 'synthetic-demo.' + format.extension,
+        file_type: format.type,
+        size: Buffer.byteLength(raw, 'utf8'),
+        upload_time: '2026-01-01T00:00:00.000Z',
+        columns: [...columns], rows, summary: computeSummary(columns, rows), raw_text: raw,
+        ...(format.type === 'DOCX' ? { doc_tables: [{ title: 'Synthetic demonstration table',
+          rows: [[...columns], ...rows.map(row => columns.map(column => String(row[column as keyof typeof row])))] }] } : {}),
+      };
+      this.files.set(file.id, file);
+    }
     this.syncCompaniesFromFiles();
-
+    this.rebuildIndexes();
   }
 
   public syncCompaniesFromFiles() {
