@@ -1,4 +1,4 @@
-export const V1_CONTACT_OVERLAY_VERSION = 26;
+export const V1_CONTACT_OVERLAY_VERSION = 27;
 
 export interface V1CompanyAddress {
   address: string;

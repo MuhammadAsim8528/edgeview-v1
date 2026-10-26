@@ -21,13 +21,16 @@ try {
     links: [], metadata: {}, search_latency_ms: 1, status: 'success',
   };
   const html = '<a href="mailto:info@trustanchor.co.ke">Email</a><a href="tel:+254207658432">Call</a>'
+    + '<section><h2>Kenya office</h2><a href="https://www.linkedin.com/company/trustanchor-medical/">LinkedIn</a></section>'
     + '<script type="application/ld+json">{"@type":"Organization","address":{"streetAddress":"22 Acacia Road","addressLocality":"Nairobi","addressCountry":"Kenya"},"employee":{"@type":"Person","name":"Jane Makori","jobTitle":"Managing Director"}}</script>';
   base.results = [result, { ...result, id: 'official-page', provider: 'direct-http', html,
     text: 'Trustanchor Medical Limited Kenya Phone: +254207658432 Email: info@trustanchor.co.ke',
     links: ['https://www.linkedin.com/company/trustanchor-medical/'] }];
   const strong = projectDeterministicContactFields(base);
   assert.equal(strong.website, 'https://trustanchor.co.ke');
-  assert.ok(strong.addresses.length && strong.contact_persons.length && strong.social_links.length);
+  assert.ok(strong.addresses.length, 'initial local structured address must be projected');
+  assert.ok(strong.contact_persons.length, 'initial local organization employee must be projected');
+  assert.ok(strong.social_links.length, 'initial local official social link must be projected');
   persistV1Run(base);
   for (let i = 0; i < 25; i += 1) persistV1Run({ ...base, id: `run-weak-history-${i}`, started_at: `2026-01-${String(i + 1).padStart(2,'0')}T00:00:00.000Z`, status: 'FAILED', results: [] });
   persistV1Run({ ...base, id: 'run-other-country', country: 'Uganda', results: [] });

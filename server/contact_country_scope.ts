@@ -4,8 +4,20 @@ type Source = { id: string; status?: string; url: string; title?: string; snippe
   text?: string; markdown?: string; html?: string; links?: string[] };
 export type ContactFactScope = 'local' | 'foreign' | 'ambiguous' | 'related_entity' | 'unknown';
 
-function visible(value: string) {
-  return value.replace(/<!--[^]*?-->/g, ' ').replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ')
+function visible(value: string, linkTargets = false) {
+  const withoutHidden = value.replace(/<!--[^]*?-->/g, ' ').replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ');
+  // A social URL is often carried only by href, while the visible label is
+  // "LinkedIn". Retain that carrier at its actual office position rather than
+  // assigning every entry in the provider's links array the page-wide country.
+  const carried = linkTargets ? withoutHidden.replace(/<a\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, tag => {
+    for (const attribute of tag.matchAll(/\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
+      if (attribute[1].toLowerCase() !== 'href') continue;
+      const href = attribute[2] ?? attribute[3] ?? attribute[4] ?? '';
+      return /^https?:\/\//i.test(href) && !/[\u0000-\u0020\u007f<>]/.test(href) ? ` ${href} ` : ' ';
+    }
+    return ' ';
+  }) : withoutHidden;
+  return carried
     .replace(/<(?:br|\/p|\/div|\/section|\/article|\/li|\/h[1-6]|\/tr)\b[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&');
 }
@@ -85,7 +97,7 @@ export function contactFactScope(source: Source, value: string, country: string,
   const contains = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').includes(sought);
   const scripts = [...String(source.html || '').matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
   const structured = scripts.join('\n');
-  const visibleHtml = visible(source.html || '');
+  const visibleHtml = visible(source.html || '', field === 'social');
   // A typed person location/relationship is not overridden by a repeated name
   // in a local footer or a visible card with no location of its own.
   const typedLeader = field === 'leader' && sought && scripts.length ? structuredScope(scripts, sought, country) : undefined;
@@ -100,7 +112,11 @@ export function contactFactScope(source: Source, value: string, country: string,
       return { scope: 'unknown' as const, quote: '' };
     }
   }
-  const htmlContext = `${visible(source.html || '')}\n${structured}`;
+  if (field === 'social' && sought && !contains(visibleHtml)
+    && !contains(source.text || '') && !contains(source.markdown || '')) {
+    return { scope: 'unknown' as const, quote: '' };
+  }
+  const htmlContext = `${visibleHtml}\n${structured}`;
   // Use the representation actually carrying the value: a short provider text
   // summary must not confer Kenyan scope on a Pakistan-only HTML contact.
   // Direct retrieval may flatten every office into one text line. Prefer the

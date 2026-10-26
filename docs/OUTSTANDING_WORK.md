@@ -2,6 +2,36 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
+
+2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:
+fresh actual Enrich HTTP run run-mvor0s3i-a910e8d076 matched the independently
+rechecked official Kenya phone/address in persisted API and HTML export, then
+retained identical contact arrays/run ID after owned-process restart. No Pakistan
+phone/address admitted; no guessed email. Real NVIDIA/Serper 200s observed;
+Hunter/Groq not called. Credentials protected in isolated config then removed;
+original configuration unchanged. Report verification/GETZ_KENYA_2026-10-25.md.
+Saved Chrome permission still denies live 3901 observation; rendered/live and
+wider company/leadership/dataset acceptance are NOT VERIFIED by this test.
+
+### CC03 social-link office attribution — implementing
+
+Hosted a053690 run 40319170045 now passes Docker and browser jobs, but verify
+fails historical_evidence_preservation.test.ts (step 91): the social link was
+not retained. Reproduction separates address/person/social assertions and shows
+actual href-only social links lose their local office position when visible
+label text replaces the URL. A dedicated red fixture demonstrates the same
+loss on mixed Kenya/Pakistan pages. links[] alone is not country evidence.
+
+The correction reads real http(s) href carriers at their HTML office position
+only for social attribution; hidden comments/scripts and fake data/title href
+attributes do not authorize a link. Foreign office links remain foreign, no
+carrier/unknown country abstains. Structured-only countries keep their own
+object semantics. Raw HTML stays unchanged. Positive/negative focused controls,
+historical weak-refresh preservation and cached startup/reopen tests PASS.
+Overlay policy 27 queues old-policy projections for existing offline revalidation
+without rewriting original raw evidence. Broader checks and hosted repeat open.
+
 ### JOB01 interactive enrichment durable-before-publish — verified scoped fix, 2026-10-26
 
 The actual HTTP route exposed a synthetic new email while its persistence call

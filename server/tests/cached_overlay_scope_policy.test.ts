@@ -18,7 +18,7 @@ try {
   const database = await getDb();
   const contact = { id: 'synthetic-kenya', company_name: 'Scopeanchor Medical', country: 'Kenya', type: 'Importer', email: '', phone: '' } as any;
   db.contacts.clear(); db.contacts.set(contact.id, contact); db.rebuildIndexes();
-  const old = JSON.stringify({ schema_version: 25, entity_key: canonicalEntityIdentityKey(contact.company_name, contact.country), emails_list: ['foreign@scopeanchor.test'], email: 'foreign@scopeanchor.test', quality_status: 'COMPLETE' });
+  const old = JSON.stringify({ schema_version: 26, entity_key: canonicalEntityIdentityKey(contact.company_name, contact.country), emails_list: ['foreign@scopeanchor.test'], email: 'foreign@scopeanchor.test', quality_status: 'COMPLETE' });
   await database.run('INSERT INTO v1_contact_enrichment (company_id, run_id, overlay_json, updated_at) VALUES (?, ?, ?, ?)',
     [contact.id, 'retained-old-run', old, '2026-01-01T00:00:00Z']);
   await database.flush();
