@@ -41,6 +41,25 @@ V1 command so this compatibility regression cannot be missed by local npm check.
 Typecheck, lint and full V1 suite PASS with both body-budget and interactive
 HTTP tests included. Hosted rerun pending. This does not verify real-company UI.
 
+2026-10-26 checkpoint: committed source 429ea53, production build
+f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:
+build, release smoke, isolated developer package, unchanged launch/privacy-file
+checks PASS. Package 139 files, ZIP SHA256
+ebb50f16915aedc7c5862850da6b087e684669a670be9c067697f6ebbfce14af;
+disposable output removed; customerRuntimeReady=false (Node/npm required).
+Rendered contact-export and synthetic upload/paging/country/restart workflows
+both PASS (2 tests, 18.3s), not live-company UI or installed acceptance.
+Original main remains clean b6db23941b8523eb2ca4714ed6118059640b41ac,
+read-only and unreconciled. No customer data/live runtime replacement.
+
+Hosted 429ea53 run 40318735819 Docker failed because the new HTTP test imported
+tests/e2e/no-egress.cjs, intentionally absent from Docker's allowlisted context.
+Correction makes the no-network preload an owned, self-contained test fixture,
+without expanding the Docker context or allowing external requests. Focused
+HTTP/restart test PASS again. This is test portability, not a product-code fix;
+hosted repeat must still prove the container behavior. Research contracts
+40318735837 and evidence inventory 40318735808 PASS; release not green.
+
 ### CC02/CORE01 Slim Pharma real-source leadership loss — implementing
 
 Fresh isolated exact company+Sri Lanka run run-mvo5cfpk-db4cf66328 resolved the

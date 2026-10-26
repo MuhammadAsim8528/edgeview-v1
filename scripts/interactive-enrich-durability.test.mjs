@@ -10,6 +10,16 @@ import { unusedTestPort } from './test-server-port.mjs';
 // No production test hook and no provider/customer credentials are loaded.
 const repo = process.cwd();
 const root = fs.mkdtempSync(path.join(repo, '.test-cache', 'interactive-durability-'));
+const noEgress = path.join(root, 'deny-egress.cjs');
+// Keep this fixture self-contained: Docker QA intentionally does not copy the
+// separate browser-test tree. Missing that tree must never enable networking.
+fs.writeFileSync(noEgress, `
+  const deny = () => { throw new Error('DURABILITY_TEST_OUTBOUND_DISABLED'); };
+  for (const name of ['node:http', 'node:https']) {
+    const transport = require(name); transport.request = deny; transport.get = deny;
+  }
+  globalThis.fetch = deny;
+`);
 const engine = path.join(repo, 'server/v1_engine.ts');
 const jobs = path.join(repo, 'server/job_manager.ts');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -74,7 +84,7 @@ try {
       EDGEVIEW_MONITORING_ENABLED:'0', SERPER_API_KEY:'fixture_not_real',
       FIXTURE_READY:path.join(state,'ready'), FIXTURE_RELEASE:path.join(state,'release'), FIXTURE_FAIL:fail?'1':'0',
     });
-    const child = spawn(process.execPath, ['-r',path.join(repo,'tests/e2e/no-egress.cjs'),path.join(root,'server.cjs')], {cwd:repo,env,stdio:['ignore','pipe','pipe']});
+    const child = spawn(process.execPath, ['-r',noEgress,path.join(root,'server.cjs')], {cwd:repo,env,stdio:['ignore','pipe','pipe']});
     children.add(child);
     let output = '';
     const collect = chunk => { output = (output + chunk.toString()).slice(-3000); };
@@ -114,7 +124,7 @@ try {
     await until(() => child.exitCode !== null || child.signalCode !== null,'owned child termination timeout');
     children.delete(child);
     if (!fail) {
-      const restarted = spawn(process.execPath, ['-r',path.join(repo,'tests/e2e/no-egress.cjs'),path.join(root,'server.cjs')], {cwd:repo,env,stdio:['ignore','pipe','pipe']});
+      const restarted = spawn(process.execPath, ['-r',noEgress,path.join(root,'server.cjs')], {cwd:repo,env,stdio:['ignore','pipe','pipe']});
       children.add(restarted);
       restarted.stdout.on('data',collect); restarted.stderr.on('data',collect);
       await until(async () => {
