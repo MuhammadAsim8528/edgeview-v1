@@ -2,6 +2,33 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Current owner order — 2026-10-26
+
+Microsoft account/Store onboarding is DEFERRED at the owner's request. Prepare
+the implementation and MSIX candidate first; final visual QA follows that work.
+No submission, publication or public installer/feed upload is authorized now.
+Desktop directories are not complete artifacts; no final source snapshot or
+installer is to be fabricated to fill them. Original source/data stay intact.
+
+### CI01/CC03 hosted closure — verified scoped checks
+
+87d46596b42b8a1ee1613629b6e41939f589c801: hosted release checks 40320662231,
+research contracts 40320662160 and release inventory 40320662180 all SUCCESS.
+This verifies the integrated social-anchor/body-budget/durability fixes under
+those workflows, not universal country correctness or installed acceptance.
+
+### REC01 backup active-layout completeness — implementing
+
+The fixed-root backup could omit active config/evidence located through explicit
+overrides while publishing a completed manifest. It now refuses noncanonical
+overrides/test-only layouts before creating staging; exact canonical overrides
+remain supported. It preserves existing previous config and legacy JSON state.
+No external path copying, multi-root restore or secret portability is introduced.
+Synthetic regression PASS for refusals, supported overrides, complete file hashes,
+SQLite/JSON/evidence reconstruction and previous config/legacy retention. Existing
+lock, partial-copy and link-refusal controls remain. No real backup/data mutation.
+Separate writable-root runtime, package and broader acceptance still pending.
+
 ### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
 
 2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:

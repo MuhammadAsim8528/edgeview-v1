@@ -102,6 +102,8 @@ For a complete local operational backup, copy these while EdgeView is stopped:
 - `data/v1-runs/`;
 - `uploads/`;
 - `config.json` through a secure secret-storage process.
+- `config.prev.json`, if present (recoverable previous configuration, also private);
+- `pharma_db.json`, if present (legacy dataset authority awaiting explicit migration).
 
 The distributable ZIP is not a data backup because sensitive configuration and runtime data are excluded intentionally.
 
@@ -113,6 +115,15 @@ directory rename. Keep the app stopped throughout: this is not a filesystem
 shadow copy or a transaction against unrelated external writers. Failed attempts
 remain explicitly INCOMPLETE for inspection. Protected credentials remain bound
 to their Windows user/machine; copying them is not portable key recovery.
+
+The backup command currently supports the canonical storage layout only. Explicit
+config/evidence/database overrides pointing elsewhere are refused with
+`BACKUP_PATH_OVERRIDE_UNSUPPORTED` before staging; test-only storage modes are
+also refused. Do not unset an override merely to make this check pass: that
+would back up different state. Preserve the actual active layout through a
+reviewed operator procedure until multi-root recovery is supported. Backups
+contain private operational data and protected configuration: never upload them
+as diagnostics or include them in customer installers/source snapshots.
 
 ### Evidence audit and quarantine
 

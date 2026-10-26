@@ -6,6 +6,24 @@ import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
 const appRoot = process.cwd();
 if (JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
 const root = resolveRuntimeDataRoot(appRoot);
+// A completed fixed-layout snapshot must never imply that externally located
+// active configuration/evidence or test databases were protected. Until backup
+// has a reviewed multi-root manifest/restore contract, refuse those layouts.
+const expectedPaths = {
+  EDGEVIEW_CONFIG: path.join(root, 'config.json'),
+  EDGEVIEW_V1_DATA_DIR: path.join(root, 'data', 'v1-runs'),
+  EDGEVIEW_SQLITE_DB: path.join(root, 'edgeview.db'),
+  EDGEVIEW_JSON_DB: path.join(root, 'edgeview_db.json'),
+};
+for (const [key, expected] of Object.entries(expectedPaths)) {
+  const override = process.env[key];
+  if (override?.trim() && path.resolve(override.trim()) !== path.resolve(expected)) {
+    throw new Error(`BACKUP_PATH_OVERRIDE_UNSUPPORTED: ${key}. No backup was created; use a reviewed backup of the actual active storage layout.`);
+  }
+}
+if (process.env.NODE_ENV === 'test' || ['1', 'true'].includes(process.env.EDGEVIEW_TEST_MODE)) {
+  throw new Error('BACKUP_TEST_LAYOUT_UNSUPPORTED: operational backup does not resolve test-only storage paths.');
+}
 const requireStopped = () => {
   if (fs.existsSync(path.join(root, 'edgeview.db.lock'))) throw new Error('Stop EdgeView normally before backup. Backup never removes an existing backend lock.');
 };
@@ -13,7 +31,7 @@ requireStopped();
 const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}`;
 const destination = path.join(root, 'backups', `EdgeView-${stamp}`);
 const staging = path.join(root, 'backups', `INCOMPLETE-EdgeView-${stamp}`);
-const included = ['edgeview.db', 'edgeview_db.json', 'config.json', 'data', 'uploads'];
+const included = ['edgeview.db', 'edgeview_db.json', 'pharma_db.json', 'config.json', 'config.prev.json', 'data', 'uploads'];
 const manifest = { format: 1, created_at: new Date().toISOString(), files: [] };
 
 async function sha256File(file) {
