@@ -4,11 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { pathToFileURL } from 'node:url';
 import { unusedTestPort } from './test-server-port.mjs';
 const source=process.cwd(),base=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-installed-data-'));
 const app=path.join(base,'app'),data=path.join(base,'state');fs.mkdirSync(app);fs.mkdirSync(data);
 fs.cpSync(path.join(source,'dist'),path.join(app,'dist'),{recursive:true});
+fs.copyFileSync(path.join(source,'packaging/windows/runtime-bootstrap.cjs'),path.join(app,'runtime-bootstrap.cjs'));
 fs.writeFileSync(path.join(app,'package.json'),JSON.stringify({name:'edgeview',version:'1.0.0-rc.2'}));
 fs.writeFileSync(path.join(data,'config.json'),JSON.stringify({serper_enabled:false,hunter_enabled:false,nvidia_enabled:false,groq_enabled:false}));
 // Do not precreate an empty dataset: that masked first-boot demo seeding.
@@ -16,9 +16,9 @@ const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>/^(PATH|S
 const port=await unusedTestPort(),url=`http://127.0.0.1:${port}`;
 Object.assign(env,{NODE_ENV:'production',NODE_PATH:path.join(source,'node_modules'),EDGEVIEW_DATA_DIR:data,PORT:String(port)});
 let child;
-async function stop(){if(child&&child.exitCode===null&&child.signalCode===null){const done=once(child,'exit',{signal:AbortSignal.timeout(10000)});child.send('edgeview-test-stop');await done;}}
+async function stop(){if(child&&child.exitCode===null&&child.signalCode===null){const done=once(child,'exit',{signal:AbortSignal.timeout(20000)});child.stdin.end('shutdown\n');const [code]=await done;assert.equal(code,0,'normal customer close must finish its durable shutdown');}}
 async function start(){
- child=spawn(process.execPath,['--import',pathToFileURL(path.join(source,'scripts/test-fixtures/owned-runtime-stop.mjs')).href,path.join(app,'dist/server.cjs')],{cwd:app,env,stdio:['ignore','ignore','pipe','ipc']});let err='';child.stderr.on('data',b=>{err=(err+String(b)).slice(-2000);});
+ child=spawn(process.execPath,[path.join(app,'runtime-bootstrap.cjs')],{cwd:app,env,stdio:['pipe','ignore','pipe']});let err='';child.stderr.on('data',b=>{err=(err+String(b)).slice(-2000);});child.stdin.on('error',()=>{});
  for(const until=Date.now()+45000;Date.now()<until;){
   if(child.exitCode!==null)throw new Error('Owned server exited: '+err);
   try{const r=await fetch(url+'/api/health',{signal:AbortSignal.timeout(1500)});const h=await r.json();if(h.app?.pid===child.pid){assert.equal(path.resolve(h.app.project_root),app);return h;}}catch{}

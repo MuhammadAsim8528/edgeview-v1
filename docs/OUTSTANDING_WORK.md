@@ -2,6 +2,23 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### PKG03 launcher-owned shutdown bridge — implementing
+
+packaging/windows/runtime-bootstrap.cjs adds a launcher-owned stdin control pipe,
+not an HTTP/shell interface or a second backend shutdown implementation. A fixed
+shutdown line or owner EOF reaches the existing SIGTERM save/drain controller;
+early close is deferred until its listener is installed. Frames are bounded,
+invalid/oversized input ignored without echo, and backend exit status is retained.
+Synthetic child-process tests cover normal/early/EOF/failure paths. PASS.
+
+The actual separate-data production-runtime regression now stages this bridge,
+uses its pipe instead of a test-only IPC preload, and asserts clean exit. Empty
+first start, upload, restart identity/data and correct backup placement PASS.
+CI wires both tests. This is a lifecycle prerequisite, not an accepted Windows GUI
+launcher or installed MSIX activation. It is not retroactively present in the
+earlier unsigned prototype; next package work must explicitly include it and
+validate the owning launcher. No live3901/customer state changed.
+
 ### Current owner order — 2026-10-26
 
 Microsoft account/Store onboarding is DEFERRED at the owner's request. Prepare
