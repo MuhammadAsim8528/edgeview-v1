@@ -52,6 +52,26 @@ final source snapshots or accepted installers; Versions/Installers remain pendin
 their acceptance gates. Original project/data stay intact. Microsoft onboarding
 remains deferred and final visual QA follows implementation/package work.
 
+Desktop export observed: six allowlisted handbook files from commit
+1a057754518df5412269f83de8c87d17762d7eed are now populated in the six existing
+Documentation categories. Documentation/INDEX-1a05775.md and manifest-1a05775.json
+record links, full source commit and SHA-256 hashes; copied bytes match committed
+source. Root Desktop README explains current status. No customer records/config,
+source snapshot, final version or installer was copied/claimed. Original data intact.
+
+### PKG01 first-launch empty storage — verified scoped runtime fix
+
+An actual production-mode separate-data test without a pre-created JSON dataset
+failed: the database constructor automatically seeded demonstration companies.
+Older tests pre-created [] and hid this first-boot path. Default construction is
+now empty; demonstration seeding requires the existing explicit developer opt-in.
+The strengthened compiled HTTP test proves zero companies/files at first launch,
+then real synthetic upload, restart UUID/data durability, no installed-root writes
+and correct backup placement. Typecheck/lint/full V1 and production build PASS.
+This is not a bundled runtime or clean-Windows/MSIX install acceptance.
+Follow-up: legacy demo literals still exist in the active seed function and must
+be replaced with plainly synthetic examples before customer payload acceptance.
+
 ### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
 
 2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:

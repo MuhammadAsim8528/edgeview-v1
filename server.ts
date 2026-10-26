@@ -2601,10 +2601,9 @@ async function startServer() {
     if (loadedFiles && loadedFiles.length > 0) {
       console.log(`Loaded ${loadedFiles.length} persisted files from SQLite database.`);
     } else if (firstBoot) {
-      // Genuine first-ever boot. Seeded sample files stay in-memory ONLY for
-      // the demo; they are never persisted into production persistence, so no
-      // automatic fake/sample data can enter the production database.
-      console.log('First boot detected. Keeping seeded sample files in-memory only (not persisted to production).');
+      console.log(process.env.EDGEVIEW_ENABLE_SAMPLE_DATA === '1'
+        ? 'First boot: explicitly enabled demonstration data remains in memory only.'
+        : 'First boot: empty customer storage; upload a file to begin.');
     } else {
       // The persistence DB exists but has no files: the user deleted them all.
       // Do NOT re-create deleted sample files (neither on disk nor in memory).

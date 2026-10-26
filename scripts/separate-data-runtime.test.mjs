@@ -11,7 +11,7 @@ const app=path.join(base,'app'),data=path.join(base,'state');fs.mkdirSync(app);f
 fs.cpSync(path.join(source,'dist'),path.join(app,'dist'),{recursive:true});
 fs.writeFileSync(path.join(app,'package.json'),JSON.stringify({name:'edgeview',version:'1.0.0-rc.2'}));
 fs.writeFileSync(path.join(data,'config.json'),JSON.stringify({serper_enabled:false,hunter_enabled:false,nvidia_enabled:false,groq_enabled:false}));
-fs.writeFileSync(path.join(data,'edgeview_db.json'),'[]');
+// Do not precreate an empty dataset: that masked first-boot demo seeding.
 const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>/^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(k)));
 const port=await unusedTestPort(),url=`http://127.0.0.1:${port}`;
 Object.assign(env,{NODE_ENV:'production',NODE_PATH:path.join(source,'node_modules'),EDGEVIEW_DATA_DIR:data,PORT:String(port)});
@@ -27,6 +27,8 @@ async function start(){
 }
 try{
  const first=await start();const identity=first.app.installation_id;assert.equal(path.resolve(first.app.data_root),data);
+ assert.equal((await fetch(url+'/api/companies').then(r=>r.json())).length,0,'fresh customer storage must not expose demo contacts');
+ assert.equal((await fetch(url+'/api/files').then(r=>r.json())).length,0,'fresh customer storage must not expose demo files');
  assert.ok(fs.existsSync(path.join(data,'edgeview.db')));assert.ok(fs.existsSync(path.join(data,'data/installation.json')));
  const form=new FormData();form.set('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC,QTY,UNT\n2026-01-01,Retained Buyer,Kenya,Retained Supplier,Product,10,1,KG']),'retained.csv');
  const uploaded=await fetch(url+'/api/files/upload',{method:'POST',body:form});assert.equal(uploaded.status,201);

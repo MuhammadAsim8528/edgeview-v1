@@ -84,7 +84,9 @@ class PharmaDatabase {
   public lastUpdatedIndex: Map<string, string> = new Map(); // id -> timestamp
 
   constructor() {
-    this.seedInitialData();
+    // Empty customer storage is authoritative. Demonstration data is an explicit
+    // developer opt-in, never a side effect of a new installation.
+    if (process.env.EDGEVIEW_ENABLE_SAMPLE_DATA === '1') this.seedInitialData();
     this.rebuildIndexes();
   }
 
