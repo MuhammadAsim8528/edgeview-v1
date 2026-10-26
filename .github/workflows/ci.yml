@@ -127,6 +127,7 @@ jobs:
       - run: node scripts/telemetry-runtime.test.mjs
       - run: node scripts/history-production-runtime.test.mjs
       - run: node scripts/runtime-bootstrap.test.mjs
+      - run: node scripts/windows-launcher.test.mjs
       - run: node scripts/separate-data-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release

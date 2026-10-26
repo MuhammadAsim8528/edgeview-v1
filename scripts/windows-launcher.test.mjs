@@ -10,12 +10,13 @@ import { unusedTestPort } from './test-server-port.mjs';
 if (process.platform !== 'win32') { console.log('SKIPPED Windows launcher requires Windows/.NET Framework build tools'); process.exit(0); }
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-launcher-test-'));
 const children = new Set(); const hash = 'a'.repeat(64);
+const systemEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
 let foreign;
 try {
   const app = path.join(root, 'app'); fs.mkdirSync(path.join(app, 'runtime'), { recursive: true }); fs.mkdirSync(path.join(app, 'dist'));
   const executable = path.join(app, 'EdgeView.exe');
   const compiler = path.join(process.env.SystemRoot, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
-  const compiled = spawnSync(compiler, ['/nologo', '/target:winexe', '/platform:x64', '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll', '/out:' + executable, path.resolve('packaging/windows/EdgeViewLauncher.cs')], { encoding: 'utf8', timeout: 30000, windowsHide: true });
+  const compiled = spawnSync(compiler, ['/nologo', '/target:winexe', '/platform:x64', '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll', '/out:' + executable, path.resolve('packaging/windows/EdgeViewLauncher.cs')], { env: systemEnvironment, encoding: 'utf8', timeout: 30000, windowsHide: true });
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
   fs.copyFileSync(process.execPath, path.join(app, 'runtime/node.exe'));
   fs.copyFileSync('packaging/windows/runtime-bootstrap.cjs', path.join(app, 'runtime-bootstrap.cjs'));
@@ -34,7 +35,7 @@ try {
       process.once('SIGTERM', () => { fs.writeFileSync(${JSON.stringify(path.join(state, 'saved'))},'saved'); server.close(() => process.exit(${mode === 'failure' ? 1 : 0})); });
       server.listen(Number(process.env.PORT),'127.0.0.1');
     `);
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
+    const env = { ...systemEnvironment };
     Object.assign(env, { PORT: String(port), EDGEVIEW_DATA_DIR: state, PATH: path.join(process.env.SystemRoot, 'System32') });
     const child = spawn(executable, ['--verify-runtime'], { env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     children.add(child); let output = '';

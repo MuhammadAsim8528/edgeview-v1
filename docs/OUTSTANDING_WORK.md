@@ -37,6 +37,18 @@ owner deferred Microsoft setup. The source candidate is NOT VERIFIED for runtime
 foreign-listener, save-failure or GUI cases merely because it compiles. Retain it
 as an unaccepted candidate; do not ship/install it or weaken Windows controls.
 
+2026-10-26 trust diagnosis: CodeIntegrity events3077/3033 identify the launcher
+and policy0283ac0f-fff1-49ae-ada1-8a933130cad6 as a signing-level refusal.
+VerifiedAndReputablePolicyState=1; no current-user code-signing certificate was
+listed. CiTool policy listing returned access denied, not a complete policy
+inventory. Official Smart App Control guidance states no individual-app bypass.
+No registry/certificate/security settings changed. Owner requested a fix; use
+trusted signing for this host, not a loader/policy workaround. Native candidate
+tests are now assigned to the existing private Windows CI runner as independent
+developer-environment validation. That is not lifting the local block, a signed
+distribution, rendered QA or clean-Windows acceptance. Compiler/test children
+receive only bounded OS environment settings, not inherited CI/provider secrets.
+
 ### Current owner order — 2026-10-26
 
 Microsoft account/Store onboarding is DEFERRED at the owner's request. Prepare
