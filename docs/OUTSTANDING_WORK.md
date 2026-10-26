@@ -93,6 +93,27 @@ Do not apply npm's suggested major ExcelJS downgrade without compatibility revie
 The default branch still has eight hosted alerts; integration audit and default
 branch alerts are distinct evidence. Review a compatible bounded remediation next.
 
+### SEC01 UUID dependency remediation — implemented, release checks pending
+
+Independent read-only investigation confirmed ExcelJS uses CommonJS UUID v4()
+without a caller buffer; no exploitable app path to v3/v5/v6 was demonstrated.
+The affected installed dependency nevertheless reproduced missing bounds refusal
+in a regression. Exact ExcelJS-scoped uuid 11.1.1 override replaces 8.3.2; no
+ExcelJS downgrade or unrelated dependency upgrade. Upstream advisory identifies
+11.1.1 as patched and its package exports support require().
+
+Clean npm ci --ignore-scripts, resolved-dependency v3/v5/v6 short-buffer/overflow/
+negative-offset rejection, unchanged rejected buffers, ordinary generation and
+actual ExcelJS extended-CF XLSX write/reload/reserialize/application import PASS.
+Existing XLSX/formula-safety and HTTP upload-extension tests PASS. Typecheck,
+lint and full V1 PASS. New regression is wired into test:v1. One independent
+post-patch review found no concrete bypass/regression; its missing-test-wiring
+observation was corrected. npm audit --json and --omit=dev both exit 0 with zero
+advisories on this integration tree. Default-branch alerts are not thereby closed.
+Runtime tested on Node 24.19.0; Node 20/22 execution not established by this unit.
+Deprecated dependency notices remain; this is not a universal supply-chain PASS.
+Production build, smoke/package and hosted acceptance for this exact change pending.
+
 ### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
 
 2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:
