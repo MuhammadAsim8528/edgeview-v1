@@ -19,6 +19,24 @@ launcher or installed MSIX activation. It is not retroactively present in the
 earlier unsigned prototype; next package work must explicitly include it and
 validate the owning launcher. No live3901/customer state changed.
 
+### PKG03 native launcher candidate — implemented but runtime BLOCKED
+
+EdgeViewLauncher.cs and its headless factory regression are preserved separately
+from the product runtime. Intended behavior: bundled Node only, cleared inherited
+provider/dev environment, same-PID/build health readiness, bounded loopback reads,
+browser open and owner-pipe durable close with truthful failure handling. No
+customer package consumes it yet. Windows .NET Framework compiler exits0.
+
+Actual scripts/windows-launcher.test.mjs exits1 at spawn UNKNOWN, before assertions
+could exercise controller behavior. A direct factory-mode launch independently
+returned the explicit OS message "An Application Control policy has blocked this
+file." This is a genuine OS trust prerequisite, not a PASS or an app regression.
+No alternate-host execution or security-policy bypass was attempted. Proper
+approved signing/trust is needed before native execution/GUI acceptance here;
+owner deferred Microsoft setup. The source candidate is NOT VERIFIED for runtime,
+foreign-listener, save-failure or GUI cases merely because it compiles. Retain it
+as an unaccepted candidate; do not ship/install it or weaken Windows controls.
+
 ### Current owner order — 2026-10-26
 
 Microsoft account/Store onboarding is DEFERRED at the owner's request. Prepare
