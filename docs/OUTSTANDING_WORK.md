@@ -29,6 +29,29 @@ SQLite/JSON/evidence reconstruction and previous config/legacy retention. Existi
 lock, partial-copy and link-refusal controls remain. No real backup/data mutation.
 Separate writable-root runtime, package and broader acceptance still pending.
 
+30be361: separate writable-root compiled runtime upload, identity/data restart,
+no application-root state writes and correct backup authority PASS. Production
+build 575850ba37da1c8ae7e353ce942950ee337fab123ecf679da5c33ba81cf9949c,
+release smoke and isolated developer-package verification PASS (139 files,
+ZIP SHA256 5106c666a7067fcfd0263ca5bf86b902fcb3cb52480f132971b2bdf6d4c67efc).
+Package is disposable, Node/npm-dependent, customerRuntimeReady=false.
+This closes only the recorded backup layout omission; transactional migration,
+restore/update/rollback/clean-Windows gates remain open.
+
+### DOC01 current handbook and Desktop documentation — implementing
+
+docs/README.md is the navigation index; docs/handbook provides six current working
+guides (first use, installation/updates, privacy/licenses, support/recovery,
+architecture/development, verification). Root README links the same task ledger
+and now truthfully discloses existing bounded AI evidence extraction. No archived
+source restored or historical Markdown deleted. Root/index link targets PASS.
+The actual Desktop is OneDrive redirected. Export only this explicit documentation
+allowlist from committed source to the existing category folders, with commit/hash
+metadata and no overwrite of versioned documents. These are working guides, not
+final source snapshots or accepted installers; Versions/Installers remain pending
+their acceptance gates. Original project/data stay intact. Microsoft onboarding
+remains deferred and final visual QA follows implementation/package work.
+
 ### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
 
 2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:

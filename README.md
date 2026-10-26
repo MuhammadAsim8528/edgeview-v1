@@ -5,7 +5,7 @@ EdgeView turns an exact company name and country into a bounded, inspectable res
 ## Frozen V1 architecture
 
 1. EdgeView supplies the exact company name and country.
-2. AI generates only a compact set of identity-anchored search queries.
+2. AI generates a compact set of identity-anchored search queries; selected captured content can also undergo bounded evidence extraction.
 3. Deterministic code calls configured search and retrieval providers.
 4. Every attempted provider request stores its complete raw response or a structured failure record.
 5. Results are normalized without deleting the immutable raw evidence.
@@ -35,3 +35,14 @@ npm run build
 ```
 
 The packaged build is not claimed to work offline: provider enrichment requires working API credentials, provider quota, and network access.
+
+## Status and documentation
+
+This is a development candidate, not an accepted self-contained customer release.
+Start with the [documentation index](docs/README.md) and
+[authoritative acceptance ledger](docs/OUTSTANDING_WORK.md).
+The original development project remains preserved; reviewed implementation is
+currently in `edgeview-integration` on `integration/edgeview-v1-20261024`, pending
+safe reconciliation to the requested original location. Git remains authoritative.
+Microsoft account setup/publication and final visual QA are deferred by the owner
+until the preceding implementation and package work. No final installer is claimed.
