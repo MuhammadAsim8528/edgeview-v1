@@ -114,6 +114,35 @@ Runtime tested on Node 24.19.0; Node 20/22 execution not established by this uni
 Deprecated dependency notices remain; this is not a universal supply-chain PASS.
 Production build, smoke/package and hosted acceptance for this exact change pending.
 
+01a9ed71ba479172b87a6502445fdd763c9c60a3 completion evidence: production build
+e58583edf5e0803f40e7ec31725d7abc9cd7419d4baeb04008606b761b70b571,
+release smoke and isolated developer-package checks PASS.139 files; disposable
+ZIP SHA256 d6fc0b26f8670559743786dcf48a562928e6a15cbad217092118c83015540de8.
+Hosted release40378776916, research40378776655 and inventory40378776557 SUCCESS.
+Scoped security report retained through Codex Security artifact storage at
+hardening/uuid-exceljs-remediation-20261026.md (SHA256
+7d4d4fede5ad573ce7e47a7352aa6fdbf26a8e3e5382666a526e42eb2f7f74b9).
+Developer ZIP still Node/npm-dependent, not an installer or clean-Windows proof.
+
+### PKG02 bundled runtime / unsigned MSIX experiment — partial, not accepted
+
+An owned production-dependency factory and copied signed Node executable launched
+with no global Node path/NODE_PATH. Fresh empty storage, synthetic upload/export,
+missing-provider503 and restart UUID/data/no-code-root-writes PASS. Real MSIX
+format failures were isolated to a vendor developer fixture by mapping bisection;
+exclude Mammoth test directory from runtime mapping, preserving canonical tests.
+SDK MakeAppx then packed the unsigned internal prototype successfully and unpacked
+it. The exact extracted payload repeated those backend/runtime checks PASS.
+
+Prototype-only manifest/bootstrap inputs are preserved in packaging/prototype-msix;
+report verification/BUNDLED_RUNTIME_MSIX_2026-10-26.md records lineage, hash,
+discarded premature EBUSY attempt, limits and explicit NOT VERIFIED gates. No
+install/sign/trust/account/publication or final visual QA occurred. No temporary
+prototype is promoted to Desktop Installers or final Versions. Repeatable accepted
+runtime builder, lifecycle UX, payload/license/asset audit, migration/update/recovery
+and clean-Windows/installed activation remain release blockers. Do not confuse
+extracted-component launch with installed MSIX acceptance.
+
 ### CC01/CC03 actual Getz Kenya repeat — verified scoped HTTP/export/restart
 
 2026-10-26 source a053690, build f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73:
