@@ -125,3 +125,42 @@ This used separate empty test config/JSON/SQLite paths. No live dataset rewrite,
 fresh provider run or rendered UI/export verification was performed in this check.
 Policy-24 overlays require the existing normal revalidation path; their stored
 records and original evidence are preserved.
+
+## 2026-10-26 fresh HTTP, durable restart and HTML export acceptance
+
+Independent current official source recheck:
+https://getzpharma.com/contact-us/ lists Kenya separately from Pakistan/global
+offices: 63 Westlands Road, Nairobi, Kenya; +254 20 426 1000.
+No Kenyan mailbox is asserted from this listing.
+
+Exact committed source a0536907661e9c166e6ede3bca8de0925b60ad69;
+version 1.0.0-rc.2, build
+f79fc44ca24659fba3faaf3632f7280929eaa46a6448da436a75ebdb5ccbed73.
+The owned compiled server imported one synthetic trade row containing only the
+public company/country identity. Actual POST /api/enrich/company ran real
+providers; no expected contacts were sent to the engine or injected afterward.
+Run run-mvor0s3i-a910e8d076 resolved getzpharma.com, status PARTIAL.
+NVIDIA query and two extraction requests returned 200; four Serper requests
+returned 200. One direct retrieval failure was retained. No Hunter/Groq request
+was observed, so those providers are not verified by this acceptance.
+
+Actual GET /api/companies returned one phone, one address, one person and zero
+emails. The phone/address match the independent official source above; no
+Pakistan phone or Pakistan/Karachi/Korangi address appeared in accepted fields.
+POST /api/export/blocks returned HTML containing the same Kenyan phone/address.
+After stopping and restarting only the owned child, the API retained identical
+phone/address arrays and run ID. Health PID was checked before mutations;
+both starts reported the same source/build identity. Individual leadership
+employment/currentness was not independently re-established in this repeat.
+
+Private isolated evidence and acceptance summary remain outside Git under the
+owned temporary directory edgeview-getz-http-eZDN3Q. The original credential
+configuration hash stayed unchanged; temporary DPAPI-protected configuration
+and its previous copy were removed after the child stopped. No production
+dataset, 3901 process or original repository source was modified.
+
+This is fresh provider -> immutable capture -> projection -> persisted API ->
+HTML export -> restart evidence for this exact case, not a claim about every
+country/entity or the rendered/downloaded document. Supported Chrome access
+to the existing 3901 tab was attempted again in the Asim Hassan profile and
+denied by the saved origin permission. Live rendered acceptance remains open.
