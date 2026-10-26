@@ -2,6 +2,36 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### Owner stop / resume checkpoint — 2026-10-26
+
+STOP explicitly requested; no further implementation/account/visual work until
+the owner resumes. Last implementation commit 877aba84ee13fa5672f35681fb06ed95f850f307.
+Native Windows CI job121845264987 in run40400501890 actually executed both tests
+(not skipped): owner-pipe and compiled launcher readiness/close/failure/foreign-PID
+controls PASS. This independent Windows result does NOT lift this laptop's Smart
+App Control signing block or verify rendered GUI/installed activation. At last
+observation Docker PASS, main verify and browser jobs still in progress; inspect
+their terminal outcomes on resume, do not infer them.
+
+Fresh Slim HTTP run finished before stop: run-mvpa7k7e-1ed426d348, source877aba8,
+build e58583edf5e0803f40e7ec31725d7abc9cd7419d4baeb04008606b761b70b571.
+Resolved slimpharma.com; PARTIAL. Captured real NVIDIA/Serper200s and retained
+direct retrieval failures. Persisted API has1 general email,3 shared phones,
+4 address representations (3 independently checked offices),7 published leaders.
+Independent official source comparison matches; explicitly related Healthcare
+CEO is not admitted as Pharmaceuticals CEO. Compact HTML export includes checked
+local phone/address; owned restart preserves contact arrays/run ID. No foreign
+Pakistan phone/address admitted. No expected facts injected into the engine.
+Evidence summary is in private owned temp directory edgeview-slim-http-82qM84;
+source credentials hash unchanged. Rendered UI and complete export coverage not
+verified. Address label duplication remains DATA01 follow-up. Source references:
+https://slimpharma.com/contact/ and /corporate-management/.
+
+On resume: review latest hosted outcomes, preserve trusted-signing requirement
+without weakening host policy, continue unaccepted launcher/package/data recovery
+and remaining country truthsets. Microsoft setup/final visual QA remain deferred.
+Original source/customer data/live3901 unchanged. No public distribution.
+
 ### PKG03 launcher-owned shutdown bridge — implementing
 
 packaging/windows/runtime-bootstrap.cjs adds a launcher-owned stdin control pipe,
