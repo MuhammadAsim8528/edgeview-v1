@@ -2,6 +2,30 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
+### JOB01 interactive enrichment durable-before-publish — verified scoped fix, 2026-10-26
+
+The actual HTTP route exposed a synthetic new email while its persistence call
+was held pending. A test-only esbuild seam substitutes provider retrieval and a
+controlled storage barrier; real Express upload/company/run routes, projection,
+immutable capture and successful SQLite writes remain in use. External network
+is disabled and every mutating request follows an owned-PID health check.
+The assertion failed on the previous route, rather than merely mirroring code.
+
+server.ts now awaits the existing durable overlay save before publishing fields
+or rebuilding directory indexes. Pending/rejected saves leave the prior visible
+contact untouched; successful saves publish and survive owned-process restart.
+The immutable run remains discoverable even when contact saving rejects.
+scripts/interactive-enrich-durability.test.mjs passes and is wired into test:v1.
+This is synthetic HTTP/restart evidence, not a live browser or disk-full proof.
+Existing persistence-failure tests cover separate real filesystem failures.
+The existing endpoint's generic HTTP 400 error classification remains unchanged.
+Typecheck, lint and full V1 suite PASS, including this HTTP/restart regression.
+Build/package and hosted acceptance for this change pending.
+Hosted 96d8546 release run 40223931168 is FAIL in the official-page body-budget
+test (verify step 14); Docker and browser jobs PASS, publish SKIPPED. Research
+contracts 40223931169 and inventory 40223931229 PASS. Investigate this separate
+hosted failure next; local build/package success does not override it.
+
 ### CC02/CORE01 Slim Pharma real-source leadership loss — implementing
 
 Fresh isolated exact company+Sri Lanka run run-mvo5cfpk-db4cf66328 resolved the
@@ -28,11 +52,10 @@ revalidation of older projections without startup evidence replay/data deletion.
 Report: verification/SLIM_PHARMA_2026-10-25.md. Final checks, fresh post-fix repeat,
 durability/API/render/export and live/installed acceptance remain open.
 
-JOB01 next source finding (not yet a runtime failure proof): interactive
+JOB01 source finding (now reproduced and corrected in the section above): interactive
 /api/enrich/company assigns projected fields to ctxContact before awaiting
 persistV1ContactOverlay(..., true). Both integration and frozen original main
-show this ordering; normal batch already uses durable-before-publish. Investigate
-with a focused failure regression and fix separately after this country slice.
+showed this ordering; normal batch already uses durable-before-publish.
 
 ### CC01–CC03 structured office country isolation — verified scoped fix
 

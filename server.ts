@@ -945,12 +945,14 @@ app.post('/api/enrich/company', async (req, res) => {
     }
     if (ctxContact) {
       const projected = projectHistoricalContactFields(run);
+      // The directory must not expose a projection while its durable save is
+      // pending or after that save fails. Immutable evidence already survives.
+      await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);
       Object.assign(ctxContact, projected, {
         edgeview_v1_run_id: run.id,
         research_validation_status: 'current',
         last_updated: new Date().toISOString(),
       });
-      await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);
       db.rebuildIndexes();
     }
     // A provider-level FAILED run is still a successfully captured V1 record.
