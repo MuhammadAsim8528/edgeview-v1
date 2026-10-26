@@ -21,9 +21,13 @@ const original = { lookup: dns.lookup, http: http.request, https: https.request,
 const MiB = 1024 * 1024;
 // Country attribution is independent of the transport body budget. This positive
 // fixture explicitly scopes its tail facts; a .co.ke URL alone is insufficient.
+// Each structured person needs its own country evidence: nearby Kenyan prose
+// must not supply the missing scope of another JSON-LD graph sibling.
 const tail = '<p>Trustanchor Medical Limited Kenya office</p><a href="/contact-us.php">Contact</a><a href="/leadership.php">Corporate management</a>'
   + '<p>Contact: public@trustanchor.co.ke</p><script type="application/ld+json">'
-  + '{"@type":"Person","name":"Alice Fixture","jobTitle":"Managing Director"}</script>';
+  + '{"@graph":[{"@type":"Person","name":"Alice Fixture","jobTitle":"Managing Director","address":{"@type":"PostalAddress","addressCountry":"KE"}},'
+  + '{"@type":"Person","name":"Foreign Fixture","jobTitle":"Director","address":{"@type":"PostalAddress","addressCountry":"PK"}},'
+  + '{"@type":"Person","name":"Unknown Fixture","jobTitle":"Director"}]}</script>';
 const largeHtml = '<html><body><!--' + 'x'.repeat(Math.floor(3.67 * MiB)) + '-->' + tail + '</body></html>';
 let privateDns = false;
 let transportCalls = 0;
@@ -126,6 +130,7 @@ try {
   const projection = projectDeterministicContactFields(persisted);
   assert.ok(projection.emails_list.includes('public@trustanchor.co.ke'), 'tail contact reached projection');
   assert.ok(projection.contact_persons.some(person => person.name === 'Alice Fixture'), 'tail structured leadership reached projection');
+  assert.ok(!projection.contact_persons.some(person => ['Foreign Fixture', 'Unknown Fixture'].includes(person.name)), 'large-page allowance must not turn a foreign or unscoped graph sibling into a Kenyan leader');
   console.log('PASS large official capture/storage/projection; 2 MiB generic and 4 MiB official bounds; redirects, chunked ceiling, private DNS and failure retention; synthetic transport, UI/live companies NOT VERIFIED');
 } finally {
   dns.lookup = original.lookup; http.request = original.http; https.request = original.https; globalThis.fetch = original.fetch;

@@ -20,11 +20,26 @@ This is synthetic HTTP/restart evidence, not a live browser or disk-full proof.
 Existing persistence-failure tests cover separate real filesystem failures.
 The existing endpoint's generic HTTP 400 error classification remains unchanged.
 Typecheck, lint and full V1 suite PASS, including this HTTP/restart regression.
-Build/package and hosted acceptance for this change pending.
+Commit 044b18fa92bda425334ffe3a809376c63d4aa8c2: production build
+and release smoke PASS, build a6b60ea9b84ed28049903ccd470eb011044b671df19f932b627998dc95b39da3.
+Package and hosted acceptance for this change pending.
 Hosted 96d8546 release run 40223931168 is FAIL in the official-page body-budget
 test (verify step 14); Docker and browser jobs PASS, publish SKIPPED. Research
 contracts 40223931169 and inventory 40223931229 PASS. Investigate this separate
 hosted failure next; local build/package success does not override it.
+
+### CI01 body-budget fixture/country-policy mismatch — correction implementing
+
+Reproduced hosted 96d8546 failure locally: the tail JSON-LD Person lacked any
+country while the assertion expected Kenyan admission. Country projection now
+correctly refuses that borrowed-prose scope. The fixture explicitly gives the
+positive person addressCountry KE and adds PK and unscoped graph siblings which
+must stay out. No runtime country protection was relaxed. Actual large-page
+capture, full immutable storage, 2/4 MiB boundaries, redirects and private DNS
+controls remain unchanged. Corrected focused test PASS; added to the ordinary
+V1 command so this compatibility regression cannot be missed by local npm check.
+Typecheck, lint and full V1 suite PASS with both body-budget and interactive
+HTTP tests included. Hosted rerun pending. This does not verify real-company UI.
 
 ### CC02/CORE01 Slim Pharma real-source leadership loss — implementing
 
