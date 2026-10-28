@@ -73,6 +73,36 @@ try {
   assert.ok(!selected.includes('&lt;img src=x'), 'selection excludes unrelated contacts');
   assert.ok(!(await (await post({ company_ids: [] })).text()).includes('class="card-title"'));
   await seed([
+    { id: 'local-rich', company_name: 'Shared Synthetic Group', country: 'Kenya', type: 'Importer',
+      email: 'office@synthetic.test', emails_list: ['office@synthetic.test', 'sales@synthetic.test'],
+      phone: '+254 20 1234567', phones_list: ['+254 20 1234567', '+254 700 123456'],
+      address: 'First Nairobi office', addresses: [
+        { address: 'First Nairobi office', type: 'Head office', source_url: 'https://synthetic.test/kenya' },
+        { address: 'Second Kisumu office', source_url: 'https://synthetic.test/kenya/branches' }],
+      contact_persons: [{ name: 'Synthetic Director', designation: 'Managing Director', email: 'director@synthetic.test', phone: '+254 711 123456',
+        country: 'Kenya', source_url: 'https://synthetic.test/team/" onclick="bad()', linkedin_url: 'JaVaScRiPt:alert(1)' },
+        { name: hostile, designation: hostile, department: hostile, source_url: 'data:text/html,bad' }],
+      socials: [{ platform: 'Published social', url: 'https://social.test/local', source_url: 'https://synthetic.test/kenya' }],
+      sources: [{ url: 'https://synthetic.test/kenya', title: 'Kenyan office' }],
+      unscoped_facts: [{ field: 'email', value: 'unproven@parent.test', scope: 'unknown' }] },
+    { id: 'foreign-rich', company_name: 'Shared Synthetic Group', country: 'Pakistan', email: 'foreign@parent.test',
+      contact_persons: [{ name: 'Foreign Parent Director', designation: 'CEO' }] },
+  ]);
+  const complete = await (await post({ company_ids: ['local-rich'] })).text();
+  for (const value of ['Kenya', 'sales@synthetic.test', '+254 700 123456', 'Second Kisumu office', 'Synthetic Director',
+    'Managing Director', 'director@synthetic.test', '+254 711 123456', 'https://social.test/local', 'https://synthetic.test/kenya/branches']) {
+    assert.ok(complete.includes(value), `saved accepted value missing from actual export: ${value}`);
+  }
+  assert.equal((complete.match(/office@synthetic.test/g) || []).length, 1, 'scalar/list duplicate appears once');
+  assert.ok(!complete.includes('foreign@parent.test') && !complete.includes('Foreign Parent Director'));
+  assert.ok(!complete.includes('unproven@parent.test'), 'unscoped evidence must not be promoted to contact facts');
+  assert.ok(!/<(?:img|script)\b/i.test(complete), 'nested people fields remain escaped');
+  assert.ok(!/href="(?:javascript|data):/i.test(complete));
+  for (const [, attributes] of complete.matchAll(/<a\s+([^>]+)>/g)) {
+    assert.match(attributes, /rel="noopener noreferrer"/);
+    assert.ok(!/\s(?:onclick|onerror)="/.test(attributes));
+  }
+  await seed([
     { id: 'fresh', company_name: 'Fresh', type: 'Importer', country: 'Kenya' },
     { id: 'details', company_name: 'Details', type: 'Importer', country: 'Kenya', edgeview_v1_run_id: 'r1', website: 'https://company.test' },
     { id: 'weak', company_name: 'Weak', type: 'Importer', country: 'Kenya', edgeview_v1_run_id: 'r2' },

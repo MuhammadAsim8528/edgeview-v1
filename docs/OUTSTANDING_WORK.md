@@ -2085,3 +2085,25 @@ Typecheck/lint, full V1 suite and release smoke passed. Production build passed
 with the existing bundle-size warning. A final rebuild and focused repeat cover
 the tightened sidecar-removal error handling. No customer installer/package,
 original-source integration or rendered UI acceptance is claimed here.
+
+### EXP01 — complete saved-contact HTML blocks — implementing (2026-10-28)
+
+A new actual-route regression failed before the change because country and saved
+secondary contacts/leadership were omitted. HTML blocks now retain the saved
+country/role/status, email/phone arrays, multiple addresses, contact people,
+WhatsApp, social profiles and published source links. Scalar-only legacy values
+remain supported; scalar/list email duplicates render once. No new admission or
+country inference is performed. Selection stays by company ID; an identically
+named foreign company and unknown-country evidence are excluded from the local
+selected fixture. Every nested value is escaped and every added link passes the
+existing HTTP(S)/control-character guard with noopener noreferrer. Source quotes,
+raw provider payloads and unscoped facts are not promoted into contact fields.
+
+Endpoint/helper adversarial tests cover nested hostile people, quote-breaking
+source URLs, multiple values, same-name foreign selection and unscoped exclusion.
+Production build completed with existing bundle warning. Final targeted checks
+are running; rendered downloaded-document and real-company complete export remain
+NOT VERIFIED. No live build restart or customer records changed.
+
+EXP01 scoped checks completed: helper and actual HTTP endpoint regressions, typecheck, lint, production build and release smoke all exit0. Existing hosted release run40685307541 at e699dd2 failed current-process birth inspection in test:v1; native launcher, browser E2E and Docker jobs succeeded. Treat that failure as open, not an export regression or green release gate.
+
