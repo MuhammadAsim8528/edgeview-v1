@@ -26,13 +26,33 @@ async function start(){
  }throw new Error('Owned separate-data runtime not ready: '+err);
 }
 try{
+ // A live unrelated PID must not authorize deletion of a legacy numeric lock.
+ const lock=path.join(data,'edgeview.db.lock'),owner=lock+'.owner.json';
+ fs.writeFileSync(lock,String(process.pid));
+ const refused=spawnSync(process.execPath,[path.join(app,'runtime-bootstrap.cjs')],{cwd:app,env,encoding:'utf8',input:'',timeout:15000});
+ assert.notEqual(refused.status,0,'legacy alive owner remains conservative');
+ assert.match(refused.stderr,/Another EdgeView backend owns/);
+ assert.equal(fs.readFileSync(lock,'utf8'),String(process.pid));
+ assert.ok(!fs.existsSync(path.join(data,'edgeview.db')),'refused startup must not initialize the database');
+ // Reproduce a PID reused by an unrelated process: same live PID, different birth.
+ const oldBirth=process.platform==='win32'?'windows:100000000000':'linux:00000000-0000-0000-0000-000000000000:1';
+ fs.writeFileSync(owner,JSON.stringify({pid:process.pid,birth:oldBirth}));
  const first=await start();const identity=first.app.installation_id;assert.equal(path.resolve(first.app.data_root),data);
+ const ownedLock=fs.readFileSync(lock,'utf8'),ownedMetadata=fs.readFileSync(owner,'utf8');
+ assert.equal(ownedLock,String(child.pid));
+ const duplicate=spawnSync(process.execPath,[path.join(app,'runtime-bootstrap.cjs')],{cwd:app,env,encoding:'utf8',input:'',timeout:15000});
+ assert.notEqual(duplicate.status,0,'actual alive backend must refuse a duplicate');
+ assert.match(duplicate.stderr,/Another EdgeView backend owns/);
+ assert.equal(fs.readFileSync(lock,'utf8'),ownedLock);
+ assert.equal(fs.readFileSync(owner,'utf8'),ownedMetadata);
+ assert.equal((await fetch(url+'/api/health').then(r=>r.json())).app.pid,child.pid);
  assert.equal((await fetch(url+'/api/companies').then(r=>r.json())).length,0,'fresh customer storage must not expose demo contacts');
  assert.equal((await fetch(url+'/api/files').then(r=>r.json())).length,0,'fresh customer storage must not expose demo files');
  assert.ok(fs.existsSync(path.join(data,'edgeview.db')));assert.ok(fs.existsSync(path.join(data,'data/installation.json')));
  const form=new FormData();form.set('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC,QTY,UNT\n2026-01-01,Retained Buyer,Kenya,Retained Supplier,Product,10,1,KG']),'retained.csv');
  const uploaded=await fetch(url+'/api/files/upload',{method:'POST',body:form});assert.equal(uploaded.status,201);
  await stop();
+ assert.equal(fs.existsSync(lock),false);assert.equal(fs.existsSync(owner),false);
  const bytes=fs.readFileSync(path.join(data,'edgeview_db.json'));assert.ok(bytes.includes(Buffer.from('Retained Buyer')));
  const second=await start();assert.equal(second.app.installation_id,identity);await stop();
  assert.deepEqual(fs.readFileSync(path.join(data,'edgeview_db.json')),bytes,'restart preserves dataset authority');

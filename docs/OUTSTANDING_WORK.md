@@ -2058,3 +2058,30 @@ operation was attempted. Live startup is NOT VERIFIED. Owner can run the origina
 EdgeView.bat normally. The retained fresh Slim acceptance summary was re-read and
 its exact scoped HTTP/export/restart evidence added to the existing verification
 report; no provider request was repeated merely to update documentation.
+
+### START01 — stale PID reuse startup failure — 2026-10-28
+
+Observed original lock contained20892. CIM identified that live PID as Windows
+RuntimeBroker.exe, not Node/EdgeView; no3901 listener and no matching Node backend
+existed. Rechecked all conditions immediately before removing only the exact
+stale edgeview.db.lock. No process killed or database/configuration file edited.
+Owner must retry normal launcher; live readiness has not yet been observed.
+
+Integration fix adds process-birth sidecar metadata while preserving the numeric
+lock for older versions. Windows uses bounded hidden OS process inspection;
+Linux uses boot ID plus proc start ticks. Only a matching recorded PID with a
+provably different birth permits recovery of an otherwise-live PID. Legacy locks,
+missing metadata and failed inspection remain conservative. EPERM inspection does
+not imply a dead owner. Sidecar replacement failure cannot retain stale ownership
+metadata while starting the backend. Metadata is local operational state, never
+hardware identity or monitoring content.
+
+Focused tests include actual host birth lookup and production compiled-backend
+startup: live legacy numeric lock refuses before DB initialization; synthetic
+prior birth for an actually live unrelated PID is recovered; second actual
+backend refuses without changing first owner's files/health; normal close removes
+both lock files. Existing upload/restart/identity/backup assertions remain intact.
+Typecheck/lint, full V1 suite and release smoke passed. Production build passed
+with the existing bundle-size warning. A final rebuild and focused repeat cover
+the tightened sidecar-removal error handling. No customer installer/package,
+original-source integration or rendered UI acceptance is claimed here.
