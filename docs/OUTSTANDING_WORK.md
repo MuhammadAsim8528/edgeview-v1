@@ -2107,3 +2107,23 @@ NOT VERIFIED. No live build restart or customer records changed.
 
 EXP01 scoped checks completed: helper and actual HTTP endpoint regressions, typecheck, lint, production build and release smoke all exit0. Existing hosted release run40685307541 at e699dd2 failed current-process birth inspection in test:v1; native launcher, browser E2E and Docker jobs succeeded. Treat that failure as open, not an export regression or green release gate.
 
+### START01 hosted probe follow-up / current owner order — 2026-10-28
+
+Hosted e699dd2 release verify failed because its current-process birth probe
+returned null after about5.2seconds; the log did not classify the cause. Native
+launcher/browser/Docker jobs passed, not the whole workflow. Cold shell timeout
+is a plausible inference, not independently proven root cause. Increase the one
+bounded Windows inspection deadline from5to15seconds and emit only TIMEOUT /
+UNAVAILABLE / MALFORMED to assertion diagnostics when inspection fails. No retry
+loop, raw errors, security bypass or unsafe ownership fallback. Local real-host
+inspection passed. Ignore the local lock owner sidecar in Git as runtime state.
+Hosted acceptance remains required; do not weaken the actual-host assertion.
+
+Owner reiterated pre-release preparation includes a runnable MSIX candidate.
+Microsoft Store setup/publication remains deferred. Native local execution is
+still gated by trusted signing/Application Control; extracting a package is not
+installed activation. Add screenshot regression infrastructure within existing
+Playwright using synthetic deterministic states, review captures before approving
+baselines, never auto-accept current images as known-correct. Final live rendered
+QA remains separately open; pixel matching does not prove company-country facts.
+START01 follow-up local checks: real process inspection, typecheck, lint, production build, actual compiled separate-data lock/restart/backup regression and release smoke exit0. Hosted verification of the longer bounded probe remains pending.

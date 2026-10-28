@@ -12,8 +12,9 @@ assert.equal(recordedOwnerWasReused({ pid: 42, birth: 'windows:100000000000' }, 
 assert.equal(processBirthIdentity(-1), null);
 assert.equal(processBirthIdentity(Number.NaN), null);
 if (['win32', 'linux'].includes(process.platform)) {
-  const birth = processBirthIdentity(process.pid);
-  assert.ok(birth, 'real current-process birth must be available on the acceptance host');
+  const reasons: string[] = [];
+  const birth = processBirthIdentity(process.pid, reason => reasons.push(reason));
+  assert.ok(birth, `real current-process birth must be available on the acceptance host (${reasons.join(',') || 'no classification'})`);
   assert.equal(processBirthIdentity(process.pid), birth);
   const oldBirth = process.platform === 'win32' ? 'windows:100000000000' : 'linux:00000000-0000-0000-0000-000000000000:1';
   assert.equal(recordedOwnerWasReused({ pid: process.pid, birth: oldBirth }, process.pid, birth), true);

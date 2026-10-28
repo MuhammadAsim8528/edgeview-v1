@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 /** Process birth identity, not hardware identity. Unavailable inspection fails closed. */
-export function processBirthIdentity(pid: number): string | null {
+export function processBirthIdentity(pid: number, onUnavailable?: (reason: 'TIMEOUT' | 'UNAVAILABLE' | 'MALFORMED') => void): string | null {
   if (!Number.isSafeInteger(pid) || pid <= 0) return null;
   try {
     if (process.platform === 'win32') {
@@ -11,9 +11,13 @@ export function processBirthIdentity(pid: number): string | null {
       const executable = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
       const value = execFileSync(executable, ['-NoProfile', '-NonInteractive', '-Command',
         `$ErrorActionPreference='Stop'; (Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks.ToString()`],
-      { timeout: 5000, maxBuffer: 4096, windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      // Cold Windows runners can exceed five seconds while initializing the OS
+      // shell. Keep one bounded probe, never a retry/poll loop or an unsafe fallback.
+      { timeout: 15000, maxBuffer: 4096, windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
         env: { SystemRoot: windowsRoot, WINDIR: windowsRoot } }).trim();
-      return /^\d{10,}$/.test(value) ? `windows:${value}` : null;
+      if (/^\d{10,}$/.test(value)) return `windows:${value}`;
+      onUnavailable?.('MALFORMED');
+      return null;
     }
     if (process.platform === 'linux') {
       const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
@@ -22,7 +26,11 @@ export function processBirthIdentity(pid: number): string | null {
       const boot = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
       return /^\d+$/.test(fields[19] || '') ? `linux:${boot}:${fields[19]}` : null;
     }
-  } catch { /* Never reclaim an alive owner merely because inspection failed. */ }
+  } catch (error) {
+    // Only bounded classifications may reach acceptance diagnostics; never the
+    // command, environment, raw exception or filesystem paths.
+    onUnavailable?.((error as NodeJS.ErrnoException)?.code === 'ETIMEDOUT' ? 'TIMEOUT' : 'UNAVAILABLE');
+  }
   return null;
 }
 

@@ -33,6 +33,7 @@ edgeview_db.json
 *.backup
 *.backup.*
 *.lock
+*.db.lock.owner.json
 !package-lock.json
 !bun.lock
 *.pid
