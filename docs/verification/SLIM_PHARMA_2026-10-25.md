@@ -82,3 +82,24 @@ multilingual biography parser, employer graph, a person's location verifier or
 proof that every management layout works. Fresh post-fix provider repeat,
 durable/API/UI/export and installed acceptance still require verification.
 No live port-3901 restart, production-data write or manually injected contact.
+
+## Fresh HTTP, durable storage and compact export repeat — 2026-10-26
+
+Retained acceptance-summary.json was re-read on 2026-10-28. Fresh run
+run-mvpa7k7e-1ed426d348 used source877aba84ee13fa5672f35681fb06ed95f850f307,
+version1.0.0-rc.2 and build
+e58583edf5e0803f40e7ec31725d7abc9cd7419d4baeb04008606b761b70b571.
+The actual upload/enrich/persisted-company API path resolved slimpharma.com and
+returned PARTIAL:1email,3phones,4address representations and7published leaders.
+The independently checked general email, shared phones and three official offices
+matched. Related Healthcare CEO remained excluded; no Pakistan phone/address was
+admitted. Real NVIDIA/Serper operations returned200; retrieval failures remained
+observable. Hunter/Groq were not exercised.
+
+The compact HTML export contained checked local phone/address. Owned backend
+shutdown/restart preserved contact arrays and run identity. Temporary credential
+copies were removed and original configuration hash remained unchanged. Expected
+facts were not injected into the engine. This closes the fresh post-fix HTTP and
+restart gap stated above, not rendered UI, complete multi-value/leadership export,
+installed-package or universal country-attribution acceptance. Four address
+representations for three offices remain a deduplication follow-up.

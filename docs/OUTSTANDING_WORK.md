@@ -2044,3 +2044,17 @@ Port 3901 now belongs to PID 30112, not the previously observed PID. Its loaded
 build and new UI behavior are not certified by these isolated checks. Supported
 browser retry on this date still failed with the kernel-assets os error 3 before
 navigation. Visual QA and the remaining security/product gates stay open.
+
+### Owner resume and live launch attempt — 2026-10-28
+
+Owner resumed and explicitly requested bringing EdgeView live. Port3901 had no
+listener. Integration HEAD89be98e was clean; original project HEADb6db239 was clean
+and retained the actual existing configuration/dataset. Original saved build
+identifies b6db239 /6b5783d5f807695a1f243c8c16621d132d8ab55ebbd75619e66b391562cb4486;
+it is distinct from newer integration fixes. A normal background Node launch
+request was rejected by automatic execution policy before launch: blocked by
+policy. No alternate execution bypass, runtime replacement or customer-state
+operation was attempted. Live startup is NOT VERIFIED. Owner can run the original
+EdgeView.bat normally. The retained fresh Slim acceptance summary was re-read and
+its exact scoped HTTP/export/restart evidence added to the existing verification
+report; no provider request was repeated merely to update documentation.
