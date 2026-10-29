@@ -2313,3 +2313,17 @@ security selection, payload/test/source-map minimization, full OSS/security scan
 monitoring enabled delivery, migration/update/rollback and real company truthsets
 remain open. No provider keys, original data, .env or old installation identity
 were copied. Original live3901 remains b6db239/database OK; no restart performed.
+
+### REL01 original/main verifier-test reconciliation — 2026-10-29
+
+Independently reviewed main9713c8b (one189line test file). The actual product
+verify-package.mjs is byte-identical between main and integration. Adopt only
+that missing adversarial/CLI suite and wire it into CI; no wholesale merge or
+original-tree write. Executed on Windows: PASS byte/length tampering, missing and
+nonregular files, malformed/traversal manifest entries, strict unlisted entries,
+real junction controls, simulated file-link flags and strict CLI relative paths.
+Host allowed junctions but not file symlinks, reported explicitly. Test also
+proves a rewritten self-consistent manifest passes: integrity is not authenticity.
+Qoder's historical mutation claims were not re-executed or adopted as new proof.
+Other main-only tar/test-debt/docs and upload-message differences remain under
+review. This narrow test adoption does not reconcile main or deploy the live app.
