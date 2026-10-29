@@ -8,6 +8,14 @@ import { sourceDigest, artifactDigest, readBuildIdentity } from '../shared/build
 
 // Internal factory only. Never installs, signs, trusts a certificate or publishes.
 const factoryEnvironment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
+export function prototypeNpmArgs(output) {
+  // npm refuses one file loaded as both scopes. Match the existing bootstrap's
+  // distinct, empty, invocation-owned configs; never read the owner's npmrc.
+  const user = path.join(output, 'user.npmrc'), global = path.join(output, 'global.npmrc');
+  fs.writeFileSync(user, '', { flag: 'wx' }); fs.writeFileSync(global, '', { flag: 'wx' });
+  return ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org',
+    `--userconfig=${user}`, `--globalconfig=${global}`, `--cache=${path.join(output, 'npm-cache')}`];
+}
 export function prototypePreflight(root) {
   const env = factoryEnvironment();
   const git = spawnSync('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: root, env, encoding: 'utf8', timeout: 15_000, windowsHide: true });
@@ -90,9 +98,7 @@ export async function buildMsixPrototype(root) {
     copyRegular(path.join(root, 'public/edgeview-mark.png'), path.join(app, 'Assets/PrototypeLogo.png'));
     const npm = path.join(path.dirname(node), 'node_modules/npm/bin/npm-cli.js');
     if (!fs.existsSync(npm)) throw new Error('MSIX_FACTORY_NPM_UNAVAILABLE');
-    const empty = path.join(output, 'empty.npmrc'); fs.writeFileSync(empty, '');
-    execute(node, [npm, 'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org',
-      `--userconfig=${empty}`, `--globalconfig=${empty}`, `--cache=${path.join(output, 'npm-cache')}`], app, 'dependencies');
+    execute(node, [npm, ...prototypeNpmArgs(output)], app, 'dependencies');
     const compiler = path.join(windows, 'Microsoft.NET/Framework64/v4.0.30319/csc.exe');
     execute(compiler, ['/nologo', '/target:winexe', '/platform:x64', '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll',
       '/reference:System.Web.Extensions.dll', `/out:${path.join(app, 'EdgeView.exe')}`, path.join(root, 'packaging/windows/EdgeViewLauncher.cs')], root, 'launcher');

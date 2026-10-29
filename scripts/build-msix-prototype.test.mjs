@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { prototypePreflight } from './build-msix-prototype.mjs';
+import { prototypePreflight, prototypeNpmArgs } from './build-msix-prototype.mjs';
 import { writeBuildMetadata } from './build-metadata.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-msix-preflight-'));
@@ -30,6 +30,19 @@ try {
   fs.unlinkSync(path.join(root, 'unreviewed.txt'));
   fs.writeFileSync(path.join(root, 'dist/server.cjs'), '/* changed after build */');
   assert.throws(() => prototypePreflight(root), /MSIX_PROTOTYPE_BUILD_IDENTITY_MISMATCH/);
+  const npmRoot = path.join(root, '.git/npm-fixture'); fs.mkdirSync(npmRoot);
+  const app = path.join(npmRoot, 'app'); fs.mkdirSync(app);
+  const manifest = { name: 'synthetic-msix-policy', version: '1.0.0', scripts: { postinstall: 'node -e "require(\'fs\').writeFileSync(\'lifecycle-ran\',\'unexpected\')"' } };
+  fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify(manifest));
+  fs.writeFileSync(path.join(app, 'package-lock.json'), JSON.stringify({ name: manifest.name, version: manifest.version, lockfileVersion: 3, requires: true, packages: { '': manifest } }));
+  const npm = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
+  if (process.platform === 'win32' || fs.existsSync(npm)) {
+    assert.ok(fs.existsSync(npm));
+    const installed = spawnSync(process.execPath, [npm, ...prototypeNpmArgs(npmRoot), '--offline'], { cwd: app, env, encoding: 'utf8', windowsHide: true, timeout: 30_000 });
+    assert.equal(installed.status, 0, 'actual offline npm must accept distinct empty config scopes');
+    assert.equal(fs.existsSync(path.join(app, 'lifecycle-ran')), false, 'dependency lifecycle code must not execute');
+    console.log('PASS actual offline factory npm policy and lifecycle suppression');
+  } else console.log('SKIPPED factory npm policy: this non-Windows fixture host has no sibling npm CLI');
   fs.writeFileSync(path.join(root, 'dist/server.cjs'), '/* synthetic fixture */');
   writeBuildMetadata(root, 'f'.repeat(40));
   assert.throws(() => prototypePreflight(root), /MSIX_PROTOTYPE_BUILD_IDENTITY_MISMATCH/);

@@ -2235,3 +2235,8 @@ this a complete runtime payload, clean-Windows installation, signing, update or
 rollback. Final artifact/source-snapshot criteria remain unchanged. Browser and
 Windows-control initialization both failed with kernel-assets os error3, so
 Serper playground verification/account actions were not performed or fabricated.
+PKG04 first actual factory attempt failed before package creation: npm rejects a
+single empty config file loaded as both user/global scope. Match the existing
+bootstrap's distinct-file pattern and add an actual offline npm regression that
+also proves lifecycle scripts do not run. Both offline npm and real Git/build
+preflight tests now exit0. Failed private attempt retained; not an installer PASS.
