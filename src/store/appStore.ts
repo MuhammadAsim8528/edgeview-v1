@@ -199,7 +199,8 @@ export function useAppStore() {
         setSelectedFileId(newFile.id);
         setSelectedFile(newFile);
       }
-      setActiveTab('files');
+      // Upload starts in Files. Completion may update its selected dataset, but
+      // must not override a tab the user chose while parsing/persistence finished.
       showToast(`Successfully uploaded ${file.name}`, 'success');
       return newFile;
     } catch (err: any) {

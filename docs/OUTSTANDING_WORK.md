@@ -2177,3 +2177,17 @@ module auto-discovery under the minimal child environment. No alternate host,
 registry/security change or unsafe lock fallback. Real local identity test,
 typecheck/lint, production build, compiled duplicate/reused-PID/restart/storage
 regression and release smoke exit0. Hosted Windows result remains required.
+
+### UI04 — late upload must not steal navigation — verified scoped (2026-10-29)
+
+Hosted contact-export failure prompted a controlled real-browser reproduction:
+actual backend parsed/persisted an upload, its response was held, user navigated
+to Contacts, then completion forced Files. This test failed before source change.
+Remove only upload completion's unconditional setActiveTab(files); explicit
+file selection still navigates normally. New dataset selection and success toast
+remain. Actual rendered delayed-response test now preserves Contacts through
+completion and reload and shows newly uploaded rows. Existing contact scope/export
+selection and full upload/paging/country/restart workflow also pass (3tests).
+Typecheck, lint, E2E typecheck, build and release smoke exit0. This closes that
+reproduced upload navigation race, not every asynchronous navigation scenario or
+final live visual QA. No live3901 restart/customer-data mutation performed.
