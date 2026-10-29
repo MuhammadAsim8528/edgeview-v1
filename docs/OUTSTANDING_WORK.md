@@ -2214,3 +2214,24 @@ returned173,771decoded bytes from30,387gzip wire bytes in1,638ms (HTTP200).
 This is observed wire reduction, not a target-device benchmark or Emerchemie fix.
 No new provider, parser authority or dependency was introduced. Real-company,
 installed-package, full UI and recovery gates remain open.
+
+### PKG04 — repeatable internal MSIX factory — implemented, end-to-end pending
+
+Replace manual-only packaging experiment steps with a reviewed factory. It
+requires clean committed source and exact matching source/artifact/commit identity;
+actual isolated Git fixtures prove dirty/stale/wrong-commit refusal. It stages an
+explicit named build allowlist, locked production dependencies with scripts and
+customer registry config disabled, vendor-signature-checked Node, official matched
+Node license, native launcher and durable close bridge. SDK output streams to a
+file, preserving the earlier buffer-overflow lesson. Explicit mapping excludes
+only the previously reproduced invalid Mammoth test path. Output is a unique
+private temporary unsigned internal candidate, not Desktop final source/installer.
+Payload hashes and candidacy blockers are retained; no install/sign/trust/security
+change/live restart/publication occurs. Prototype monitoring remains disabled.
+
+node --check and actual Git/build preflight tests exit0. Full SDK/dependency
+factory run has not yet been attempted on this committed factory. Do not call
+this a complete runtime payload, clean-Windows installation, signing, update or
+rollback. Final artifact/source-snapshot criteria remain unchanged. Browser and
+Windows-control initialization both failed with kernel-assets os error3, so
+Serper playground verification/account actions were not performed or fabricated.

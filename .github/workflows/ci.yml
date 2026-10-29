@@ -67,6 +67,7 @@ jobs:
       - run: node scripts/dev-server.test.mjs
       - run: node scripts/launcher-process-exit.test.mjs
       - run: node scripts/build-metadata.test.mjs
+      - run: node scripts/build-msix-prototype.test.mjs
       - run: node scripts/local-load-smoke.test.mjs
       - run: node --import tsx server/tests/build_identity_presentation.test.tsx
       - run: node --import tsx server/tests/runtime_usage_presentation.test.tsx
