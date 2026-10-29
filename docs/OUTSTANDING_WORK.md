@@ -2170,3 +2170,10 @@ START01: hosted f7edda8 still failed real process inspection with TIMEOUT at15s;
 longer waiting alone did not close it. Inspect Windows cmdlet module discovery
 rather than weakening the actual-host assertion. Browser17/18 passed; contact
 export scenario could not find All exporters and requires separate investigation.
+START01 framework probe correction (2026-10-29): actual hosted TIMEOUT persisted
+at15seconds, so deadline increase was insufficient. Replace Get-Process cmdlet
+with the loaded System.Diagnostics.Process API and dispose the handle, avoiding
+module auto-discovery under the minimal child environment. No alternate host,
+registry/security change or unsafe lock fallback. Real local identity test,
+typecheck/lint, production build, compiled duplicate/reused-PID/restart/storage
+regression and release smoke exit0. Hosted Windows result remains required.

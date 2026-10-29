@@ -9,10 +9,10 @@ export function processBirthIdentity(pid: number, onUnavailable?: (reason: 'TIME
     if (process.platform === 'win32') {
       const windowsRoot = process.env.SystemRoot || 'C:\\Windows';
       const executable = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-      const value = execFileSync(executable, ['-NoProfile', '-NonInteractive', '-Command',
-        `$ErrorActionPreference='Stop'; (Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks.ToString()`],
-      // Cold Windows runners can exceed five seconds while initializing the OS
-      // shell. Keep one bounded probe, never a retry/poll loop or an unsafe fallback.
+      const value = execFileSync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+        `$ErrorActionPreference='Stop'; $p=[System.Diagnostics.Process]::GetProcessById(${pid}); try { [Console]::Out.Write($p.StartTime.ToUniversalTime().Ticks.ToString([Globalization.CultureInfo]::InvariantCulture)) } finally { $p.Dispose() }`],
+      // Avoid Get-Process cmdlet auto-discovery in the minimal child environment.
+      // Use the loaded framework API directly, as the existing DPAPI adapter does.
       { timeout: 15000, maxBuffer: 4096, windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
         env: { SystemRoot: windowsRoot, WINDIR: windowsRoot } }).trim();
       if (/^\d{10,}$/.test(value)) return `windows:${value}`;
