@@ -2,7 +2,49 @@
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
-### Owner stop / resume checkpoint — 2026-10-26
+### Current checkpoint — 2026-10-29 (supersedes dated coordination notes)
+
+Owner resumed on October28. Continue implementation; do not interpret the older
+stop note below as an active stop. This session owns source/tests/docs in
+edgeview-integration, integration/edgeview-v1-20261024. Original project remains
+clean b6db239 and serves live3901, PID27072, database OK at the latest observation.
+It does NOT contain the integration branch's newer fixes. Permanent original-tree
+reconciliation remains open; no silent runtime swap/customer-data operation.
+
+Verdict NOT READY. Keep all older unfinished goals. Microsoft account/Store setup
+and final live/manual visual QA are deferred by owner; prepare package/tooling
+first. No Store submission, public release, public installer/feed or final Desktop
+snapshot is authorized. Working Desktop guides exist; incomplete installer/version
+folders must not be represented as accepted releases.
+
+Latest scoped results: f6ee2c9 complete saved-contact HTML collections; 4b306b3
+reproduced late-upload navigation race corrected with actual rendered regression;
+afa6abd bounded official gzip with real Slim wire reduction and adversarial tests.
+Hosted release40915213513, research40915213324 and inventory40915213323 all SUCCESS
+at afa6abd. These are not clean-Windows/factual-accuracy/customer-release proof.
+
+Emerchemie remains an observed FAIL: correct domain but incomplete public contacts
+after fresh provider/API/export/restart repeats. Its server currently sends a
+large uncompressed page too slowly for capture deadlines. The official Serper
+playground public implementation confirms a page endpoint; one guarded probe
+returned200/2credits but only121bytes of page text, not complete contacts. No
+production cloud fallback or expected fact injection was added. See CC04/report.
+
+Current internal MSIX candidate uses source11c7caf, build
+0b52634bbe7379796f778cbd277a31fc758ef837952df0c74153315501bf829d,
+SHA2563c5e2b098ffa133c4207ddc4e3bd6af1bdbd15d7841b41f2d893f78259295afa.
+SDK pack/unpack and extracted bundled-runtime upload/export/restart/diagnostic
+checks passed. Native GUI execution, installed activation, trusted publisher,
+current Node security selection, payload minimization/OSS, migration/update/
+rollback and clean-Windows acceptance are NOT VERIFIED. Prototype monitoring OFF.
+It is unsigned internal evidence outside Desktop, not a customer installer.
+
+Screenshot capture infrastructure produced six UNREVIEWED synthetic images;
+missing approved references deliberately fail comparison. No baseline approved.
+Both supported browser/Windows-control initializations currently fail kernel
+assets os error3. No dashboard/account click or final visual approval is inferred.
+
+### Historical owner stop / resume checkpoint — 2026-10-26 (superseded)
 
 STOP explicitly requested; no further implementation/account/visual work until
 the owner resumes. Last implementation commit 877aba84ee13fa5672f35681fb06ed95f850f307.
@@ -845,30 +887,34 @@ the cited acceptance scope, never automatically to the whole product.
 
 | ID / priority | Requirement; current state / capability | Code / commits / executed evidence | Remaining acceptance and dependencies |
 | --- | --- | --- | --- |
-| CC01 P0 | Company+country identity from upload to history; implementing / partial | 75e8cac, 22a7879, 18d6ffb, adfd099; identity/country fixtures and actual Getz Kenya provider comparison; verification/GETZ_KENYA_2026-10-25.md | Remaining complex layouts/aliases, every cache/API/UI/export path and additional real-company rendered acceptance; no whole-product correctness claim |
+| CC01 P0 | Company+country identity from upload to history; implementing / partial | Identity/country fixtures; fresh Getz Kenya and Slim Sri Lanka provider→HTTP/persistence/export/restart evidence in verification reports | Emerchemie capture still FAIL; complex layouts/aliases, additional companies, final rendered/full-dataset acceptance; no whole-product correctness claim |
 | CC02 P0 | Field-level local/parent/subsidiary/distributor attribution; implementing / partial | 18d6ffb office HTML recall; adfd099 personal-name/location; 5689c7f role cleanup; 70d7d38 structured per-object ISO office/related-entity scope, malformed/budget abstention; fixtures and retained actual Getz reprojection PASS | Broader visible office/parent leadership layouts, general relationship and @id graphs, multilingual names and per-field real UI/export evidence; no whole-product accuracy claim |
-| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; implementing / partial | 3a9672e stale-overlay withholding, 30c7f92 offline revalidation, 7baea6d unscoped dedup; 70d7d38 policy 25, policy-24 matching-entity withholding with stored recovery preservation and cached batch PASS | Large real-history cost, interrupted/retried jobs, aliases and actual current dataset/API/UI/export acceptance; preserve original raw runs |
+| CC03 P0 | Country-aware history/cache and no foreign repair of missing facts; implementing / partial | Stale overlay withholding/offline reprojection/unscoped dedup; current shared policy27 includes structured country, local-HQ management and actual social-anchor scope; stored recovery/raw preservation and cached batch regressions PASS | Large real-history cost, interrupted/retried jobs, aliases and current real dataset/API/UI/export acceptance; policy number alone does not prove fact correctness |
+| CC04 P0 | Reliable official-page acquisition; implementing / partial with real failure | 7fc82f1 CMS/contact priority and bounded transient retries; afa6abd official gzip, synthetic storage/projection tests and real Slim compressed capture PASS | Emerchemie run-mvtrc2gh-d3453b35b3 remains incomplete; server ignores gzip and transfer stalls. Serper page probe returns only header/address text. Full published contacts/leadership source→UI must still pass |
 | CORE01 P0 | Bounded V1/provider capture, evidence and prior-good preservation; implementing / partial | v1_engine.ts, job_manager.ts; actual NVIDIA query/extraction 200 and four Serper search 200 requests in each Getz acceptance run; direct failure records retained | Groq/Hunter real operations/failure/recovery not proven by configuration; full source-to-render truthsets, limitations and whole-dataset workflow remain open |
-| DATA01 P0 | CSV/XLSX/NVL, importer scope, pagination/export/state; planned / partial | routes/upload.ts, db.ts, Contacts.tsx, FileViewer.tsx, appStore.ts; previous branch fixes not assumed all integrated | Reconcile actual importers/exporters/duplicates, UI controls, refresh/navigation races and accurate counts; no customer dataset writes during fixtures |
+| DATA01 P0 | CSV/XLSX/NVL, importer scope, pagination/export/state; implementing / partial | Existing parsing/paging fixes; f6ee2c9 saved collections in HTML; 4b306b3 delayed upload preserves chosen tab, actual browser/export/restart checks PASS | Real importer/exporter/duplicate/count reconciliation and wider navigation/state acceptance; synthetic checks do not mutate or accept the customer dataset |
+| EXP01 P1 | All saved contact collections in HTML export; verified scoped implementation | f6ee2c9; actual endpoint hostile text/source URLs, secondary contacts/leadership, same-name foreign selection and unscoped exclusion PASS | Final downloaded-document visual and real-company complete export acceptance remain part of QA01; no unsupported facts admitted |
+| START01 P0 | Reused PID must not impersonate backend owner; verified scoped integration | e699dd2/8fc046d process-birth sidecar, conservative inspection failures; actual duplicate/reused-PID compiled runtime tests and hosted afa6abd checks PASS | Original/main still uses numeric legacy lock until reviewed integration; local native launcher trust remains a separate blocker |
 | JOB01 P0 | Progress/cancel/retry, bounded waits and crash recovery; planned / partial | job_manager.ts, ResearchWorkspace.tsx, SHUTDOWN_RECOVERY.md, RESEARCH_READ_RECOVERY.md | Trace cancellation to transport/job persistence; kill/restart/retry and no spinner/lost state; fresh runtime/visible proof |
 | SEC01 P0 | Local Host/Origin, SSRF/DNS/redirect/credential origin and resource limits; planned / partial | server.ts, ai_providers.ts, url_safety.ts, routes/upload.ts, security tests | Reconcile exact current tests and deployed build; alias/raw requests and malformed/error cases; preserve safe loopback boundary |
-| SEC02 P0 | DPAPI secret authority/history/package scans; planned / partial | settings.ts, scan-history-gitleaks.mjs, CI; older branch package scan candidate uncommitted | Review/install current secret boundary; staged-content gate and old main alerts; never publish credentials or claim missing private GitHub features passed |
+| SEC02 P0 | DPAPI secret authority/history/package scans; implementing / partial | settings.ts, scan-history-gitleaks.mjs; 98bf418 committed staged-content publication gate; actual hosted developer-package checks PASS | Previously exposed key rotation, final customer-package/history scope, default-main8alerts and private GitHub security feature availability remain distinct open gates |
 | MON01 P0 | Privacy-safe Sentry/PostHog plus disabled/offline controls; implementing / partial | 5f33d83 actual dashboard receipt recorded a112dac; current saved per-purpose Settings controls, actual queue/opt-out transport regression and isolated rendered restart/failure acceptance | Broader actual frontend crash and startup/unhandled coverage, target installation and final-package acceptance; no SDK-flush-only dashboard claims |
 | MON02 P0 | Account IP/location privacy; partially verified externally | a112dac/2b6b8d7: 5f33d83 synthetic dashboard receipt, Sentry backend geography filtered/IP prevention, PostHog GeoIP disabled/discard-IP, persisted autocapture OFF/replay OFF, existing error alert triggered/hourly throttle | Owner inbox delivery, access/retention, fresh separate frontend project effects and final release-wide acceptance remain unverified |
 | DIAG01 P1 | Honest diagnostics preview/export/retention/support; planned / partial | support_diagnostics.ts, SystemHealthPanel.tsx; 365021c; support_diagnostics.test.ts | Review actual overview/provider/resource/error states, visible preview/download, offline and redaction; no raw logs/content leakage; support contact requires genuine publisher details |
 | PRIV01 P0 | Accessible privacy notice and AI/search disclosures; implementing / partial | 960e95e PrivacyNotice.tsx, updated current MonitoringControls.tsx, per-purpose saved consent; isolated keyboard/save/restart/failure checks and screenshot inspected | Genuine publisher privacy/support URLs, About/notices/licensing and final package acceptance; live browser origin remains denied |
 | ID01 P1 | Installation identity distinct from licensing/HWID; planned / partial | install_identity.ts random UUID; prior identity/doctor tests | UUID is not cryptographic licensing. Inspect DPAPI/private-key authority and corruption/recovery. Raw HWID authentication deferred; no hardware analytics |
-| REL01 P0 | One integration line, narrow commits and version/build/schema/channel; implementing / partial | build_identity, build metadata, sql.js schema, Git/CI; integration at 75e8cac | Reconcile older branch fixes and Qoder launcher commits individually; exact package identity, pilot/stable promotion and changelog; no rebuilding different code on promotion |
+| REL01 P0 | One integration line, narrow commits and version/build/schema/channel; implementing / partial | Current integration source/CI; version1.0.0-rc.2 and exact content-derived build/commit identities; fresh internal candidate11c7caf | Original/main remains b6db239 and unreconciled; review remaining main-only verifier/tar/test-debt work, channel/promotion identity and release notes; no different-byte promotion under one version |
 | CI01 P0 | CI, dependency/license/SBOM/secret/release evidence; planned / partial | .github/workflows, release-license-inventory, collect-license-texts, verify-release-evidence | Actual current commit jobs/artifacts, dependency advisories and license texts; native private-repo CodeQL/push protection availability not assumed |
 | STORE01 P0 | sql.js/JSON/evidence authority and integrity; planned / implemented, broader recovery unverified | sqlite.ts, sqlite_persistence.ts, v1_engine.ts; existing atomic/integrity tests | Old-version upgrades, failed writes, locking and interrupted runtime tests with exact schema evidence; no new persistence authority |
 | MIG01 P0 | Stable writable root and explicit legacy migration; planned / partial | shared/runtime_paths.mjs and c8019b7 opt-in EDGEVIEW_DATA_DIR, doctor/backup tests | No legacy migration claimed. Destination/link/junction checks, preflight/backup/journal, interrupted promotion/stale policy and ambiguity refusal; needed before installer |
 | REC01 P0 | Backup/transactional restore/schema-compatible rollback; planned / partial | backup-runtime.mjs, migration_backup_retention.ts, prior isolated tests | Rejected restore stays excluded. Executable matched app/data recovery, midway failures, integrity/restart and schema compatibility; package downgrade is not DB rollback |
-| DIST01 P0 | Bundled runtime and immutable customer payload; planned / absent customer distribution | package-windows/EdgeView.bat developer ZIP; Windows SDK located; c8019b7 data-root precursor | No customer Node/npm/Git/IDE; runtime-only licenses, stable launcher/data location and complete lifecycle; depends MIG01/REC01/REL01 |
+| DIST01 P0 | Bundled runtime and immutable customer payload; implementing / partial, no accepted customer distribution | Committed internal MSIX factory and candidate11c7caf; exact extracted payload runs copied Node with no global Node/NODE_PATH, empty data/upload/export/restart/diagnostic checks PASS | Trusted signing/native activation, current Node security, source-map/test/dependency minimization/OSS, real clean Windows, complete lifecycle and MIG01/REC01/REL01 still required |
 | MS01 P1 | Microsoft Store vs signed MSIX/feed decision; planned / unverified account | WINDOWS_DISTRIBUTION_DECISION.md is evaluation only | Current official eligibility/fees/publisher/account/signing/policy review and visible official account handoff if needed; user handles identity/payment/agreement/attestations. Choose one update authority |
 | UPD01 P0 | Trusted update acceptance and compatible recovery; planned / absent accepted updater | UNCLE_INSTALL_UPDATE_SUPPORT_PLAN.md, build recovery only | Package trust, channel/schema compatibility, preserved state, restart health/build/DB acceptance, last-known-good recovery; depends selected distribution route and migration |
 | UX01 P1 | Accessibility/About/notices/support; planned / partial | React UI, prior focused browser/a11y tests, license inventory | Keyboard/focus/dialog/forms/error/empty workflows, actual About/version/notices, genuine support details; no broad redesign |
 | PERF01 P1 | Offline/failure UX and target-device long performance; planned / partial | resource monitoring, prior smoke/soak JSON and bounded queues/logs | Fresh target idle/start/import/export/research/shutdown measurements; long repeated leak tests and disk/DB/permission/network failures; no scale claims from short smoke |
-| QA01 P0 | Rendered controls and real company truthsets; blocked / unverified for live instance | Playwright infrastructure exists; last supported Chrome local-origin access denied despite Always allow UI | No bypass/alternate port. External dashboards accessible; real Global Pharma/Thorne Berry/Emerchemie/Slim and Getz local-scope source→UI checks pending supported access |
+| QA01 P0 | Rendered controls and real company truthsets; implementing / partial, final live QA deferred | Actual synthetic browser regressions/hosted screenshots PASS; Getz/Slim source-to-HTTP/export/restart scoped evidence; Emerchemie fresh acceptance FAIL | Final live/manual QA deferred; browser/Windows helpers currently fail kernel-assets initialization, not an EdgeView port diagnosis. No baseline approval or country/product-wide acceptance; Global Pharma/Thorne Berry/whole dataset remain |
+| QA02 P1 | Screenshot capture/comparison infrastructure; implemented and capture exercised | 032de45; two desktop/narrow cases produce six synthetic unreviewed screenshots, build metadata and failure traces; missing reference negative test exits1 | Approve consistent-platform references only after review; no baseline currently approved, no pixel comparison PASS and no final live visual acceptance |
 | PILOT01 P0 | Clean Windows install/update/recovery/uninstall pilot; planned / absent acceptance | Existing developer ZIP/Docker are not evidence | Exact frozen self-contained package on clean Windows; synthetic import/research/export/offline/restart/update/failure/retention; then authorized real-data step |
 | FINAL01 P0 | Freeze/three artifacts/report/uncle Stable deployment; planned / absent release acceptance | Existing release contract and preserved source/data architecture | Close dependent gates; exact source archive, private operational snapshot without casual credentials, runtime distribution/checksums/SBOM/notices/release notes; final READY/READY WITH WARNINGS/NOT READY from evidence |
 
@@ -2240,3 +2286,30 @@ single empty config file loaded as both user/global scope. Match the existing
 bootstrap's distinct-file pattern and add an actual offline npm regression that
 also proves lifecycle scripts do not run. Both offline npm and real Git/build
 preflight tests now exit0. Failed private attempt retained; not an installer PASS.
+
+### PKG04 actual MSIX / extracted-runtime evidence — 2026-10-29
+
+Factory11c7caf produced EdgeView-1.0.0-rc.2-11c7caf-UNSIGNED.msix,
+123,969,775bytes,27,411mapped files, SHA256
+3c5e2b098ffa133c4207ddc4e3bd6af1bdbd15d7841b41f2d893f78259295afa,
+build0b52634bbe7379796f778cbd277a31fc758ef837952df0c74153315501bf829d.
+Private temporary folder edgeview-msix-candidate-F69bQM retains mapping, payload
+hash manifest, SDK logs and Node24.19.0 vendor signature/license evidence. Locked
+production npm install completed437packages; deprecation warnings retained.
+
+Actual MakeAppx pack/unpack exit0. New verifier requires the independently recorded
+factory package hash, re-extracts it into a new owned directory using the SDK,
+verifies source/artifact and mapped-file hashes plus exact current vendor Node
+bytes before executing. It uses bundled Node and actual packaged shutdown bridge,
+PATH System32 only, empty NODE_PATH/NODE_OPTIONS and isolated synthetic state.
+Observed empty first launch/new UUID, two same-name/different-country identities,
+actual upload/scoped HTML export, missing-key503, no diagnostic private markers,
+normal pipe close and restart UUID/data, no installed-root state writes: PASS.
+Latest evidence: runtime-acceptance-Ki5SDQ/result.json inside that private folder.
+
+Native GUI exe was NOT executed; package NOT installed/signed/customer accepted.
+This host has developer tools, so it is not clean-Windows proof. Current Node
+security selection, payload/test/source-map minimization, full OSS/security scan,
+monitoring enabled delivery, migration/update/rollback and real company truthsets
+remain open. No provider keys, original data, .env or old installation identity
+were copied. Original live3901 remains b6db239/database OK; no restart performed.
