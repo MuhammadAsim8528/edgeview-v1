@@ -2127,3 +2127,23 @@ Playwright using synthetic deterministic states, review captures before approvin
 baselines, never auto-accept current images as known-correct. Final live rendered
 QA remains separately open; pixel matching does not prove company-country facts.
 START01 follow-up local checks: real process inspection, typecheck, lint, production build, actual compiled separate-data lock/restart/backup regression and release smoke exit0. Hosted verification of the longer bounded probe remains pending.
+
+### QA02 — synthetic screenshot infrastructure — implementing (2026-10-29)
+
+Reuses existing Playwright/backend fixture, no new SaaS/browser shell. Dedicated
+capture and compare commands cover desktop/narrow empty storage, synthetic loaded
+file and Settings. Backend paths are isolated, provider keys empty, external
+traffic blocked; no live3901 or customer rows. Six review images retain source/
+build identity. Capture artifacts are labelled UNREVIEWED and CI retention7days.
+Compare uses updateSnapshots=none, zero pixel difference and a precondition for
+existing reviewed platform-specific references. No baseline is approved yet.
+
+Observed: E2E typecheck and test discovery exit0. First capture failed desktop
+Settings during a5.6hour wall-clock interval; narrow passed. Failure screenshot/
+trace retained privately. Unchanged repeat completed both cases in10seconds.
+The long interval is not a normal performance measurement or diagnosed product
+root cause. Final script repeat pending. Compare deliberately exited1 for both
+missing reviewed baselines and created none: this is expected rejection, not a
+visual comparison PASS. Final live/manual QA and broader screenshot states remain
+open. Pixel equality never establishes country attribution or installation.
+QA02 final local capture: both scenarios completed in15.2seconds, six unreviewed PNGs produced. No pixel comparison or final visual acceptance claimed.

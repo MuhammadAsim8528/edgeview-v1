@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "test:e2e": "playwright test",
+    "test:visual": "node scripts/run-visual-check.mjs --compare",
+    "test:visual:capture": "node scripts/run-visual-check.mjs --capture",
     "test:soak": "playwright test --config playwright.soak.config.ts",
     "typecheck:e2e": "tsc --noEmit -p tests/e2e/tsconfig.json",
     "doctor": "node scripts/doctor.mjs",

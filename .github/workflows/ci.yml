@@ -176,11 +176,21 @@ jobs:
       - run: npm run build
       - run: npx playwright install chromium
       - run: npm run test:e2e
+      - name: Capture synthetic review screenshots (not baseline approval)
+        run: npm run test:visual:capture
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: EdgeView-synthetic-browser-evidence
           path: .test-cache/e2e-artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EdgeView-unreviewed-visual-captures
+          path: .test-cache/visual-artifacts/
           if-no-files-found: warn
           retention-days: 7
 

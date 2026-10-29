@@ -18,6 +18,7 @@ New instructions extend that ledger. This index is navigation, not another roadm
 - [Build identity](BUILD_IDENTITY.md)
 - [Writable state boundary](WRITABLE_STATE_BOUNDARY.md)
 - [Browser tests](BROWSER_E2E.md)
+- [Synthetic screenshot capture and reviewed comparisons](../tests/visual/README.md)
 - [Support diagnostics](SUPPORT_DIAGNOSTICS_EXPORT.md)
 - [Monitoring acceptance](MONITORING_ACCEPTANCE_2026-10-25.md)
 - [Getz Kenya acceptance](verification/GETZ_KENYA_2026-10-25.md)
