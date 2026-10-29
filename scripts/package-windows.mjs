@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { verifyPackage } from './verify-package.mjs';
 import { withScanner } from './scan-history-gitleaks.mjs';
+import { systemTar } from './system-tar.mjs';
 
 const root = process.cwd();
 const deliverables = path.resolve(root, '..', '..', 'outputs');
@@ -117,10 +118,7 @@ function hashTree(directory, relative = '') {
 hashTree(stage);
 fs.writeFileSync(path.join(stage, 'PACKAGE_MANIFEST.json'), `${JSON.stringify({ format: 1, files: manifest }, null, 2)}\n`, 'utf8');
 
-const systemTar = path.join(process.env.SystemRoot ?? '', 'System32', 'tar.exe');
-// A bash-flavoured PATH can put GNU tar first, which reads C:\... as a remote share and, on other
-// hosts, silently writes an uncompressed tarball behind the .zip name.
-const archiver = process.platform === 'win32' && fs.existsSync(systemTar) ? systemTar : 'tar';
+const archiver = systemTar();
 const archived = spawnSync(archiver, ['-a', '-c', '-f', zip, '-C', buildRoot, path.basename(stage)], { encoding: 'utf8' });
 if (archived.status !== 0) throw new Error(archived.stderr || `Failed to create Windows ZIP with ${archiver}`);
 if (fs.statSync(zip).size < 4) throw new Error('Windows ZIP is too small to be an archive.');

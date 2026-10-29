@@ -80,6 +80,7 @@ jobs:
       - run: node scripts/generate-sbom.test.mjs
       - run: node scripts/package-preservation.test.mjs
       - run: node scripts/verify-package.test.mjs
+      - run: node scripts/system-tar.test.mjs
       - run: node scripts/scan-history-gitleaks.test.mjs
       - run: node scripts/package-content-secrets.test.mjs
       - run: node --import tsx server/tests/fatal_errors.test.ts

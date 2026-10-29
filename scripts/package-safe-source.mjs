@@ -1,6 +1,9 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { systemTar } from './system-tar.mjs';
+
+const tar = systemTar();
 
 const root = process.cwd();
 const outputDir = join(root, '.agent', 'packages');
@@ -13,10 +16,10 @@ const excludes = [
   '*.log', '*.bak', '*.backup', '*.backup.*', '*.pid', '*.err', '*.lock', 'v1-coverage-audit.json',
 ];
 const args = ['-a', '-c', '-f', output, ...excludes.map((value) => `--exclude=${value}`), '.'];
-const created = spawnSync('tar', args, { cwd: root, encoding: 'utf8' });
+const created = spawnSync(tar, args, { cwd: root, encoding: 'utf8' });
 if (created.status !== 0) throw new Error(`Safe package creation failed: ${created.stderr || 'tar failed'}`);
 
-const listed = spawnSync('tar', ['-tf', output], { cwd: root, encoding: 'utf8' });
+const listed = spawnSync(tar, ['-tf', output], { cwd: root, encoding: 'utf8' });
 if (listed.status !== 0) {
   rmSync(output, { force: true });
   throw new Error(`Safe package verification failed: ${listed.stderr || 'tar listing failed'}`);

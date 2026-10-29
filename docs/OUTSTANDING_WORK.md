@@ -2327,3 +2327,7 @@ proves a rewritten self-consistent manifest passes: integrity is not authenticit
 Qoder's historical mutation claims were not re-executed or adopted as new proof.
 Other main-only tar/test-debt/docs and upload-message differences remain under
 review. This narrow test adoption does not reconcile main or deploy the live app.
+
+### REL01 archive-tool reconciliation — 2026-10-29
+Reviewed main commit3493912 and adopted only its six archive-tool files. Resolved the package-builder import conflict by retaining BOTH systemTar and withScanner; no credential gate removed. Added the helper regression to CI. Executed: system-tar test PASS; package-preservation test PASS; actual package-content-secrets test PASS (multilingual benign package, encoded/compressed credential canaries, scanner failures, previous-artifact preservation); typecheck PASS; lint PASS; four changed script syntax checks PASS; git diff check PASS. No live restart, customer-data modification, existing output replacement or final source export. Legacy package-safe-source exclusion copying is NOT accepted as the final explicit-allowlist snapshot procedure. Installed MSIX, clean Windows and full release gates remain unverified.
+

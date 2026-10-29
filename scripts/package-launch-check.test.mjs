@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { verifyPackage } from './verify-package.mjs';
+import { systemTar } from './system-tar.mjs';
 
 const root = path.resolve(process.argv[2] || '../../outputs/EdgeView-V1-Windows');
 verifyPackage(root, { rejectUnexpected: true });
@@ -20,7 +21,7 @@ check(root);
 const extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-zip-launch-check-'));
 try {
   const zip = path.join(path.dirname(root),'EdgeView-V1-Windows.zip');
-  const extraction = spawnSync('tar', ['-xf',zip,'-C',extracted], { encoding: 'utf8' });
+  const extraction = spawnSync(systemTar(), ['-xf',zip,'-C',extracted], { encoding: 'utf8' });
   assert.equal(extraction.status, 0, extraction.stderr);
   const unpacked = path.join(extracted,'EdgeView-V1-Windows');
   verifyPackage(unpacked, { rejectUnexpected: true });

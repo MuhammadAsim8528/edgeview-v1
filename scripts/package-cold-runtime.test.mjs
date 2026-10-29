@@ -7,6 +7,7 @@ import { performance } from 'node:perf_hooks';
 import crypto from 'node:crypto';
 import { verifyPackage } from './verify-package.mjs';
 import { ensureDependencies } from './ensure-dependencies.mjs';
+import { systemTar } from './system-tar.mjs';
 
 const source = process.cwd();
 const zip = path.resolve('../../outputs/EdgeView-V1-Windows.zip');
@@ -36,7 +37,7 @@ async function runNode(args, cwd, timeoutMs) {
   } finally { clearTimeout(timeout); clearInterval(heartbeat); }
 }
 try {
-  const extraction = spawnSync('tar', ['-xf',zip,'-C',root], { encoding: 'utf8' });
+  const extraction = spawnSync(systemTar(), ['-xf',zip,'-C',root], { encoding: 'utf8' });
   assert.equal(extraction.status, 0, extraction.stderr);
   const installed = path.join(root,'EdgeView-V1-Windows');
   verifyPackage(installed, { rejectUnexpected: true });
