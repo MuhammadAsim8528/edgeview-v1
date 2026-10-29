@@ -1,4 +1,7 @@
 import assert from 'assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { NvidiaProvider, GroqProvider, fetchProviderModels } from '../ai_providers';
 import { resolveApiKey, maskKey } from '../settings';
 import { validateHttpHeaderValue, assertSafeHeaderValue } from '../utils/header_encoder';
@@ -83,15 +86,33 @@ async function assertProviderGuard() {
 }
 await assertProviderGuard();
 
-// 6. fetchProviderModels must resolve masked input to stored secret and never emit a masked header.
-//    (Uses the real stored config key; must not throw a ByteString error.)
+// 6. Exercise the real settings resolver using synthetic storage only. A refused
+// request is not a successful resolution; every unexpected failure must fail CI.
+const originalConfig = process.env.EDGEVIEW_CONFIG;
+const originalCatalog = NvidiaProvider.listModels;
+const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-bytestring-'));
+const syntheticStored = 'nvapi-SYNTHETIC0000000000000000000000';
+let catalogCalls = 0;
 try {
-  const result = await fetchProviderModels('nvidia', 'nvap••••••••XXXX', undefined, true);
-  assert.ok(Array.isArray(result.models), 'fetchProviderModels must return a model array');
-  console.log(`✅ Test 6: fetchProviderModels resolved masked key → fetched ${result.models.length} NVIDIA models (no ByteString)`);
-} catch (err: any) {
-  assert.ok(!err.message.includes('ByteString'), `fetchProviderModels surfaced ByteString: ${err.message}`);
-  console.log(`✅ Test 6: fetchProviderModels with masked key failed cleanly (not ByteString): ${err.message.slice(0, 80)}`);
+  process.env.EDGEVIEW_CONFIG = path.join(isolatedRoot, 'config.json');
+  fs.writeFileSync(process.env.EDGEVIEW_CONFIG, JSON.stringify({ nvidia_api_key: syntheticStored, nvidia_base_url: '' }));
+  NvidiaProvider.listModels = async key => {
+    catalogCalls++;
+    assert.strictEqual(key, syntheticStored, 'catalog must receive the synthetic stored secret, never the mask');
+    assertSafeHeaderValue(`Bearer ${key}`, 'Authorization header');
+    return [{ id: 'synthetic-model', name: 'Synthetic model' }];
+  };
+  const result = await fetchProviderModels('nvidia', maskKey(syntheticStored), undefined, true);
+  assert.strictEqual(catalogCalls, 1, 'the settings-to-provider path must actually execute');
+  assert.deepStrictEqual(result.models.map(model => model.id), ['synthetic-model']);
+  assert.strictEqual(result.cached, false, 'cached output must not hide a broken resolver');
+  console.log('PASS Test 6: synthetic stored credential reached the catalog boundary; no live provider contacted');
+} finally {
+  NvidiaProvider.listModels = originalCatalog;
+  if (originalConfig === undefined) delete process.env.EDGEVIEW_CONFIG;
+  else process.env.EDGEVIEW_CONFIG = originalConfig;
+  assert.strictEqual(path.dirname(fs.realpathSync(isolatedRoot)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(isolatedRoot, { recursive: true, force: true });
 }
 
-console.log('🎉 P0 BYTESTRING CREDENTIAL REGRESSION PASSED 100%');
+console.log('PASS ByteString credential regression (isolated catalog; real delivery NOT VERIFIED)');

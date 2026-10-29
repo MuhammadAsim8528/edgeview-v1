@@ -92,6 +92,8 @@ jobs:
       - run: node --import tsx server/tests/outbound_retrieval_safety.test.ts
       - run: node --import tsx server/tests/provider_model_discovery_e2e.test.ts
       - run: node scripts/model-test-outcome.test.mjs
+      - run: node --import tsx server/tests/bytestring_credential_regression.test.ts
+      - run: node scripts/bytestring-test-outcome.test.mjs
       - run: node --import tsx server/tests/provider_settings_runtime_sync.test.ts
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
       - run: node --import tsx server/tests/install_identity.test.ts
