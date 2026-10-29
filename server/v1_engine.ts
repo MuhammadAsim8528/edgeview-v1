@@ -634,15 +634,17 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
     url: result.url,
     max_bytes: officialDomain ? OFFICIAL_DIRECT_PAGE_MAX_BYTES : DEFAULT_DIRECT_PAGE_MAX_BYTES,
     ...(officialDomain ? { max_bytes_domain: officialDomain } : {}),
+    ...(officialDomain ? { accepted_content_encoding: 'gzip, identity' } : {}),
     ...(attempt > 1 ? { attempt } : {}),
   };
   const started = Date.now(); const requestedAt = now();
   let responseRecorded = false;
   try {
-    const { response, text } = await safeFetchOutboundText(result.url, {
+    const { response, text, transport } = await safeFetchOutboundText(result.url, {
       timeoutMs,
       maxBytes: request.max_bytes,
       maxBytesDomain: officialDomain,
+      allowGzip: Boolean(officialDomain),
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -650,7 +652,7 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
       },
     });
     const headers = Object.fromEntries(response.headers.entries());
-    const payload = { status: response.status, headers, body: text };
+    const payload = { status: response.status, headers, body: text, ...(transport ? { transport } : {}) };
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, ...(response.ok ? { response: payload } : { response: payload, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(payload) };
     run.raw_records.push(raw); responseRecorded = true;
     result.raw_record_id = [result.raw_record_id, raw.id].filter(Boolean).join(',');

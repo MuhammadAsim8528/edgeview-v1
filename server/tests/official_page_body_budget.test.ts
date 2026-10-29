@@ -7,6 +7,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { gzipSync } from 'node:zlib';
 import { safeFetchOutboundText } from '../url_safety';
 
 // Actual engine + pinned/bounded transport; only DNS, wire responses and search
@@ -72,12 +73,14 @@ const wire = ((options: any, callback: (incoming: any) => void) => {
       body = '<html><body>Ordinary small page</body></html>';
     }
     if (host === 'outside.example' && route === '/big') body = largeHtml;
-    if (!route.includes('chunked')) incoming.headers['content-length'] = String(Buffer.byteLength(body));
+    const compressed = String(options.headers['accept-encoding']).includes('gzip') && host.endsWith('trustanchor.co.ke');
+    const bytes = compressed ? gzipSync(Buffer.from(body)) : Buffer.from(body);
+    if (compressed) incoming.headers['content-encoding'] = 'gzip';
+    if (!route.includes('chunked')) incoming.headers['content-length'] = String(bytes.length);
     incoming.once('close', () => options.signal.removeEventListener('abort', abort));
     options.signal.addEventListener('abort', abort, { once: true });
     callback(incoming);
     if (!incoming.destroyed) {
-      const bytes = Buffer.from(body);
       for (let offset = 0; offset < bytes.length && !incoming.destroyed; offset += 64 * 1024) incoming.write(bytes.subarray(offset, offset + 64 * 1024));
       if (!incoming.destroyed) incoming.end();
     }
@@ -120,6 +123,8 @@ try {
   assert.ok(run.raw_records.some(record => record.kind === 'scrape' && record.failure?.message.includes('RETRIEVAL_BODY_LIMIT_EXCEEDED') && record.request.max_bytes === 4 * MiB), 'official size failure retained with bounded request');
   assert.ok(run.raw_records.some(record => record.kind === 'scrape' && record.request.url === 'https://outside.example/big' && record.failure && record.request.max_bytes === 2 * MiB), 'generic failure recorded at original budget');
   const scrapeRecords = run.raw_records.filter(record => record.kind === 'scrape');
+  assert.ok(scrapeRecords.some(record => !record.failure && (record.response as any)?.transport?.contentEncoding === 'gzip'
+    && (record.response as any).body === largeHtml), 'official gzip retains complete decoded HTML and explicit wire metadata');
   for (const suffix of ['/', '/leadership.php']) {
     const records = scrapeRecords.filter(record => record.request.url === `https://trustanchor.co.ke${suffix}`);
     assert.equal(records.length, 2, 'transient official failure receives exactly one bounded retry');

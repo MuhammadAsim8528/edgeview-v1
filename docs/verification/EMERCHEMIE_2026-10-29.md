@@ -42,3 +42,26 @@ homepage, actual bounded transport retry, exhaustion, original-failure retention
 immutable storage and country-scoped projection. Typecheck/lint/full V1,
 production build and release smoke passed. No rendered UI, complete public-info
 recall, installed-package or broader country correctness acceptance is claimed.
+
+## Fresh repeat after crawl correction — still incomplete
+
+Run run-mvtrc2gh-d3453b35b3 used exact source
+7fc82f14ac5229dcb5b24f13cd9afeca79c46c0d, build
+41eabcc075d03a225e8ba9ba4424422772fc93dc8a2075922066add86c3366df.
+The real contact-us.php now entered the crawl, and transient retries were retained,
+but official pages again timed out. Persisted result was2emails/0phones/
+0addresses/0people, PARTIAL. The required published contacts remained missing.
+HTTP/export/restart preserved that weak result; persistence success does not turn
+it into accurate/complete company intelligence. Original credentials unchanged
+and isolated temporary protected copies removed. This repeat FAIL remains open.
+
+Instrumentation through the existing guarded transport observed HTTP200 then
+only102,815body bytes in20seconds. A later15second probe received150,815bytes.
+The page is about3.67MB. Increasing retry count alone cannot guarantee retrieval.
+The server continued sending identity encoding when gzip was offered. No partial
+page is promoted and no independent expected facts are injected into product data.
+
+The new opt-in gzip path is separately verified on Slim Pharma's official contact
+page: HTTP200,173,771decoded bytes from30,387wire bytes in1,638ms. This proves a
+working bounded compressed capture, not that Emerchemie supports it or that the
+fresh Emerchemie acceptance passed. Broader failure fallback remains necessary.

@@ -2191,3 +2191,26 @@ selection and full upload/paging/country/restart workflow also pass (3tests).
 Typecheck, lint, E2E typecheck, build and release smoke exit0. This closes that
 reproduced upload navigation race, not every asynchronous navigation scenario or
 final live visual QA. No live3901 restart/customer-data mutation performed.
+
+### CC04 compressed official capture / real repeat — 2026-10-29
+
+7fc82f1 fresh Emerchemie run-mvtrc2gh-d3453b35b3 remains FAIL for required public
+contacts: the real CMS route was attempted, but timeout persisted;2emails and
+zero phones/addresses/people. Correct discovery/retry fixtures are not sufficient
+acceptance. Instrumentation confirmed HTTP200 followed by only102,815bytes in20s
+of a3.67MB page. The server currently ignores the gzip offer. Do not claim fixed.
+
+Add opt-in gzip only inside the already-resolved official-domain capture scope.
+Node streaming pipeline enforces both encoded and decoded byte caps and the same
+absolute deadline, rejects corrupt/truncated/concatenated-member expansion, and
+destroys streams on limit/cancellation. Generic/provider calls stay identity-only;
+foreign redirects lose the allowance and private targets remain blocked. Decoded
+Response headers are truthful; raw page evidence records wire headers/byte counts
+separately. Full decoded HTML survives storage/projection. No partial HTML accepted.
+
+Focused gzip/transport/provider-origin/schema tests, typecheck/lint, full V1,
+production build and release smoke exit0. Actual guarded Slim contact capture
+returned173,771decoded bytes from30,387gzip wire bytes in1,638ms (HTTP200).
+This is observed wire reduction, not a target-device benchmark or Emerchemie fix.
+No new provider, parser authority or dependency was introduced. Real-company,
+installed-package, full UI and recovery gates remain open.

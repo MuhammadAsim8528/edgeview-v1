@@ -2,6 +2,9 @@ import dns from 'dns/promises';
 import net from 'net';
 import http from 'node:http';
 import https from 'node:https';
+import { Transform, Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createGunzip } from 'node:zlib';
 
 export function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split('.').map((p) => parseInt(p, 10));
@@ -148,6 +151,7 @@ export const DEFAULT_EXTERNAL_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 export interface SafeOutboundTextResult {
   response: Response;
   text: string;
+  transport?: { contentEncoding: 'gzip'; encodedBytes: number; decodedBytes: number; headers: Record<string, string> };
 }
 
 export function appendBoundedResponseChunk(chunks: Buffer[], chunk: Buffer, bytesRead: number, maxBytes: number): number {
@@ -160,7 +164,7 @@ export function appendBoundedResponseChunk(chunks: Buffer[], chunk: Buffer, byte
 /** Fetches a public text page while bounding redirects, total time, and decoded body bytes. */
 export async function safeFetchOutboundText(
   urlStr: string,
-  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string } = {},
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string; allowGzip?: boolean } = {},
 ): Promise<SafeOutboundTextResult> {
   return captureOutboundText(urlStr, options, false);
 }
@@ -176,7 +180,7 @@ export async function safeFetchProviderRequest(
 
 async function captureOutboundText(
   urlStr: string,
-  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string },
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string; allowGzip?: boolean },
   providerRequest: boolean,
 ): Promise<SafeOutboundTextResult> {
   const {
@@ -184,8 +188,10 @@ async function captureOutboundText(
     maxBytes = DEFAULT_EXTERNAL_PAGE_MAX_BYTES,
     maxRedirects = 5,
     maxBytesDomain,
+    allowGzip = false,
     ...requestOptions
   } = options;
+  if (allowGzip && (providerRequest || !maxBytesDomain)) throw new Error('Compressed retrieval requires official page scope');
   const method = String(requestOptions.method || 'GET').toUpperCase();
   if (!providerRequest && method !== 'GET') throw new Error('Safe page retrieval supports GET only');
   if (providerRequest && !['GET', 'POST'].includes(method)) throw new Error('Unsupported provider request method');
@@ -229,11 +235,12 @@ async function captureOutboundText(
     const host = stripBrackets(parsed.hostname).replace(/\.$/, '');
     const inScope = maxBytesDomain === undefined || host === maxBytesDomain || host.endsWith(`.${maxBytesDomain}`);
     const bodyLimit = inScope ? maxBytes : Math.min(maxBytes, DEFAULT_EXTERNAL_PAGE_MAX_BYTES);
+    const mayDecompress = allowGzip && inScope && !providerRequest;
     const targetPort = parsed.port || (parsed.protocol === 'https:' ? 443 : 80);
 
     return new Promise<SafeOutboundTextResult>((resolve, reject) => {
       const headers = Object.fromEntries(new Headers(requestOptions.headers).entries());
-      headers['accept-encoding'] = 'identity';
+      headers['accept-encoding'] = mayDecompress ? 'gzip, identity' : 'identity';
       headers['host'] = parsed.host;
       if (bodyBytes) {
         headers['content-length'] = String(bodyBytes.length);
@@ -271,8 +278,9 @@ async function captureOutboundText(
           reject(new Error(`RETRIEVAL_UNSUPPORTED_CONTENT_TYPE:${contentType.split(';')[0]}`));
           return;
         }
-        const contentEncoding = String(incoming.headers['content-encoding'] || '').toLowerCase();
-        if (contentEncoding && contentEncoding !== 'identity') {
+        const contentEncoding = String(incoming.headers['content-encoding'] || '').trim().toLowerCase();
+        const compressed = mayDecompress && contentEncoding === 'gzip';
+        if (contentEncoding && contentEncoding !== 'identity' && !compressed) {
           incoming.destroy();
           reject(new Error(`RETRIEVAL_UNSUPPORTED_CONTENT_ENCODING:${contentEncoding}`));
           return;
@@ -286,6 +294,42 @@ async function captureOutboundText(
 
         const chunks: Buffer[] = [];
         let bytesRead = 0;
+        const complete = (encodedBytes?: number) => {
+          const bytes = Buffer.concat(chunks);
+          const text = providerRequest ? '' : bytes.toString('utf8');
+          const responseHeaders = new Headers();
+          for (const [key, value] of Object.entries(incoming.headers)) {
+            if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(key, item));
+            else if (value !== undefined) responseHeaders.set(key, String(value));
+          }
+          const wireHeaders = compressed ? Object.fromEntries(responseHeaders.entries()) : undefined;
+          if (compressed) { responseHeaders.delete('content-encoding'); responseHeaders.delete('content-length'); }
+          const validStatus = (status >= 200 && status <= 599) ? status : 502;
+          // Provider bytes remain exact; only explicitly scoped page capture may
+          // decode gzip, with its wire representation recorded separately.
+          const body = [204, 205, 304].includes(validStatus) ? null : new Uint8Array(bytes);
+          resolve({ response: new Response(body, { status: validStatus, headers: responseHeaders }), text,
+            ...(compressed ? { transport: { contentEncoding: 'gzip' as const, encodedBytes: encodedBytes!,
+              decodedBytes: bytes.length, headers: wireHeaders! } } : {}) });
+        };
+        if (compressed) {
+          let encodedBytes = 0;
+          const wireLimit = new Transform({ transform(chunk: Buffer, _encoding, callback) {
+            encodedBytes += chunk.length;
+            callback(encodedBytes > bodyLimit ? new Error('RETRIEVAL_BODY_LIMIT_EXCEEDED') : null, chunk);
+          } });
+          const collector = new Writable({ write(chunk: Buffer, _encoding, callback) {
+            try { bytesRead = appendBoundedResponseChunk(chunks, chunk, bytesRead, bodyLimit); callback(); }
+            catch (error) { callback(error as Error); }
+          } });
+          // pipeline owns destruction of all streams on limit, cancellation,
+          // malformed/truncated gzip or deadline. Nothing accepts partial HTML.
+          void pipeline(incoming, wireLimit, createGunzip(), collector, { signal }).then(() => complete(encodedBytes), error => {
+            reject(signal.aborted ? signal.reason : new Error(error?.message === 'RETRIEVAL_BODY_LIMIT_EXCEEDED'
+              ? 'RETRIEVAL_BODY_LIMIT_EXCEEDED' : 'RETRIEVAL_DECOMPRESSION_FAILED'));
+          });
+          return;
+        }
         incoming.on('data', (chunk: Buffer | string) => {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
           try {
@@ -295,20 +339,7 @@ async function captureOutboundText(
           }
         });
         incoming.on('error', reject);
-        incoming.on('end', () => {
-          const bytes = Buffer.concat(chunks);
-          const text = providerRequest ? '' : bytes.toString('utf8');
-          const responseHeaders = new Headers();
-          for (const [key, value] of Object.entries(incoming.headers)) {
-            if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(key, item));
-            else if (value !== undefined) responseHeaders.set(key, String(value));
-          }
-          const validStatus = (status >= 200 && status <= 599) ? status : 502;
-          // Keep the Response byte-exact. Provider consumers use fatal UTF-8
-          // validation; decoding/re-encoding here would conceal malformed bytes.
-          const body = [204, 205, 304].includes(validStatus) ? null : new Uint8Array(bytes);
-          resolve({ response: new Response(body, { status: validStatus, headers: responseHeaders }), text });
-        });
+        incoming.on('end', () => complete());
       });
       req.setTimeout(timeoutMs, () => req.destroy(new Error('RETRIEVAL_TIMEOUT')));
       req.on('error', reject);
