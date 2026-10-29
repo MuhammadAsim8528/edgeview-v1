@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { crawlOfficialPages } from '../official_site_crawl';
+import { crawlOfficialPages, officialPageFallbackUrls } from '../official_site_crawl';
 
 const fetched: string[] = [];
 const pages = await crawlOfficialPages('fixture.example', 4, [], ['https://fixture.example/management', 'https://fixture.example/contact'], async url => {
@@ -20,4 +20,12 @@ await crawlOfficialPages('fixture.example', 1, [{ url: 'https://fixture.example/
   reused.push(url); return { url, links: [] };
 });
 assert.deepEqual(reused, ['https://fixture.example/contact'], 'reuse captured homepage and deduplicate fragments');
+const unavailableHome: string[] = [];
+const observed = ['https://fixture.example/leadership.php'];
+await crawlOfficialPages('fixture.example', 4, [], [...observed, ...officialPageFallbackUrls('fixture.example', observed)], async url => {
+  unavailableHome.push(url);
+  return { url, links: [], html: url.endsWith('/contact-us.php') ? '<p>Published local contacts</p>' : '' };
+});
+assert.ok(unavailableHome.includes('https://fixture.example/contact-us.php'), 'observed CMS extension and contact priority must survive a failed homepage within four-page budget');
+assert.ok(!officialPageFallbackUrls('fixture.example', ['https://foreign.example/team.aspx']).some(url => url.endsWith('.aspx')), 'foreign CMS hints cannot drive official routes');
 console.log('PASS bounded official-site link discovery, opaque CMS anchors, domain boundary and reuse');

@@ -2147,3 +2147,26 @@ missing reviewed baselines and created none: this is expected rejection, not a
 visual comparison PASS. Final live/manual QA and broader screenshot states remain
 open. Pixel equality never establishes country attribution or installation.
 QA02 final local capture: both scenarios completed in15.2seconds, six unreviewed PNGs produced. No pixel comparison or final visual acceptance claimed.
+
+### CC04 — reproduced Emerchemie official retrieval loss — 2026-10-29
+
+Fresh real HTTP run-mvscdk97-099199092b at f7edda8 resolved the correct domain but
+missed published contacts/leadership:1email/0phones/0addresses/0people, PARTIAL.
+Official pages timed out; management guesses consumed priority before the real
+CMS contact route. Independent source and subsequent guarded successful page
+retrieval confirm this is not evidence of no internet presence. See the existing
+verification folder's EMERCHEMIE_2026-10-29.md for exact trace/build/limitations.
+
+Candidate: contact priority equals leadership, at most two publisher-observed CMS
+suffixes, at most two extra transient retries per official crawl (10s each).
+No retries of abort/security/body-limit/HTTP failures or arbitrary external pages.
+Both failures/successes retained; successful retry resets failed-capture metadata.
+Actual transport fixtures reproduced loss before fix and now pass bounded retry,
+exhaustion, failures, immutable storage and local-country projection. Typecheck,
+lint, full V1, production build and release smoke exit0. Fresh real repeat remains
+required. No live3901/customer state changed. Other company and release gates stay.
+
+START01: hosted f7edda8 still failed real process inspection with TIMEOUT at15s;
+longer waiting alone did not close it. Inspect Windows cmdlet module discovery
+rather than weakening the actual-host assertion. Browser17/18 passed; contact
+export scenario could not find All exporters and requires separate investigation.

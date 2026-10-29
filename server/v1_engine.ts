@@ -7,7 +7,7 @@ import { isSafeExternalUrl, safeFetchOutboundText, safeFetchProviderRequest } fr
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
 import { readProviderResponse, validateProviderEnvelope, providerSchemaError } from './provider_response';
-import { crawlOfficialPages } from './official_site_crawl';
+import { crawlOfficialPages, officialPageFallbackUrls } from './official_site_crawl';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -629,11 +629,12 @@ async function scrapeApifyFallback(run: V1Run, result: V1Result): Promise<boolea
 const DEFAULT_DIRECT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const OFFICIAL_DIRECT_PAGE_MAX_BYTES = 4 * 1024 * 1024;
 
-async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12_000, officialDomain?: string): Promise<void> {
+async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12_000, officialDomain?: string, attempt = 1): Promise<void> {
   const provider = 'direct-http'; const request = {
     url: result.url,
     max_bytes: officialDomain ? OFFICIAL_DIRECT_PAGE_MAX_BYTES : DEFAULT_DIRECT_PAGE_MAX_BYTES,
     ...(officialDomain ? { max_bytes_domain: officialDomain } : {}),
+    ...(attempt > 1 ? { attempt } : {}),
   };
   const started = Date.now(); const requestedAt = now();
   let responseRecorded = false;
@@ -659,7 +660,7 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
     result.links = [...text.matchAll(/href=["']([^"'#]+)["']/gi)].map(match => {
       try { return new URL(match[1], result.url).toString(); } catch { return ''; }
     }).filter(Boolean).slice(0, 500);
-    result.metadata = { ...result.metadata, direct_http_status: response.status, content_type: response.headers.get('content-type') || '' };
+    result.metadata = { ...result.metadata, scrape_status: 'success', direct_http_status: response.status, content_type: response.headers.get('content-type') || '' };
     result.status = 'success'; result.error = undefined; result.scrape_latency_ms = raw.latency_ms;
     run.timeline.push({ at: now(), stage: 'scrape', status: 'success', provider, query: result.query, latency_ms: raw.latency_ms, message: `Captured bounded HTML fallback for ${result.url}` });
   } catch (error) {
@@ -680,7 +681,6 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
 
 async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
   if (!domain) return;
-  const origin = `https://${domain}`;
   const pagePriority = (url: string) => /(?:management|leadership|team|board|director|executive)/i.test(url) ? 4 : /contact/i.test(url) ? 3 : /about|company/i.test(url) ? 2 : 1;
   // Search already discovered real CMS routes (for example contact-us.php and
   // leadership.php). Seed those exact URLs before generic guessed paths.
@@ -692,12 +692,8 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
   // These routes cover the common places where smaller international
   // distributors publish contacts and management without linking them clearly
   // from the home page. Exact search-discovered CMS routes still take priority.
-  const fallbackUrls = [
-    `${origin}/contact`, `${origin}/contact-us`,
-    `${origin}/management`, `${origin}/management-team`, `${origin}/corporate-management`,
-    `${origin}/leadership`, `${origin}/our-team`, `${origin}/team`,
-    `${origin}/board-of-directors`, `${origin}/about`, `${origin}/about-us`,
-  ];
+  const fallbackUrls = officialPageFallbackUrls(domain, discoveredSearchPages);
+  let transientRetries = 0;
   const existingPages = run.results.filter(result => sameDomainOrSubdomain(result.url, domain) && result.status === 'success' && Boolean(result.html || result.text || result.markdown));
   await crawlOfficialPages(domain, run.limits.max_scrapes, existingPages, [...discoveredSearchPages, ...fallbackUrls], async (url, rank) => {
     const result: V1Result = {
@@ -714,6 +710,17 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
     // (or structured failure) for every attempted page.
     run.results.push(result);
     await scrapeDirectFallback(run, result, 10_000, domain);
+    const lastCapture = run.raw_records.at(-1);
+    // At most two extra network attempts for the entire official crawl. Never
+    // retry caller aborts, policy refusals, body limits, HTTP failures or every
+    // external search result. Both attempts remain in immutable raw evidence.
+    if (transientRetries < 2 && lastCapture?.request.url === url && lastCapture.failure
+      && /^(?:RETRIEVAL_TIMEOUT|socket hang up|(?:read )?ECONNRESET)$/i.test(lastCapture.failure.message)) {
+      transientRetries++;
+      run.timeline.push({ at: now(), stage: 'scrape', status: 'pending', provider: 'direct-http',
+        message: `Retrying transient official-page capture (${transientRetries}/2 retry budget)` });
+      await scrapeDirectFallback(run, result, 10_000, domain, 2);
+    }
     return result;
   });
 }

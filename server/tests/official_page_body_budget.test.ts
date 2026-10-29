@@ -31,6 +31,7 @@ const tail = '<p>Trustanchor Medical Limited Kenya office</p><a href="/contact-u
 const largeHtml = '<html><body><!--' + 'x'.repeat(Math.floor(3.67 * MiB)) + '-->' + tail + '</body></html>';
 let privateDns = false;
 let transportCalls = 0;
+const attempts = new Map<string, number>();
 const wire = ((options: any, callback: (incoming: any) => void) => {
   const request = new EventEmitter() as any;
   let incoming: any;
@@ -44,9 +45,14 @@ const wire = ((options: any, callback: (incoming: any) => void) => {
   request.end = () => queueMicrotask(() => {
     if (options.signal.aborted) return abort();
     transportCalls++;
-    incoming = new PassThrough();
     const host = String(options.headers.host);
     const route = String(options.path);
+    const attemptKey = `${host}${route}`;
+    attempts.set(attemptKey, (attempts.get(attemptKey) || 0) + 1);
+    if (host === 'trustanchor.co.ke' && ((['/', '/leadership.php'].includes(route) && attempts.get(attemptKey) === 1) || route === '/contact-connection-error')) {
+      request.destroy(new Error('socket hang up')); return;
+    }
+    incoming = new PassThrough();
     incoming.statusCode = 200;
     incoming.headers = { 'content-type': 'text/html; charset=utf-8' };
     let body = largeHtml;
@@ -101,6 +107,7 @@ try {
       { title: 'Directory result', link: 'https://outside.example/big', snippet: 'Retain this search evidence despite downstream failure' },
       { title: 'Trustanchor leadership', link: 'https://trustanchor.co.ke/leadership-oversize', snippet: 'Oversized capture must be recorded' },
       { title: 'Trustanchor management', link: 'https://trustanchor.co.ke/management-error', snippet: 'HTTP error body must be retained' },
+      { title: 'Trustanchor contact page', link: 'https://trustanchor.co.ke/contact-connection-error', snippet: 'Persistent transient failure must stay bounded' },
     ] });
   }) as typeof fetch;
   const { runV1Enrichment, getV1Run } = await import('../v1_engine');
@@ -113,6 +120,13 @@ try {
   assert.ok(run.raw_records.some(record => record.kind === 'scrape' && record.failure?.message.includes('RETRIEVAL_BODY_LIMIT_EXCEEDED') && record.request.max_bytes === 4 * MiB), 'official size failure retained with bounded request');
   assert.ok(run.raw_records.some(record => record.kind === 'scrape' && record.request.url === 'https://outside.example/big' && record.failure && record.request.max_bytes === 2 * MiB), 'generic failure recorded at original budget');
   const scrapeRecords = run.raw_records.filter(record => record.kind === 'scrape');
+  for (const suffix of ['/', '/leadership.php']) {
+    const records = scrapeRecords.filter(record => record.request.url === `https://trustanchor.co.ke${suffix}`);
+    assert.equal(records.length, 2, 'transient official failure receives exactly one bounded retry');
+    assert.ok(records[0].failure && !records[1].failure, 'both original failure and subsequent success remain immutable evidence');
+  }
+  assert.equal(scrapeRecords.filter(record => record.request.url === 'https://trustanchor.co.ke/contact-connection-error').length, 2,
+    'initial search retrieval and official attempt only: two used retry slots cannot become unlimited retries');
   assert.equal(scrapeRecords.length, transportCalls - callsBeforeRun, 'each actual attempt gets exactly one raw response/failure, including repeat URLs');
   const failedOfficial = scrapeRecords.find(record => record.request.max_bytes === 4 * MiB && record.request.url === 'https://trustanchor.co.ke/leadership-oversize');
   assert.ok(failedOfficial);
