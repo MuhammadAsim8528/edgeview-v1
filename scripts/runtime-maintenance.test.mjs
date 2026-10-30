@@ -35,6 +35,20 @@ try {
   fs.writeFileSync(gate, 'not a directory');
   assert.throws(() => acquireRuntimeMaintenance(lock), /RUNTIME_MAINTENANCE_BUSY/);
   assert.equal(fs.readFileSync(gate, 'utf8'), 'not a directory');
+  fs.unlinkSync(gate);
+  const interruptedRelease = spawnSync(process.execPath, ['--input-type=module', '-e',
+    `import fs from 'node:fs';import { acquireRuntimeMaintenance } from ${JSON.stringify(new URL('../shared/runtime_maintenance.mjs', import.meta.url).href)};
+    const release=acquireRuntimeMaintenance(process.argv[1]);const rename=fs.renameSync;
+    fs.renameSync=(from,to)=>{rename(from,to);if(String(from)===process.argv[1]+'.maintenance')process.kill(process.pid,'SIGKILL');};release();`, lock],
+    { encoding: 'utf8', timeout: 10000, windowsHide: true });
+  assert.equal(interruptedRelease.error, undefined);
+  if (process.platform === 'win32') assert.equal(interruptedRelease.status, 1, interruptedRelease.stderr);
+  else assert.equal(interruptedRelease.signal, 'SIGKILL', interruptedRelease.stderr);
+  assert.equal(fs.existsSync(gate), false, 'termination after atomic release must not leave an ownerless active gate');
+  const retired = fs.readdirSync(root).filter(name => name.startsWith('edgeview.db.lock.maintenance.released-'));
+  assert.equal(retired.length, 1, 'retired private marker remains as exact interruption evidence');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, retired[0], 'owner.json'), 'utf8')).format, 1);
+  const nextRelease = acquireRuntimeMaintenance(lock); nextRelease();
   console.log('PASS atomic maintenance exclusion, conservative interrupted-state refusal and ownership-safe release');
 } finally {
   assert.equal(path.dirname(fs.realpathSync(root)), fs.realpathSync(os.tmpdir()));

@@ -6,9 +6,15 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import initSqlJs from 'sql.js';
+import { buildSync } from 'esbuild';
 import { applyHistoryRepair, recoverInterruptedHistoryRepair } from '../history_repair_transaction';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-repair-transaction-'));
+const childFile = path.join(root, 'repair-child.cjs');
+buildSync({ entryPoints: [fileURLToPath(new URL('./history_repair_transaction_child.ts', import.meta.url))],
+  bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: childFile, logLevel: 'silent' });
+const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => /^(PATH|SystemRoot|WINDIR|TEMP|TMP)$/i.test(name)));
+Object.assign(childEnv, { NODE_ENV: 'test', EDGEVIEW_TEST_MODE: '1', NODE_PATH: path.join(process.cwd(), 'node_modules') });
 const SQL = await initSqlJs();
 const db = new SQL.Database();
 db.exec(`PRAGMA user_version=2;
@@ -26,9 +32,16 @@ function fixture(label: string) {
   fs.writeFileSync(path.join(directory, 'edgeview_db.json'), primary);
   return directory;
 }
-const child = (directory: string, mode: string) => spawnSync(process.execPath, ['--import', 'tsx',
-  fileURLToPath(new URL('./history_repair_transaction_child.ts', import.meta.url)), directory, mode],
-{ cwd: process.cwd(), encoding: 'utf8', timeout: 30000, windowsHide: true });
+const child = (directory: string, mode: string) => spawnSync(process.execPath, [childFile, directory, mode],
+{ cwd: process.cwd(), env: childEnv, encoding: 'utf8', timeout: 30000, windowsHide: true });
+function killed(directory: string, mode: string) {
+  const result = child(directory, mode);
+  assert.equal(result.error, undefined, 'spawn/timeout failures are not termination evidence');
+  assert.equal(fs.readFileSync(path.join(directory, 'test-termination-stage'), 'utf8'), mode,
+    'prove the exact intended interruption point was reached');
+  if (process.platform === 'win32') assert.equal(result.status, 1, result.stderr);
+  else assert.equal(result.signal, 'SIGKILL', result.stderr);
+}
 try {
   const success = fixture('success');
   assert.equal((await applyHistoryRepair(success, 'same.csv')).status, 'REPAIRED');
@@ -39,8 +52,9 @@ try {
   assert.equal((await applyHistoryRepair(success, 'same.csv')).status, 'CURRENT');
   assert.equal(fs.existsSync(path.join(success, 'edgeview.db.lock.maintenance')), false);
   for (const mode of ['kill-before', 'kill-after', 'throw-after']) {
-    const directory = fixture(mode), result = child(directory, mode);
-    assert.equal(result.status, mode === 'kill-before' ? 77 : mode === 'kill-after' ? 78 : 19, result.stderr);
+    const directory = fixture(mode);
+    if (mode === 'throw-after') { const result = child(directory, mode); assert.equal(result.status, 19, result.stderr); }
+    else killed(directory, mode);
     if (mode !== 'throw-after') {
       assert.equal(fs.existsSync(path.join(directory, 'edgeview.db.lock.maintenance')), true);
       await assert.rejects(applyHistoryRepair(directory, 'same.csv'), /MAINTENANCE_BUSY/);
@@ -54,6 +68,24 @@ try {
   const locked = fixture('locked'); fs.writeFileSync(path.join(locked, 'edgeview.db.lock'), '1');
   await assert.rejects(applyHistoryRepair(locked, 'same.csv'));
   assert.deepEqual(fs.readFileSync(path.join(locked, 'edgeview.db')), Buffer.from(before));
+  const interruptedRollback = fixture('rollback-interrupted');
+  killed(interruptedRollback, 'kill-after');
+  killed(interruptedRollback, 'recover-kill-after');
+  assert.equal(recoverInterruptedHistoryRepair(interruptedRollback).status, 'ROLLED_BACK', 'recovery must itself survive termination');
+  assert.deepEqual(fs.readFileSync(path.join(interruptedRollback, 'edgeview.db')), Buffer.from(before));
+  const archived = fixture('archive-interrupted');
+  killed(archived, 'kill-archive');
+  assert.equal(recoverInterruptedHistoryRepair(archived).status, 'ROLLED_BACK', 'archive publication must not hide rollback preimages');
+  assert.deepEqual(fs.readFileSync(path.join(archived, 'edgeview.db')), Buffer.from(before));
+  const partialRollback = fixture('partial-rollback');
+  killed(partialRollback, 'kill-after');
+  killed(partialRollback, 'recover-kill-writing');
+  assert.equal(recoverInterruptedHistoryRepair(partialRollback).status, 'ROLLED_BACK');
+  assert.deepEqual(fs.readFileSync(path.join(partialRollback, 'edgeview.db')), Buffer.from(before));
+  const partialCopy = fixture('partial-copy');
+  killed(partialCopy, 'kill-copy');
+  assert.equal(recoverInterruptedHistoryRepair(partialCopy).status, 'ROLLED_BACK');
+  assert.deepEqual(fs.readFileSync(path.join(partialCopy, 'edgeview.db')), Buffer.from(before));
   const full = fixture('full'), writeFile = fs.writeFileSync;
   try {
     fs.writeFileSync = ((target: any, ...args: any[]) => {
@@ -67,11 +99,27 @@ try {
   const linked = path.join(root, 'linked');
   fs.symlinkSync(success, linked, process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(applyHistoryRepair(linked, 'same.csv'));
-  const uncertain = fixture('uncertain'); assert.equal(child(uncertain, 'kill-after').status, 78);
+  fs.mkdirSync(path.join(root, 'ancestor-real'));
+  fixture('ancestor-real/child');
+  const ancestorLink = path.join(root, 'ancestor-link');
+  fs.symlinkSync(path.join(root, 'ancestor-real'), ancestorLink, process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(applyHistoryRepair(path.join(ancestorLink, 'child'), 'same.csv'));
+  const hardlink = fixture('hardlink');
+  fs.linkSync(path.join(hardlink, 'edgeview.db'), path.join(root, 'original-hardlink.db'));
+  await assert.rejects(applyHistoryRepair(hardlink, 'same.csv'));
+  assert.deepEqual(fs.readFileSync(path.join(root, 'original-hardlink.db')), Buffer.from(before));
+  const redirected = fixture('redirected-journal'); killed(redirected, 'kill-after');
+  const redirectJournal = path.join(redirected, '.edgeview-history-repair', 'journal.json');
+  const redirectedMetadata = JSON.parse(fs.readFileSync(redirectJournal, 'utf8'));
+  redirectedMetadata.target = '../original-hardlink.db';
+  fs.writeFileSync(redirectJournal, JSON.stringify(redirectedMetadata));
+  assert.throws(() => recoverInterruptedHistoryRepair(redirected), 'valid original hashes do not authorize arbitrary target fields');
+  assert.deepEqual(fs.readFileSync(path.join(root, 'original-hardlink.db')), Buffer.from(before));
+  const uncertain = fixture('uncertain'); killed(uncertain, 'kill-after');
   fs.writeFileSync(path.join(uncertain, 'edgeview_db.json'), '[]');
   assert.throws(() => recoverInterruptedHistoryRepair(uncertain), 'changed primary must not be overwritten by recovery');
   assert.equal(fs.existsSync(path.join(uncertain, 'edgeview.db.lock.maintenance')), true);
-  const alive = fixture('alive'); assert.equal(child(alive, 'kill-after').status, 78);
+  const alive = fixture('alive'); killed(alive, 'kill-after');
   const ownerFile = path.join(alive, 'edgeview.db.lock.maintenance', 'owner.json');
   const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8')); owner.pid = process.pid;
   fs.writeFileSync(ownerFile, JSON.stringify(owner));

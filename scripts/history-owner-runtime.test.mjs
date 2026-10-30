@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import initSqlJs from 'sql.js';
+import { buildSync } from 'esbuild';
 import { unusedTestPort } from './test-server-port.mjs';
 
 const source = process.cwd(), root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-history-runtime-'));
@@ -14,6 +15,9 @@ fs.cpSync(path.join(source, 'dist'), path.join(app, 'dist'), { recursive: true }
 fs.copyFileSync(path.join(source, 'packaging/windows/runtime-bootstrap.cjs'), path.join(app, 'runtime-bootstrap.cjs'));
 fs.writeFileSync(path.join(app, 'package.json'), '{"name":"edgeview","version":"1.0.0-rc.2"}');
 fs.writeFileSync(path.join(state, 'config.json'), '{}');
+const repairTool = path.join(root, 'repair-test-helper.cjs');
+buildSync({ entryPoints: [path.join(source, 'server/tests/history_repair_transaction_child.ts')], bundle: true,
+  platform: 'node', format: 'cjs', packages: 'external', outfile: repairTool, logLevel: 'silent' });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
 const port = await unusedTestPort(), base = `http://127.0.0.1:${port}`;
 Object.assign(env, { NODE_ENV: 'production', NODE_PATH: path.join(source, 'node_modules'), EDGEVIEW_DATA_DIR: state, PORT: String(port), EDGEVIEW_MONITORING_ENABLED: '0' });
@@ -59,6 +63,36 @@ try {
   await start(); const c = await upload('Synthetic C');
   const deleted = await fetch(base + '/api/stats/history-files/' + encodeURIComponent(b), { method: 'DELETE', signal: AbortSignal.timeout(10000) });
   assert.equal(deleted.status, 200); await stop(); assert.deepEqual(history(), [['Synthetic C', c]]);
+  // Reproduce the old same-name upload loss using only this stopped fixture.
+  await start(); const d = await upload('Synthetic D'); await stop();
+  const repairDbFile = path.join(state, 'edgeview.db');
+  const broken = new SQL.Database(fs.readFileSync(repairDbFile));
+  broken.run('DELETE FROM history_data WHERE file_id=?', [c]);
+  broken.run('UPDATE history_data SET file_id=NULL WHERE file_id=?', [d]);
+  fs.writeFileSync(repairDbFile, broken.export()); broken.close();
+  const primaryBeforeRepair = fs.readFileSync(path.join(state, 'edgeview_db.json'));
+  const repair = mode => spawnSync(process.execPath, [repairTool, state, mode, 'shared.csv'],
+    { cwd: app, env, encoding: 'utf8', timeout: 30000, windowsHide: true });
+  const interrupted = repair('kill-after');
+  assert.equal(interrupted.error, undefined);
+  assert.equal(fs.readFileSync(path.join(state, 'test-termination-stage'), 'utf8'), 'kill-after');
+  if (process.platform === 'win32') assert.equal(interrupted.status, 1, interrupted.stderr);
+  else assert.equal(interrupted.signal, 'SIGKILL', interrupted.stderr);
+  const blockedStart = spawn(process.execPath, [path.join(app, 'runtime-bootstrap.cjs')],
+    { cwd: app, env, stdio: ['pipe', 'ignore', 'ignore'] });
+  blockedStart.stdin.on('error', () => {});
+  const blockedExit = await once(blockedStart, 'exit', { signal: AbortSignal.timeout(20000) });
+  assert.notEqual(blockedExit[0], 0, 'interrupted maintenance must block compiled backend startup');
+  assert.equal(repair('recover').status, 0, 'explicit interrupted rollback completes');
+  assert.deepEqual(history(), [['Synthetic D', null]], 'rollback restores the exact pre-repair derived index');
+  assert.equal(repair('normal').status, 0);
+  assert.deepEqual(fs.readFileSync(path.join(state, 'edgeview_db.json')), primaryBeforeRepair);
+  assert.deepEqual(history(), [['Synthetic C', c], ['Synthetic D', d]]);
+  await start();
+  const repairedFiles = await (await fetch(base + '/api/files', { signal: AbortSignal.timeout(10000) })).json();
+  assert.ok(JSON.stringify(repairedFiles).includes(c) && JSON.stringify(repairedFiles).includes(d));
+  assert.equal((await remove(d)).status, 200); await stop();
+  assert.deepEqual(history(), [['Synthetic C', c]], 'repair permits deletion without losing the restored sibling');
   // Seed unattributed legacy data only while this synthetic runtime is stopped.
   const dbFile = path.join(state, 'edgeview.db'); const legacy = new SQL.Database(fs.readFileSync(dbFile));
   legacy.run("INSERT INTO history_data(importer,file_name) VALUES('Synthetic Legacy','shared.csv')");
@@ -71,7 +105,7 @@ try {
     assert.deepEqual(fs.readFileSync(path.join(state, 'edgeview_db.json')), retained);
   }
   await stop(); assert.deepEqual(history(), [['Synthetic C', c], ['Synthetic Legacy', null]]);
-  console.log('PASS compiled production same-name upload, both delete aliases, durable sibling history, restart and pre-mutation legacy refusal');
+  console.log('PASS compiled production same-name upload, both delete aliases, durable sibling history, interrupted repair startup refusal, exact rollback, repair/restart and pre-mutation legacy refusal');
 } finally {
   await stop();
   assert.equal(path.dirname(fs.realpathSync(root)), fs.realpathSync(os.tmpdir()));
