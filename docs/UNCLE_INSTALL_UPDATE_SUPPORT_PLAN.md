@@ -2,6 +2,36 @@
 
 Status: implementation plan, not an available MSIX release. 2026-10-25.
 
+## Implemented storage prerequisites as of October 30
+
+`shared/runtime_paths.mjs` now supports the opt-in, disjoint writable data root.
+`server/legacy_data_migration.ts` provides an internal same-user private copy
+operation. It does not select a root in the launcher or ship an installer.
+It copies only the existing SQLite/JSON/configuration/evidence/upload authorities
+into a new destination, keeps the source intact, and refuses existing destinations,
+links, active backends, noncanonical overrides, plaintext provider credentials and
+legacy `.env` files. Protected credentials are copied opaquely for the same Windows
+user; this does not prove DPAPI access after an account change.
+
+Copy preparation retains a private hash manifest and original storage. Interrupted
+copies retain startup exclusion. Explicit retry requires the exact unchanged
+source, bound owner markers and a definitely absent prior process; partial copies
+are archived rather than overlaid. New root startup refuses missing or invalid
+preparation markers and verifies the bounded completion-manifest hash.
+The return state is `COPIED_NOT_ACTIVATED`, never installed-update success.
+No source is deleted and no automatic launcher pointer is changed.
+
+Tests use synthetic temporary storage only. Final installer activation, pre-update
+independent backup, matched application/data rollback, account/ACL acceptance,
+power-loss durability and clean-Windows installation remain open. An incomplete
+owner/journal initialization is preserved for support review rather than reclaimed
+from a PID alone. Recovery snapshots/manifests are private business data and must
+never enter telemetry, diagnostic exports or customer distribution assets.
+
+The dated planning sections below remain useful context; their statement that
+all production paths are necessarily under the project root is superseded by the
+explicit opt-in implementation. The live original installation has not been moved.
+
 ## Current facts
 
 EdgeView runs React in the browser with a loopback Node/Express backend. Current

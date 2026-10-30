@@ -28,7 +28,7 @@ export async function flushInitializedDatabase(): Promise<void> {
   if (initPromise) await initPromise;
   if (dbInstance) await dbInstance.flush();
 }
-const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /** Re-open the isolated on-disk database for persistence regression tests. */
 export function resetDbInstanceForTests(): void {
