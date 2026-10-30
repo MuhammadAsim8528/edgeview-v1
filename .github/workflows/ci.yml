@@ -33,6 +33,7 @@ jobs:
       - run: node --import tsx server/tests/export_blocks_html_safety.test.ts
       - run: node --import tsx server/tests/export_blocks_endpoint.test.ts
       - run: node --import tsx server/tests/upload_extension_validation.test.ts
+      - run: node --import tsx server/tests/upload_history_identity.test.ts
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/engine_ai_destination.test.ts
