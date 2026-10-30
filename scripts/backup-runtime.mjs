@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
+import { acquireRuntimeMaintenance } from '../shared/runtime_maintenance.mjs';
 const appRoot = process.cwd();
 if (JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
 const root = resolveRuntimeDataRoot(appRoot);
@@ -57,15 +58,21 @@ async function copyTree(source, target, relative) {
 }
 
 const parent = path.dirname(destination);
-if (fs.existsSync(parent) && fs.lstatSync(parent).isSymbolicLink()) throw new Error('Backup destination links are not supported.');
-fs.mkdirSync(parent, { recursive: true });
-fs.mkdirSync(staging, { recursive: false });
-for (const item of included) {
-  const source = path.join(root, item);
-  if (fs.existsSync(source)) await copyTree(source, path.join(staging, item), item);
+const releaseMaintenance = acquireRuntimeMaintenance(path.join(root, 'edgeview.db.lock'));
+try {
+  requireStopped();
+  if (fs.existsSync(parent) && fs.lstatSync(parent).isSymbolicLink()) throw new Error('Backup destination links are not supported.');
+  fs.mkdirSync(parent, { recursive: true });
+  fs.mkdirSync(staging, { recursive: false });
+  for (const item of included) {
+    const source = path.join(root, item);
+    if (fs.existsSync(source)) await copyTree(source, path.join(staging, item), item);
+  }
+  if (!manifest.files.length) throw new Error('No EdgeView runtime files were found to back up.');
+  requireStopped();
+  fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+  fs.renameSync(staging, destination);
+  console.log(JSON.stringify({ backup: destination, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0) }));
+} finally {
+  releaseMaintenance();
 }
-if (!manifest.files.length) throw new Error('No EdgeView runtime files were found to back up.');
-requireStopped();
-fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
-fs.renameSync(staging, destination);
-console.log(JSON.stringify({ backup: destination, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0) }));

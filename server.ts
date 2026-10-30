@@ -3,6 +3,7 @@ import { buildCountryOverview } from './shared/country_overview';
 import path from 'path';
 import fs from 'fs';
 import { processBirthIdentity, recordedOwnerWasReused } from './server/process_identity';
+import { acquireRuntimeMaintenance } from './shared/runtime_maintenance.mjs';
 import multer from 'multer';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
@@ -2558,50 +2559,55 @@ async function startServer() {
   process.once('SIGTERM', () => { void shutdown(); });
   if (!isTestProcess()) {
     const lockPath = getBackendLockPath();
-    // Keep the legacy numeric lock readable by older EdgeView versions.
-    const ownerPath = `${lockPath}.owner.json`;
-    if (fs.existsSync(lockPath)) {
-      let ownerPid = 0;
-      try { ownerPid = Number(fs.readFileSync(lockPath, 'utf8').trim()); } catch (_) {}
-      let ownerAlive = false;
-      if (ownerPid > 0) {
-        try { process.kill(ownerPid, 0); ownerAlive = true; }
-        catch (error: any) { ownerAlive = error?.code !== 'ESRCH'; }
-        if (ownerAlive) {
-          try {
-            const record = JSON.parse(fs.readFileSync(ownerPath, 'utf8'));
-            if (recordedOwnerWasReused(record, ownerPid, processBirthIdentity(ownerPid))) ownerAlive = false;
-          } catch { /* Legacy/missing/unreadable metadata cannot prove PID reuse. */ }
-        }
-      }
-      if (!ownerAlive) {
-        try { fs.unlinkSync(lockPath); } catch (_) {}
-      }
-    }
+    const releaseMaintenance = acquireRuntimeMaintenance(lockPath);
     try {
-      lockHandle = fs.openSync(lockPath, 'wx');
-      fs.writeFileSync(lockHandle, String(process.pid));
-      const birth = processBirthIdentity(process.pid);
-      // Remove stale sidecar first; a failed identity probe must not inherit it.
-      try { fs.unlinkSync(ownerPath); }
-      catch (error: any) { if (error?.code !== 'ENOENT') throw error; }
-      if (birth) {
-        try { fs.writeFileSync(ownerPath, JSON.stringify({ pid: process.pid, birth }), { mode: 0o600 }); }
-        catch { /* Numeric lock still protects ownership; require manual inspection after PID reuse. */ }
-      }
-      const releaseLock = () => {
-        if (lockHandle !== null) {
-          try { fs.closeSync(lockHandle); } catch (_) {}
-          lockHandle = null;
-          try { fs.unlinkSync(ownerPath); } catch (_) {}
+      // Keep the legacy numeric lock readable by older EdgeView versions.
+      const ownerPath = `${lockPath}.owner.json`;
+      if (fs.existsSync(lockPath)) {
+        let ownerPid = 0;
+        try { ownerPid = Number(fs.readFileSync(lockPath, 'utf8').trim()); } catch (_) {}
+        let ownerAlive = false;
+        if (ownerPid > 0) {
+          try { process.kill(ownerPid, 0); ownerAlive = true; }
+          catch (error: any) { ownerAlive = error?.code !== 'ESRCH'; }
+          if (ownerAlive) {
+            try {
+              const record = JSON.parse(fs.readFileSync(ownerPath, 'utf8'));
+              if (recordedOwnerWasReused(record, ownerPid, processBirthIdentity(ownerPid))) ownerAlive = false;
+            } catch { /* Legacy/missing/unreadable metadata cannot prove PID reuse. */ }
+          }
+        }
+        if (!ownerAlive) {
           try { fs.unlinkSync(lockPath); } catch (_) {}
         }
-      };
-      process.once('exit', releaseLock);
-    } catch (error: any) {
-      let owner = 'unknown';
-      try { owner = fs.readFileSync(lockPath, 'utf8').trim() || owner; } catch (_) {}
-      throw new Error(`Another EdgeView backend owns the authoritative database (PID ${owner}). Lock: ${lockPath}`, { cause: error });
+      }
+      try {
+        lockHandle = fs.openSync(lockPath, 'wx');
+        fs.writeFileSync(lockHandle, String(process.pid));
+        const birth = processBirthIdentity(process.pid);
+        // Remove stale sidecar first; a failed identity probe must not inherit it.
+        try { fs.unlinkSync(ownerPath); }
+        catch (error: any) { if (error?.code !== 'ENOENT') throw error; }
+        if (birth) {
+          try { fs.writeFileSync(ownerPath, JSON.stringify({ pid: process.pid, birth }), { mode: 0o600 }); }
+          catch { /* Numeric lock still protects ownership; require manual inspection after PID reuse. */ }
+        }
+        const releaseLock = () => {
+          if (lockHandle !== null) {
+            try { fs.closeSync(lockHandle); } catch (_) {}
+            lockHandle = null;
+            try { fs.unlinkSync(ownerPath); } catch (_) {}
+            try { fs.unlinkSync(lockPath); } catch (_) {}
+          }
+        };
+        process.once('exit', releaseLock);
+      } catch (error: any) {
+        let owner = 'unknown';
+        try { owner = fs.readFileSync(lockPath, 'utf8').trim() || owner; } catch (_) {}
+        throw new Error(`Another EdgeView backend owns the authoritative database (PID ${owner}). Lock: ${lockPath}`, { cause: error });
+      }
+    } finally {
+      releaseMaintenance();
     }
   }
 

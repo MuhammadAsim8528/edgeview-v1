@@ -45,6 +45,10 @@ try {
   assert.notEqual(failed.status, 0);
   assert.match(failed.stderr, /Controlled backup copy failure/);
   assert.ok(fs.readdirSync(path.join(root, 'backups')).every(name => name.startsWith('INCOMPLETE-')), 'partial copy cannot publish a completed backup');
+  assert.equal(fs.existsSync(path.join(root, 'edgeview.db.lock.maintenance')), false, 'controlled failure releases maintenance gate');
+  const concurrent = run('--import', new URL('./test-fixtures/backup-concurrent-attempt.mjs', import.meta.url).href);
+  assert.equal(concurrent.status, 0, `outer backup must complete while a competing attempt is refused: ${concurrent.stderr}`);
+  assert.equal(fs.existsSync(path.join(root, 'edgeview.db.lock.maintenance')), false, 'successful backup releases maintenance gate');
   const completed = run(); assert.equal(completed.status, 0, completed.stderr);
   const ordinaryOverrides = withEnv({ EDGEVIEW_CONFIG: path.join(root, 'config.json'),
     EDGEVIEW_V1_DATA_DIR: path.join(root, 'data', 'v1-runs'),

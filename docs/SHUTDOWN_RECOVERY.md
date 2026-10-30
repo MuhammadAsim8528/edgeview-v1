@@ -84,3 +84,27 @@ history/deletion and stop/recovery exceptions. The compiled corrupt-DB fixture
 checks unavailable capabilities, structured refusal of research/upload/history
 mutations before provider calls, and continued settings access. Real UI behavior
 and physical disk-full/power-loss scenarios remain unverified.
+
+## Offline backup and startup exclusion
+
+Compatible builds acquire an atomic maintenance directory beside the database
+lock before inspecting/acquiring backend ownership. Startup releases this gate
+after the ordinary lifetime database lock is established. Offline backup holds
+the same gate for its entire copy and publication, and checks that the backend
+is stopped after acquiring it. A competing startup/backup fails promptly with
+`RUNTIME_MAINTENANCE_BUSY`; it must not remove the active operation's marker.
+The existing numeric database lock remains the backend ownership authority.
+
+Normal success and controlled failure release the maintenance gate. A process
+terminated before release leaves it in place. This is intentional fail-closed
+behavior: PID death alone does not establish whether an interrupted operation
+is safe to resume. Automatic interruption recovery is still a release blocker.
+The end user should contact support; do not ask them to delete locks or inspect
+files. Owner recovery must first establish that all relevant processes stopped,
+preserve the incomplete snapshot and determine the interrupted operation's state.
+There is currently no accepted one-click recovery procedure for this condition.
+
+Older builds do not honor the new gate. Do not run a mixed-version backup/startup
+workflow or claim this protocol protects against older binaries, arbitrary
+external file writers, power loss, or a compromised Windows user account. This
+change does not implement transactional restore, migration, or schema rollback.

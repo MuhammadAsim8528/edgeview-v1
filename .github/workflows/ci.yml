@@ -73,6 +73,7 @@ jobs:
       - run: node --import tsx server/tests/runtime_usage_presentation.test.tsx
       - run: node scripts/ensure-dependencies.test.mjs
       - run: node scripts/npm-policy-isolation.test.mjs
+      - run: node scripts/runtime-maintenance.test.mjs
       - run: node scripts/backup-runtime.test.mjs
       - run: node --experimental-strip-types server/tests/resource_snapshot.test.ts
       - run: node scripts/doctor.test.mjs

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { unusedTestPort } from './test-server-port.mjs';
+import { acquireRuntimeMaintenance } from '../shared/runtime_maintenance.mjs';
 const source=process.cwd(),base=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-installed-data-'));
 const app=path.join(base,'app'),data=path.join(base,'state');fs.mkdirSync(app);fs.mkdirSync(data);
 fs.cpSync(path.join(source,'dist'),path.join(app,'dist'),{recursive:true});
@@ -28,6 +29,15 @@ async function start(){
 try{
  // A live unrelated PID must not authorize deletion of a legacy numeric lock.
  const lock=path.join(data,'edgeview.db.lock'),owner=lock+'.owner.json';
+ const releaseMaintenance=acquireRuntimeMaintenance(lock);
+ try {
+  const gateOwner=fs.readFileSync(lock+'.maintenance/owner.json','utf8');
+  const duringBackup=spawnSync(process.execPath,[path.join(app,'runtime-bootstrap.cjs')],{cwd:app,env,encoding:'utf8',input:'',timeout:15000});
+  assert.equal(duringBackup.error,undefined,'blocked startup must terminate promptly');
+  assert.notEqual(duringBackup.status,0);assert.match(duringBackup.stderr,/RUNTIME_MAINTENANCE_BUSY/);
+  assert.equal(fs.readFileSync(lock+'.maintenance/owner.json','utf8'),gateOwner,'refused startup cannot remove another operation gate');
+  assert.equal(fs.existsSync(lock),false);assert.equal(fs.existsSync(path.join(data,'edgeview.db')),false);
+ } finally { releaseMaintenance(); }
  fs.writeFileSync(lock,String(process.pid));
  const refused=spawnSync(process.execPath,[path.join(app,'runtime-bootstrap.cjs')],{cwd:app,env,encoding:'utf8',input:'',timeout:15000});
  assert.notEqual(refused.status,0,'legacy alive owner remains conservative');
