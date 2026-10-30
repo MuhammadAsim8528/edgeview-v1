@@ -1,5 +1,11 @@
 # EdgeView completion ledger — 2026-10-20
 
+### Owner progress workspace — 2026-10-30
+
+Added scripts/render-progress-workspace.mjs to generate a readable local HTML view from this ledger's capability matrix and latest checkpoints. Current output is the resolved OneDrive Desktop EdgeView/Progress.html, not a release artifact or second planning authority. Regenerate after meaningful work checkpoints; the page does not imply background execution or live automatic status while the session is stopped. Source values are HTML-escaped, no customer data/config/provider credentials are read. Thirty capability records currently appear. Script syntax, generation and diff checks passed; actual browser rendering is NOT VERIFIED. Codex file-open request was queued, not observed as displayed.
+
+Owner requests faster completion. Preserve the existing finite release scope and dated conditional targets; prioritize demonstrated release blockers, avoid optional infrastructure expansion and repeated verification without new evidence. Immediate active task remains DATA02 reviewable offline repair candidate. No guaranteed hours-to-release assertion; signing, clean-device and deferred final visual gates remain open. Microsoft Store setup/public shipping remain deferred.
+
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
 ### Current checkpoint — 2026-10-29 (supersedes dated coordination notes)
