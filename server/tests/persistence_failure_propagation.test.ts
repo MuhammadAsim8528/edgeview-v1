@@ -19,11 +19,18 @@ async function run() {
   fs.writeFileSync(blocker, 'block child creation', 'utf8');
 
   try {
-    // JSON persistence: parent component is a regular file, so durable write
-    // must fail and the public save API must reject instead of returning success.
-    process.env.EDGEVIEW_JSON_DB = path.join(blocker, 'edgeview_db.json');
+    // A readable authority distinguishes an actual write failure from a read
+    // refusal (ENOTDIR/EACCES differ across operating systems).
+    const jsonPath = path.join(root, 'write-failure.json');
+    fs.writeFileSync(jsonPath, '[]'); process.env.EDGEVIEW_JSON_DB = jsonPath;
+    const renameJson = fs.renameSync;
     let jsonRejected = false;
+    let jsonFailureCode = '';
     try {
+      fs.renameSync = ((from, to) => {
+        if (String(to) === jsonPath) throw Object.assign(new Error('Controlled JSON write failure'), { code: 'ENOSPC' });
+        return renameJson(from, to);
+      }) as typeof fs.renameSync;
       await saveFileToDb({
         id: 'durability-json-test',
         name: 'durability-json-test.csv',
@@ -35,9 +42,12 @@ async function run() {
         summary: {} as any,
       } as any, 'durability-json-test-hash', 'test');
     } catch (error) {
+      jsonFailureCode = String((error as any)?.code || '');
       jsonRejected = error instanceof PersistenceWriteError || ['DISK_FULL', 'PERSISTENCE_WRITE_FAILED'].includes(String((error as any)?.code || ''));
-    }
+    } finally { fs.renameSync = renameJson; }
     assert(jsonRejected, 'saveFileToDb must reject when its durable JSON write fails');
+    assert(jsonFailureCode === 'DISK_FULL', 'injected ENOSPC must retain its exact durability classification');
+    assert(fs.readFileSync(jsonPath, 'utf8') === '[]', 'failed write preserves the readable authority');
 
     // sql.js persistence: initialization performs schema writes. With an
     // impossible path, getDb itself must reject rather than silently continue

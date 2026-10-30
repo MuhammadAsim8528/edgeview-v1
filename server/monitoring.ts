@@ -199,6 +199,7 @@ export function initMonitoring(nextIdentity: MonitoringIdentity, initialPreferen
 export function classifyMonitoringError(error: unknown): string {
   const message = String((error as any)?.message ?? error ?? '').toLowerCase();
   const code = String((error as any)?.code ?? '').toLowerCase();
+  if (code === 'dataset_unavailable') return 'DATABASE_UNAVAILABLE';
   if (code === 'enospc' || /no space left|disk.{0,12}full|storage.{0,12}full/.test(message)) return 'DISK_FULL';
   if (/\b(?:401|403)\b|unauthor|forbidden|credential|api[ _-]?key|auth(?:entication)?/.test(message)) return 'PROVIDER_AUTH_FAILED';
   if (/\b429\b|rate[ _-]?limit|quota/.test(message)) return 'PROVIDER_RATE_LIMITED';

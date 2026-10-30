@@ -8,6 +8,7 @@ import {
   computeFileHash,
   findFileByHash,
   deleteFileFromHistory,
+  PersistenceReadError,
 } from '../sqlite_persistence';
 import { captureMonitoringEvent, classifyMonitoringError } from '../monitoring';
 import { historyInsertValues } from '../history_row_projection';
@@ -214,6 +215,15 @@ async function handleUpload(req: express.Request, res: express.Response) {
       }
 
     } catch (dbErr: any) {
+      if (dbErr instanceof PersistenceReadError) {
+        const duration_ms = Date.now() - monitoringStartedAt;
+        void captureMonitoringEvent('dataset_import_failed', { stage: 'import', outcome: 'failed', duration_ms });
+        void captureMonitoringEvent('runtime_error', { stage: 'storage', outcome: 'failed', duration_ms,
+          error_code: classifyMonitoringError(dbErr) });
+        return res.status(503).json({ success: false, code: dbErr.code,
+          error: 'Existing saved datasets could not be read safely. No upload was saved. Contact support to recover the retained data.',
+          recoverable: false });
+      }
       console.error('Durable save error during upload:', dbErr);
       // Prevent a half-saved JSON record from turning the next retry into a
       // false duplicate success when history_data was not durably completed.

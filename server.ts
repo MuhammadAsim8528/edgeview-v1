@@ -23,6 +23,7 @@ import {
   deleteFileFromHistory,
   persistenceDatabaseExists,
   isTestRecord,
+  PersistenceReadError,
 } from './server/sqlite_persistence';
 import {
   getAppSettings,
@@ -2661,6 +2662,7 @@ async function startServer() {
       console.error('Failed to initialize jobs/counters state on startup:', jobInitErr.message);
     }
   } catch (dbErr) {
+    if (dbErr instanceof PersistenceReadError) throw dbErr;
     console.error('Failed to initialize SQLite persistence on startup:', dbErr);
   }
 

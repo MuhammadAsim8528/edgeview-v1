@@ -128,3 +128,24 @@ This is a physical schema upgrade, separate from contact-overlay policy versions
 Installed-package downgrade and database rollback remain separate acceptance
 gates. No accepted automatic rollback procedure is provided by this change;
 the original operational installation has not been migrated during these tests.
+
+## Unreadable dataset authority
+
+An existing empty, malformed, invalidly encoded or structurally invalid dataset
+JSON file must not become an empty installation. Reading it does not rename it,
+create a replacement, or fall back to an older authority file. Only a genuinely
+missing primary may use the established legacy fallback. Explicit `[]` remains
+valid empty storage.
+
+Startup refuses the affected installation with `DATASET_UNAVAILABLE`. If a read
+failure occurs after startup, upload returns a sanitized 503 before publishing
+new in-memory data. Persistence saves and deletion also refuse to proceed from
+an unreadable authority. Original bytes remain at the original path. Diagnostic
+errors omit JSON excerpts and underlying filesystem/parse exception text.
+
+This prevents a failed read from becoming a destructive replacement. It does
+not repair corrupted source, prove all historical formats compatible, or provide
+an accepted end-user recovery installer. Owner recovery must preserve and inspect
+the original plus an appropriate verified backup; do not ask an end user to edit
+JSON or delete files. The canonical decoder is shared with future repair work so
+that candidate construction need not introduce another persistence authority.

@@ -75,25 +75,42 @@ export function persistenceDatabaseExists(): boolean {
   return fs.existsSync(main) || (legacy ? fs.existsSync(legacy) : false);
 }
 
-function readRecordsFromDisk(): UploadedFileRecord[] {
-  const { main, legacy } = getJsonPaths();
+export class PersistenceReadError extends Error {
+  readonly code = 'DATASET_UNAVAILABLE';
+  constructor() {
+    super('DATASET_UNAVAILABLE: Saved datasets could not be read safely. Original data was retained; contact support before importing or deleting files.');
+    this.name = 'PersistenceReadError';
+  }
+}
+
+/** Canonical decoder shared by normal hydration and future recovery preflight.
+ * No filesystem mutation; parser errors never expose record excerpts or paths. */
+export function decodePersistenceRecords(raw: string | Uint8Array, testProcess = isTestProcess()): UploadedFileRecord[] {
   try {
-    const targetPath = fs.existsSync(main) ? main : legacy && fs.existsSync(legacy) ? legacy : null;
-
-    if (!targetPath) return [];
-    const raw = fs.readFileSync(targetPath, 'utf-8');
-    if (!raw.trim()) return [];
-
-    const items = JSON.parse(raw);
-    if (!Array.isArray(items)) return [];
-
+    const text = typeof raw === 'string' ? raw : new TextDecoder('utf-8', { fatal: true }).decode(raw);
+    if (!text.trim()) throw new PersistenceReadError();
+    const items = JSON.parse(text);
+    if (!Array.isArray(items)) throw new PersistenceReadError();
+    const seen = new Set<string>();
     return items.map((r: any, idx: number) => {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) throw new PersistenceReadError();
+      if (r.file_data !== undefined && (!r.file_data || typeof r.file_data !== 'object' || Array.isArray(r.file_data))) throw new PersistenceReadError();
       const fName = r.file_name || r.filename || r.name || 'uploaded_file';
       const fId = r.id || r.file_id || r.fileId || `file-persisted-${idx + 1}`;
-      const recordSource = resolveDatasetSource({ id: fId, file_name: fName, source: r.source, provenance_version: r.provenance_version });
+      if (typeof fName !== 'string' || typeof fId !== 'string' || seen.has(fId)) throw new PersistenceReadError();
+      seen.add(fId);
+      const recordSource = resolveDatasetSource({ id: fId, file_name: fName, source: r.source, provenance_version: r.provenance_version }, testProcess);
 
       const cols = r.file_data?.columns || r.columns || [];
       const rws = r.file_data?.rows || r.rows || [];
+      if (!Array.isArray(cols) || cols.some((column: unknown) => typeof column !== 'string')
+        || !Array.isArray(rws) || rws.some((row: unknown) => !row || typeof row !== 'object' || Array.isArray(row))) throw new PersistenceReadError();
+      for (const container of [r, r.file_data]) {
+        if (!container) continue;
+        if (Object.hasOwn(container, 'rows') && !Array.isArray(container.rows)) throw new PersistenceReadError();
+        if (Object.hasOwn(container, 'columns') && !Array.isArray(container.columns)) throw new PersistenceReadError();
+      }
+      if (r.row_count !== undefined && (!Number.isSafeInteger(r.row_count) || r.row_count < 0 || r.row_count !== rws.length)) throw new PersistenceReadError();
       const sum = r.file_data?.summary || r.summary || {};
 
       return {
@@ -118,22 +135,27 @@ function readRecordsFromDisk(): UploadedFileRecord[] {
         },
       };
     });
-  } catch (err) {
-    console.error('Failed to read persistence DB from disk:', err);
-    // Back up the unreadable file instead of silently returning [] and later
-    // overwriting the only copy of the data. Mirrors the sqlite.ts corrupt-DB
-    // backup pattern so a corrupt JSON DB is never lost.
-    try {
-      const targetPath = fs.existsSync(main) ? main : legacy && fs.existsSync(legacy) ? legacy : null;
-      if (targetPath) {
-        const backupPath = `${targetPath}.corrupt.${Date.now()}`;
-        fs.renameSync(targetPath, backupPath);
-        console.warn(`Corrupted persistence DB backed up to ${backupPath}`);
-      }
-    } catch (backupErr) {
-      console.error('Failed to back up corrupted persistence DB file:', backupErr);
+  } catch {
+    throw new PersistenceReadError();
+  }
+}
+
+function readRecordsFromDisk(): UploadedFileRecord[] {
+  try {
+    const { main, legacy } = getJsonPaths();
+    for (const target of [main, legacy].filter(Boolean)) {
+      let stat: fs.Stats;
+      try { stat = fs.lstatSync(target); }
+      catch (error: any) { if (error?.code === 'ENOENT') continue; throw new PersistenceReadError(); }
+      if (stat.isSymbolicLink() || !stat.isFile()) throw new PersistenceReadError();
+      const bytes = fs.readFileSync(target);
+      // Present but invalid primary authority must never fall through to an
+      // older file or be interpreted as a fresh empty installation.
+      return decodePersistenceRecords(bytes);
     }
     return [];
+  } catch {
+    throw new PersistenceReadError();
   }
 }
 

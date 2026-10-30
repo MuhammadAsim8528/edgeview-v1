@@ -9,6 +9,7 @@ const cases: Array<[unknown,string]> = [
   [new Error('fetch failed ECONNRESET'), 'PROVIDER_UNAVAILABLE'],
   [Object.assign(new Error('no space left on device'), { code: 'ENOSPC' }), 'DISK_FULL'],
   [new Error('sqlite database unavailable'), 'DATABASE_UNAVAILABLE'],
+  [Object.assign(new Error('PRIVATE saved dataset unavailable'), { code: 'DATASET_UNAVAILABLE' }), 'DATABASE_UNAVAILABLE'],
   [new Error('persistence write failed'), 'PERSISTENCE_WRITE_FAILED'],
   [new Error('SYNTHETIC_COMPANY contact@example.test private prompt'), 'UNEXPECTED_ERROR'],
 ];
