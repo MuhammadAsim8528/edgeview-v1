@@ -8,6 +8,14 @@ import { sourceDigest, artifactDigest, readBuildIdentity } from '../shared/build
 import { verifyPackage } from './verify-package.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export function verifyPackagedBackup(stage) {
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts/backup-runtime.test.mjs'),
+    path.join(stage, 'scripts/backup-runtime.mjs')], {
+    cwd: root, encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true,
+    env: Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|HOME|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key))),
+  });
+  if (result.error || result.status !== 0) throw new Error('Packaged backup contract failed; no release acceptance.');
+}
 export function ownedPackagePaths(scratch) {
   const project = path.join(scratch, 'workspace', 'edgeview');
   const output = path.resolve(project, '..', '..', 'outputs');
@@ -54,13 +62,16 @@ export function checkPackageIsolated(projectRoot = root) {
     execute(process.execPath, [path.join(projectRoot, 'scripts/package-windows.mjs')], locations.project);
     const verified = verifyPackage(locations.stage, { rejectUnexpected: true });
     execute(process.execPath, ['scripts/package-launch-check.test.mjs', locations.stage], locations.project);
+    // Execute the staged script (including staged relative imports), rather than
+    // infer functionality from its presence or a matching manifest hash.
+    verifyPackagedBackup(locations.stage);
     const manifest = JSON.parse(fs.readFileSync(path.join(locations.stage, 'PACKAGE_MANIFEST.json'), 'utf8'));
     const privacyUnexpected = manifest.files.filter(item => /(^|\/)(?:\.env(?:\..*)?|config(?:\.prev)?\.json|edgeview_db\.json|.*\.db(?:[-.].*)?|\.git|data|uploads|logs|backups)(?:\/|$)/i.test(item.path));
     if (privacyUnexpected.length) throw new Error('Runtime/private files entered the isolated package.');
     const developmentFiles = manifest.files.filter(item => /^(?:src\/|server\/|docs\/)|^EDGEVIEW_.*(?:AUDIT|QA).*\.md$|\.(?:ts|tsx)$/i.test(item.path)).map(item => item.path);
     return { qaOnly: true, commit, buildId: identity.buildId, manifest: verified,
       zipSha256: crypto.createHash('sha256').update(fs.readFileSync(locations.zip)).digest('hex'),
-      unchangedLaunchCheck: 'PASS', privacyFileCheck: 'PASS', customerRuntimeReady: false,
+      unchangedLaunchCheck: 'PASS', packagedBackupContract: 'PASS', privacyFileCheck: 'PASS', customerRuntimeReady: false,
       developmentFileCount: developmentFiles.length,
       limitation: 'Disposable developer ZIP verified, then removed. Contains source/development inputs and requires installed Node/npm; not customer-only, clean Windows, installer, browser or update acceptance.' };
   } finally {
