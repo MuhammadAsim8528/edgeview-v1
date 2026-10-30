@@ -46,6 +46,17 @@ export async function runDoctor({ root = installation, full = false, request = f
   try { dataRoot = resolveRuntimeDataRoot(root, environment); }
   catch { add('runtime_storage', 'FAIL', 'Configured writable data root is invalid or overlaps application files.'); return { format: 1, checks, exitCode: 1 }; }
   add('runtime_storage', 'PASS', dataRoot === path.resolve(root) ? 'Legacy application-root storage selected.' : 'Separate writable data root selected; migration is not inferred.');
+  try {
+    const gate = fs.lstatSync(path.join(dataRoot, 'edgeview.db.lock.maintenance'));
+    if (gate.isSymbolicLink() || !gate.isDirectory()) {
+      add('runtime_maintenance', 'FAIL', 'Maintenance gate is not an ordinary directory. Startup and backup require owner recovery.');
+    } else {
+      add('runtime_maintenance', 'WARN', 'A maintenance gate is recorded. An operation may be active or interrupted; startup and backup remain blocked. Contact support if this persists.');
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') add('runtime_maintenance', 'PASS', 'No maintenance gate is recorded. This alone does not prove backup readiness.');
+    else add('runtime_maintenance', 'FAIL', 'Maintenance state could not be inspected. Startup and backup readiness are unknown.');
+  }
   const identityFile = path.join(dataRoot, 'data', 'installation.json');
   const hasIdentityFile = fs.existsSync(identityFile);
   let identityId = null;

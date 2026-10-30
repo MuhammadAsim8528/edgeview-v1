@@ -14,6 +14,40 @@ try {
   const request = async url => { calls++; assert.equal(url, 'http://127.0.0.1:3901/api/health'); return Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'ok' }, providers: { serper: { enabled: true, configured: true } }, secret: 'must-not-leak' }); };
   const healthy = await runDoctor({ root, request });
   assert.equal(healthy.exitCode, 0); assert.equal(calls, 1);
+  assert.equal(healthy.checks.find(check => check.id === 'runtime_maintenance')?.status, 'PASS');
+  const gate = path.join(root, 'edgeview.db.lock.maintenance');
+  fs.mkdirSync(gate);
+  fs.writeFileSync(path.join(gate, 'owner.json'), '{"token":"PRIVATE_SYNTHETIC_OPERATION","pid":1}');
+  const maintenance = await runDoctor({ root, request });
+  assert.equal(maintenance.checks.find(check => check.id === 'runtime_maintenance')?.status, 'WARN');
+  assert.ok(!JSON.stringify(maintenance).includes('PRIVATE_SYNTHETIC_OPERATION'));
+  fs.unlinkSync(path.join(gate, 'owner.json')); fs.rmdirSync(gate);
+  fs.writeFileSync(gate, 'PRIVATE_SYNTHETIC_OPERATION');
+  const malformedMaintenance = await runDoctor({ root, request });
+  assert.equal(malformedMaintenance.checks.find(check => check.id === 'runtime_maintenance')?.status, 'FAIL');
+  assert.equal(malformedMaintenance.exitCode, 1);
+  assert.ok(!JSON.stringify(malformedMaintenance).includes('PRIVATE_SYNTHETIC_OPERATION'));
+  fs.unlinkSync(gate);
+  const originalStat = fs.lstatSync;
+  try {
+    fs.lstatSync = (file, ...args) => {
+      if (file === gate) throw Object.assign(new Error('PRIVATE_MAINTENANCE_FAILURE'), { code: 'EACCES' });
+      return originalStat(file, ...args);
+    };
+    const inaccessible = await runDoctor({ root, request });
+    assert.equal(inaccessible.checks.find(check => check.id === 'runtime_maintenance')?.status, 'FAIL');
+    assert.ok(!JSON.stringify(inaccessible).includes('PRIVATE_MAINTENANCE_FAILURE'));
+  } finally { fs.lstatSync = originalStat; }
+  const target = path.join(root, 'gate-target'); fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, 'private.txt'), 'PRIVATE_SYNTHETIC_OPERATION');
+  let gateLinked = false;
+  try { fs.symlinkSync(target, gate, 'junction'); gateLinked = true; } catch { /* host may forbid link creation */ }
+  if (gateLinked) {
+    const linked = await runDoctor({ root, request });
+    assert.equal(linked.checks.find(check => check.id === 'runtime_maintenance')?.status, 'FAIL');
+    assert.equal(fs.readFileSync(path.join(target, 'private.txt'), 'utf8'), 'PRIVATE_SYNTHETIC_OPERATION');
+    fs.unlinkSync(gate);
+  } else console.log('SKIPPED maintenance gate junction probe: host does not permit creation');
   assert.ok(!JSON.stringify(healthy).includes('must-not-leak'));
   assert.equal(healthy.checks.find(check => check.id === 'provider_serper').status, 'WARN');
   assert.equal(healthy.checks.find(check => check.id === 'resources').status, 'WARN', 'old runtime cannot fabricate resource measurements');
