@@ -48,6 +48,10 @@ jobs:
       - run: node --import tsx server/tests/monitoring_error_classification.test.ts
       - run: node --import tsx server/tests/stored_file_export.test.ts
       - run: node --import tsx server/tests/contact_export_scope.test.ts
+      - run: node --import tsx server/tests/contact_directory_completeness.test.ts
+      - run: node --import tsx server/tests/contact_directory_docx.test.ts
+      - run: node --import tsx server/tests/contact_directory_pdf_pagination.test.ts
+      - run: node --import tsx server/tests/contact_directory_export.test.ts
       - run: node --import tsx server/tests/official_phone_recall.test.ts
       - run: node --import tsx server/tests/file_page_loading.test.ts
       - run: node --import tsx server/tests/country_overview.test.ts

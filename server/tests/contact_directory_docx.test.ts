@@ -1,9 +1,10 @@
-﻿// DOCX Directory Report â€” verifies the generated Word document contains the
+// DOCX Directory Report â€” verifies the generated Word document contains the
 // exact title banner, 5-column header row, country sections, per-country S.No,
 // leadership details, trade partners, and full contact information with sources.
 
 import * as assert from 'assert';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import JSZip from 'jszip';
 import { db } from '../db';
@@ -11,8 +12,7 @@ import { computeSummary } from '../summary';
 import { TradeRelationshipResolver } from '../trade_relationship_resolver';
 import { generateDocxReport, type ReportCompanyContact } from '../docx_report';
 
-const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_tests';
-fs.mkdirSync(SCRATCH, { recursive: true });
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-export-contract-'));
 
 const fixture: ReportCompanyContact[] = [
   {
@@ -127,7 +127,10 @@ async function main() {
   console.log('contact_directory_docx OK');
 }
 
-main().catch((err) => {
+main().finally(() => {
+  assert.equal(path.dirname(fs.realpathSync(SCRATCH)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(SCRATCH, { recursive: true, force: true });
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });

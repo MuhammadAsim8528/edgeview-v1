@@ -1,10 +1,12 @@
-﻿// Directory Completeness â€” builds a full directory across 3 country sections
+// Directory Completeness â€” builds a full directory across 3 country sections
 // (including "Not Specified" last), generates the real PDF + DOCX, and proves that
 // every company, leader, source, and address makes it into BOTH artifacts â€” nothing
-// dropped, clipped, or skipped. Also verifies country ordering and per-country S.No.
+// dropped from extracted content. Also verifies country ordering and per-country S.No.
+// Text extraction does not prove visible layout or absence of clipping in a viewer.
 
 import * as assert from 'assert';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import JSZip from 'jszip';
 import { db } from '../db';
@@ -15,8 +17,7 @@ import { generatePdfReport } from '../pdf_report';
 import { generateDocxReport, type ReportCompanyContact } from '../docx_report';
 import { extractPdfText, pdfTextContains } from './pdf_inspect';
 
-const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_tests';
-fs.mkdirSync(SCRATCH, { recursive: true });
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-export-contract-'));
 
 function fixture(): ReportCompanyContact[] {
   const mk = (
@@ -122,7 +123,10 @@ async function main() {
   console.log('contact_directory_completeness OK');
 }
 
-main().catch((err) => {
+main().finally(() => {
+  assert.equal(path.dirname(fs.realpathSync(SCRATCH)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(SCRATCH, { recursive: true, force: true });
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });

@@ -5,14 +5,14 @@
 
 import * as assert from 'assert';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import { processExportRequest } from '../export_manager';
 import { countPdfPages, extractPdfText, pdfTextContains } from './pdf_inspect';
 
-const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_tests';
-fs.mkdirSync(SCRATCH, { recursive: true });
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-export-contract-'));
 
 const fixture: any[] = [
   {
@@ -172,7 +172,10 @@ async function main() {
   console.log('contact_directory_export OK');
 }
 
-main().catch((err) => {
+main().finally(() => {
+  assert.equal(path.dirname(fs.realpathSync(SCRATCH)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(SCRATCH, { recursive: true, force: true });
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });

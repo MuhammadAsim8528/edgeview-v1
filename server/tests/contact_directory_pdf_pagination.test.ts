@@ -1,10 +1,12 @@
-﻿// PDF Pagination â€” proves that a single importer with large trade history,
-// leadership, and source lists spans multiple pages WITHOUT dropping or clipping
+// PDF Pagination â€” proves that a single importer with large trade history,
+// leadership, and source lists spans multiple pages without dropping extracted
 // any content. This is the regression test for the old "one page per company +
 // off-page clipping" bug.
+// Viewer geometry and visual clipping remain separate acceptance checks.
 
 import * as assert from 'assert';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import { db } from '../db';
 import { computeSummary } from '../summary';
@@ -13,8 +15,7 @@ import { generatePdfReport } from '../pdf_report';
 import { countPdfPages, extractPdfText, pdfTextContains } from './pdf_inspect';
 import type { ReportCompanyContact } from '../docx_report';
 
-const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_tests';
-fs.mkdirSync(SCRATCH, { recursive: true });
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-export-contract-'));
 
 // Build a large importer that comfortably overflows a single page.
 function bigImporter(): ReportCompanyContact {
@@ -97,7 +98,10 @@ async function main() {
   console.log(`contact_directory_pdf_pagination OK (${pages} pages)`);
 }
 
-main().catch((err) => {
+main().finally(() => {
+  assert.equal(path.dirname(fs.realpathSync(SCRATCH)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(SCRATCH, { recursive: true, force: true });
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });
