@@ -1,6 +1,10 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Verify and commit private legacy-to-stable-storage copy, interrupted-copy retry and compiled schema-upgrade/restart checks, then continue remaining research blockers. Live customer data remains untouched; launcher activation, generic restore/update and final customer acceptance remain open.
+Current active task: Continue remaining research accuracy/retrieval blockers after recording private migration copy and exact package evidence. Live customer data remains untouched; final launcher activation, generic restore/update and final customer acceptance remain open.
+
+### MIG01 exact committed runtime and package checkpoint — 2026-10-30
+
+Exact61b25071be898c7e96ee3d6fcb925dc3773a2b52 rebuilt with clean tree. Actual compiled app-root→separate-data/schema1→2/UUID/dataset discovery/backup/new-root-only writes/restart workflow PASS again. Isolated developer-package check PASS:147 files, unchanged launch, actual staged-backup contract and prohibited-private-file checks. Buildb057903add64cc2db1d86e30c9f8fa06f8349dbded295f85c5ddef719eabbc46; disposable ZIP SHA2563252fadc76a88ed5cdfc7b375f98c13522997f48258c345d1c7a9ea2382a7042. Output removed by owner-bounded checker; still115 development files, installed Node/npm required, customerRuntimeReady=false. No final installer/clean-Windows/real migration, release publication or customer-data modification claim. Internal migration is prepared and tested in its stated scope; the capability remains PARTIAL until activation/support/installed acceptance closes.
 
 ### MIG01 private canonical legacy copy and interruption recovery — 2026-10-30
 
