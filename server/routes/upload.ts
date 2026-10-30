@@ -10,6 +10,7 @@ import {
   deleteFileFromHistory,
 } from '../sqlite_persistence';
 import { captureMonitoringEvent, classifyMonitoringError } from '../monitoring';
+import { historyInsertValues } from '../history_row_projection';
 
 export const uploadRouter = express.Router();
 
@@ -205,21 +206,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
         `);
         try {
           for (const r of parsed.rows) {
-            await stmt.run(
-              r.be_link || r['BE Link'] || '',
-              r.be_date || r['BE Date'] || '',
-              r.hs_code || r['HS Code'] || '',
-              r.item || r.Item || r.ITEM || '',
-              r.importer || r.Importer || r.IMPORTER || r.BUYER || '',
-              r.exporter || r.Exporter || r.EXPORTER || r.SUPPLIER || '',
-              r.country || r.Country || r.COUNTRY || r.ORIGIN || '',
-              typeof r['Total Value (USD)'] === 'number' ? r['Total Value (USD)'] : (typeof r['Total FC (USD)'] === 'number' ? r['Total FC (USD)'] : (typeof r.TOT_FC === 'number' ? r.TOT_FC : 0)),
-              typeof r.Qty === 'number' ? r.Qty : 0,
-              r.unit || r.Unit || r.UNIT || '',
-              r.agent_name || r['Agent Name'] || '',
-              originalName,
-              fileRecord.id
-            );
+            await stmt.run(...historyInsertValues(r, originalName, fileRecord.id));
           }
         } finally {
           await stmt.finalize();
