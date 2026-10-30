@@ -37,6 +37,7 @@ jobs:
       - run: node --import tsx server/tests/history_ownership_migration.test.ts
       - run: node --import tsx server/tests/history_reconciliation.test.ts
       - run: node --import tsx server/tests/history_repair_candidate.test.ts
+      - run: node --import tsx server/tests/history_repair_transaction.test.ts
       - run: node --import tsx server/tests/json_authority_read_failure.test.ts
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
