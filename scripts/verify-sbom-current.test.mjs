@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { verifySbomCurrency } from './verify-sbom-current.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,8 +105,9 @@ try {
   const passFile = write('current.cdx.json', JSON.stringify(full()));
   const lockFile = write('package-lock.json', JSON.stringify(lock));
   const manifestFile = write('package.json', JSON.stringify(manifest));
-  const cli = (args, expectStatus) => {
-    const run = spawnSync(process.execPath, ['scripts/verify-sbom-current.mjs', ...args], { cwd: repoRoot, encoding: 'utf8' });
+  const cli = (args, expectStatus, nodeArgs = []) => {
+    const run = spawnSync(process.execPath, [...nodeArgs, 'scripts/verify-sbom-current.mjs', ...args], { cwd: repoRoot, encoding: 'utf8', timeout: 30000 });
+    assert.equal(run.error, undefined, 'CLI must terminate normally, not time out');
     if (expectStatus !== undefined) assert.equal(run.status, expectStatus, `${run.stdout}${run.stderr}`);
     return run;
   };
@@ -119,6 +120,26 @@ try {
   assert.match(usage.stderr, /Usage: node scripts\/verify-sbom-current\.mjs/);
   const missing = cli([path.join(directory, 'absent.cdx.json'), '--lock', lockFile, '--manifest', manifestFile], 1);
   assert.match(missing.stderr, /SBOM currency check rejected/);
+  const oversized = write('oversized.json', '');
+  fs.truncateSync(oversized, 32 * 1024 * 1024 + 1);
+  for (const args of [
+    [oversized, '--lock', lockFile, '--manifest', manifestFile],
+    [passFile, '--lock', oversized, '--manifest', manifestFile],
+    [passFile, '--lock', lockFile, '--manifest', oversized],
+  ]) {
+    assert.match(cli(args, 1).stderr, /exceeds the size bound/);
+  }
+  const allocationProbe = write('allocation-probe.mjs', `import fs from 'node:fs';const original=fs.readFileSync;fs.readFileSync=(file,...args)=>{if(String(file)===${JSON.stringify(oversized)})throw new Error('UNBOUNDED_READ_ATTEMPT');return original(file,...args);};`);
+  assert.match(cli([oversized, '--lock', lockFile, '--manifest', manifestFile], 1,
+    ['--import', pathToFileURL(allocationProbe).href]).stderr, /exceeds the size bound/,
+  'oversized input must be refused before any whole-file allocation');
+  // Simulate a file growing after inspection. The actual CLI must still enforce
+  // the byte budget while reading, not rely only on its initial size check.
+  const growthProbe = write('growth-probe.mjs', `import fs from 'node:fs';const original=fs.fstatSync;fs.fstatSync=(...args)=>{const stat=original(...args);if(stat.size===${32 * 1024 * 1024 + 1})stat.size=0;return stat;};`);
+  assert.match(cli([oversized, '--lock', lockFile, '--manifest', manifestFile], 1,
+    ['--import', pathToFileURL(growthProbe).href]).stderr, /exceeds the size bound/);
+  const nonregular = cli([directory, '--lock', lockFile, '--manifest', manifestFile], 1);
+  assert.match(nonregular.stderr, /regular file|EISDIR|EACCES|EPERM/);
   const linked = path.join(directory, 'linked.cdx.json');
   let linkMade = false;
   try { fs.symlinkSync(passFile, linked); linkMade = true; } catch { /* links need developer mode on Windows */ }

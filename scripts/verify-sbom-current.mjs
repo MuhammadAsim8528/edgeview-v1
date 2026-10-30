@@ -9,9 +9,27 @@ const MAX_BYTES = 32 * 1024 * 1024;
 
 function readBoundedRegularFile(file, label) {
   if (fs.lstatSync(file).isSymbolicLink()) throw new Error(`${label} must not be a link.`);
-  const bytes = fs.readFileSync(file);
-  if (bytes.length > MAX_BYTES) throw new Error(`${label} exceeds the size bound.`);
-  return bytes;
+  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  try {
+    const stat = fs.fstatSync(descriptor);
+    if (!stat.isFile()) throw new Error(`${label} must be a regular file.`);
+    if (stat.size > MAX_BYTES) throw new Error(`${label} exceeds the size bound.`);
+    const chunks = [];
+    let total = 0;
+    // Read one byte beyond the limit to detect growth after fstat without ever
+    // asking readFileSync to allocate the whole changing file.
+    while (total <= MAX_BYTES) {
+      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, MAX_BYTES + 1 - total));
+      const count = fs.readSync(descriptor, chunk, 0, chunk.length, null);
+      if (count === 0) return Buffer.concat(chunks, total);
+      total += count;
+      if (total > MAX_BYTES) throw new Error(`${label} exceeds the size bound.`);
+      chunks.push(chunk.subarray(0, count));
+    }
+    throw new Error(`${label} exceeds the size bound.`);
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 /**

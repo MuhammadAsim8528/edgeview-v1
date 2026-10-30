@@ -19,6 +19,9 @@ jobs:
           node-version: 24
       - run: node scripts/release-license-inventory.test.mjs
       - run: node scripts/collect-license-texts.test.mjs
+      - run: node scripts/verify-sbom-current.test.mjs
+      - run: node scripts/generate-third-party-notices.test.mjs
+      - run: node scripts/check-package-isolated.test.mjs
       - run: node scripts/verify-release-evidence.test.mjs
       - run: node scripts/probe-telemetry-privacy.test.mjs
       - run: node --experimental-strip-types server/tests/latest_research_request.test.ts
