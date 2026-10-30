@@ -1,5 +1,7 @@
 # EdgeView completion ledger — 2026-10-20
 
+Current active task: Verify remaining interruption boundaries and compiled restart behavior for legacy-history repair. Candidate construction and before/after-replacement child termination rollback passed; live customer data remains untouched. Next dependent gates are migration and matched application/data recovery, then research and package acceptance.
+
 ### DATA02 journaled isolated repair and rollback — 2026-10-30
 
 Added internal history_repair_transaction.ts with fixed edgeview.db/edgeview_db.json targets in a caller-selected ordinary storage root. No HTTP route, CLI or live invocation exposed. Reuses the existing startup/backup maintenance gate; refuses any backend lock, linked root/ancestor, nonregular or multiply-linked input, changed source/generation and oversized read. Bounded descriptor reads; private preimages and pending candidate fsynced before immutable journal, then one-file same-directory-filesystem rename and hash validation. Existing valid rows are retained by the candidate builder. Original JSON never replaced. Completed/controlled-failure preimages retained privately under UUID history-repair directories, not diagnostic exports; retention policy remains open.
