@@ -6,6 +6,13 @@ import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { unusedTestPort } from './test-server-port.mjs';
 import { acquireRuntimeMaintenance } from '../shared/runtime_maintenance.mjs';
+import { setTimeout as pause } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
+const args = process.argv.slice(2);
+const soakCycles = args.length === 0 ? 0 : Number(args[1]);
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--soak-cycles'
+ && /^\d+$/.test(args[1]) && Number.isSafeInteger(soakCycles) && soakCycles >= 1 && soakCycles <= 120),
+ 'Usage: separate-data-runtime.test.mjs [--soak-cycles 1..120] (30 seconds per cycle)');
 const source=process.cwd(),base=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-installed-data-'));
 const app=path.join(base,'app'),data=path.join(base,'state');fs.mkdirSync(app);fs.mkdirSync(data);
 fs.cpSync(path.join(source,'dist'),path.join(app,'dist'),{recursive:true});
@@ -61,6 +68,42 @@ try{
  assert.ok(fs.existsSync(path.join(data,'edgeview.db')));assert.ok(fs.existsSync(path.join(data,'data/installation.json')));
  const form=new FormData();form.set('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC,QTY,UNT\n2026-01-01,Retained Buyer,Kenya,Retained Supplier,Product,10,1,KG']),'retained.csv');
  const uploaded=await fetch(url+'/api/files/upload',{method:'POST',body:form});assert.equal(uploaded.status,201);
+ if(soakCycles){
+  const reportFile=path.join(source,'.test-cache',`isolated-soak-${randomUUID()}.json`);
+  const controller=new AbortController();const cancel=()=>controller.abort();
+  process.once('SIGINT',cancel);process.once('SIGTERM',cancel);
+  const report={format:1,status:'RUNNING',scope:'synthetic import/read/export/delete; providers disabled; not browser, large-data or leak-free acceptance',
+   build:first.app.build,startedAt:new Date().toISOString(),requestedCycles:soakCycles,intervalMs:30000,samples:[]};
+  fs.mkdirSync(path.dirname(reportFile),{recursive:true});
+  const save=()=>fs.writeFileSync(reportFile,JSON.stringify(report,null,2));
+  console.log(JSON.stringify({stage:'soak_started',reportFile,cycles:soakCycles}));save();
+  const bounded=async(response,json=false)=>{
+   assert.ok(response.ok,'soak request must succeed');const chunks=[];let size=0;
+   if(response.body)for await(const chunk of response.body){size+=chunk.length;assert.ok(size<=16*1024*1024,'bounded soak response');if(json)chunks.push(Buffer.from(chunk));}
+   return json?JSON.parse(Buffer.concat(chunks).toString('utf8')):null;
+  };
+  const request=(route,options={})=>fetch(url+route,{...options,redirect:'error',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)])});
+  try{
+   for(let cycle=0;cycle<soakCycles;cycle++){
+    controller.signal.throwIfAborted();const started=performance.now();
+    const health=await bounded(await request('/api/health'),true);assert.equal(health.app.pid,child.pid);
+    for(const key of ['rss_mb','heap_used_mb'])assert.ok(Number.isFinite(health.memory?.[key]),'actual memory measurement required');
+    const rows=Array.from({length:100},(_,i)=>`2026-01-01,Soak Buyer ${i%10},${i%2?'Kenya':'Pakistan'},Soak Supplier,Product ${cycle}-${i},10`);
+    const cycleForm=new FormData();cycleForm.set('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n'+rows.join('\n')]),`synthetic-soak-${cycle}.csv`);
+    await bounded(await request('/api/files/upload',{method:'POST',body:cycleForm}));
+    const directory=await bounded(await request('/api/companies'),true);assert.ok(Array.isArray(directory));
+    await bounded(await request('/api/export/blocks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company_ids:directory.map(item=>item.id)})}));
+    const files=await bounded(await request('/api/files'),true);const active=files.find(item=>item.name===`synthetic-soak-${cycle}.csv`);assert.ok(active);
+    await bounded(await request('/api/files/'+encodeURIComponent(active.id),{method:'DELETE'}));
+    report.samples.push({cycle:cycle+1,at:new Date().toISOString(),rssMb:health.memory.rss_mb,heapUsedMb:health.memory.heap_used_mb,
+     workflowMs:performance.now()-started,companies:directory.length});save();
+    console.log(JSON.stringify({stage:'soak_sample',...report.samples.at(-1)}));
+    await pause(30000,undefined,{signal:controller.signal});
+   }
+   report.status='COMPLETED';report.completedAt=new Date().toISOString();save();
+  }catch(error){report.status=controller.signal.aborted?'INTERRUPTED':'FAILED';save();throw error;}
+  finally{process.removeListener('SIGINT',cancel);process.removeListener('SIGTERM',cancel);}
+ }
  await stop();
  assert.equal(fs.existsSync(lock),false);assert.equal(fs.existsSync(owner),false);
  const bytes=fs.readFileSync(path.join(data,'edgeview_db.json'));assert.ok(bytes.includes(Buffer.from('Retained Buyer')));
