@@ -192,35 +192,38 @@ async function handleUpload(req: express.Request, res: express.Response) {
       await saveFileToDb(fileRecord, fileHash, 'real');
       jsonPersisted = true;
 
-      // Insert rows into history_data table. Clear the same filename first so a
-      // retry after an interrupted/failed upload is idempotent rather than
-      // duplicating trade rows.
+      // Filename is a display label, not ownership. Hash duplicates returned
+      // above; new datasets and failed-upload cleanup are scoped to their ID.
       const { getDb } = await import('../sqlite');
       sqlDb = await getDb();
-      await sqlDb.run('DELETE FROM history_data WHERE file_name = ?', [originalName]);
+      await sqlDb.run('DELETE FROM history_data WHERE file_id = ?', [fileRecord.id]);
       if (parsed.rows && parsed.rows.length > 0) {
         const stmt = await sqlDb.prepare(`
           INSERT INTO history_data (
-            be_link, be_date, hs_code, item, importer, exporter, country, tot_fc, qty, unit, agent_name, file_name
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            be_link, be_date, hs_code, item, importer, exporter, country, tot_fc, qty, unit, agent_name, file_name, file_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        for (const r of parsed.rows) {
-          await stmt.run(
-            r.be_link || r['BE Link'] || '',
-            r.be_date || r['BE Date'] || '',
-            r.hs_code || r['HS Code'] || '',
-            r.item || r.Item || r.ITEM || '',
-            r.importer || r.Importer || r.IMPORTER || r.BUYER || '',
-            r.exporter || r.Exporter || r.EXPORTER || r.SUPPLIER || '',
-            r.country || r.Country || r.COUNTRY || r.ORIGIN || '',
-            typeof r['Total Value (USD)'] === 'number' ? r['Total Value (USD)'] : (typeof r['Total FC (USD)'] === 'number' ? r['Total FC (USD)'] : (typeof r.TOT_FC === 'number' ? r.TOT_FC : 0)),
-            typeof r.Qty === 'number' ? r.Qty : 0,
-            r.unit || r.Unit || r.UNIT || '',
-            r.agent_name || r['Agent Name'] || '',
-            originalName
-          );
+        try {
+          for (const r of parsed.rows) {
+            await stmt.run(
+              r.be_link || r['BE Link'] || '',
+              r.be_date || r['BE Date'] || '',
+              r.hs_code || r['HS Code'] || '',
+              r.item || r.Item || r.ITEM || '',
+              r.importer || r.Importer || r.IMPORTER || r.BUYER || '',
+              r.exporter || r.Exporter || r.EXPORTER || r.SUPPLIER || '',
+              r.country || r.Country || r.COUNTRY || r.ORIGIN || '',
+              typeof r['Total Value (USD)'] === 'number' ? r['Total Value (USD)'] : (typeof r['Total FC (USD)'] === 'number' ? r['Total FC (USD)'] : (typeof r.TOT_FC === 'number' ? r.TOT_FC : 0)),
+              typeof r.Qty === 'number' ? r.Qty : 0,
+              r.unit || r.Unit || r.UNIT || '',
+              r.agent_name || r['Agent Name'] || '',
+              originalName,
+              fileRecord.id
+            );
+          }
+        } finally {
+          await stmt.finalize();
         }
-        await stmt.finalize();
       }
 
     } catch (dbErr: any) {
@@ -233,7 +236,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
       }
       if (sqlDb) {
         try {
-          await sqlDb.run('DELETE FROM history_data WHERE file_name = ?', [originalName]);
+          await sqlDb.run('DELETE FROM history_data WHERE file_id = ?', [fileRecord.id]);
           await sqlDb.flush();
         } catch (cleanupErr) {
           console.error('Failed to clean partial history_data upload state:', cleanupErr);

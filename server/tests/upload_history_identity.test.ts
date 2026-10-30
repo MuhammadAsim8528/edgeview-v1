@@ -19,11 +19,11 @@ const server = app.listen(0, '127.0.0.1');
 await new Promise<void>(resolve => server.once('listening', resolve));
 const address = server.address(); assert.ok(address && typeof address !== 'string');
 const url = `http://127.0.0.1:${address.port}/api/files/upload`;
-async function upload(buyer: string) {
+async function upload(buyer: string, expectedStatus = 201) {
   const form = new FormData();
   form.set('file', new Blob([`Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,${buyer},Kenya,Synthetic Supplier,Product,10\n`]), 'shared-name.csv');
   const response = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(10000) });
-  assert.equal(response.status, 201, 'different file contents must remain distinct uploads');
+  assert.equal(response.status, expectedStatus, 'upload must report the actual persistence outcome');
   return response.json();
 }
 let failure: unknown;
@@ -35,9 +35,35 @@ try {
   const saved = (await loadAllFilesFromDb()).filter(file => file.name === 'shared-name.csv');
   assert.equal(saved.length, 2, 'both primary datasets must remain saved');
   assert.notEqual(saved[0].id, saved[1].id);
+  await upload('Synthetic Second Buyer', 200);
   const rows = await sql.all('SELECT importer FROM history_data WHERE file_name = ? ORDER BY importer', ['shared-name.csv']);
   assert.deepEqual(rows.map(row => row.importer), ['Synthetic First Buyer', 'Synthetic Second Buyer'],
     'a same-name upload must not erase shipment history owned by a different dataset ID');
+  const prepare = sql.prepare;
+  try {
+    sql.prepare = async query => {
+      const statement = await prepare(query);
+      return { ...statement, run: async (...params) => {
+        await statement.run(...params); throw new Error('Controlled shipment insert failure');
+      } };
+    };
+    await upload('Synthetic Failed Buyer', 507);
+  } finally { sql.prepare = prepare; }
+  assert.deepEqual((await loadAllFilesFromDb()).filter(file => file.name === 'shared-name.csv').map(file => file.id).sort(),
+    saved.map(file => file.id).sort(), 'failed upload rollback preserves the two older primary datasets');
+  assert.deepEqual(await sql.all('SELECT importer FROM history_data WHERE file_name = ? ORDER BY importer', ['shared-name.csv']), rows,
+    'failed same-name upload cleanup cannot erase sibling history');
+  await sql.run('INSERT INTO history_data (file_name, importer) VALUES (?, ?)', ['shared-name.csv', 'Synthetic Unattributed Legacy']);
+  await sql.flush();
+  const beforeRefusal = fs.readFileSync(process.env.EDGEVIEW_JSON_DB!);
+  const refused = await fetch(`http://127.0.0.1:${address.port}/api/stats/history-files/${encodeURIComponent(firstId)}`,
+    { method: 'DELETE', signal: AbortSignal.timeout(10000) });
+  assert.equal(refused.status, 409);
+  assert.equal((await refused.json()).code, 'LEGACY_HISTORY_RECONCILIATION_REQUIRED');
+  assert.deepEqual(fs.readFileSync(process.env.EDGEVIEW_JSON_DB!), beforeRefusal, 'legacy refusal precedes primary deletion');
+  assert.equal((await sql.get('SELECT COUNT(*) AS count FROM history_data')).count, 3);
+  // Remove only the deliberately inserted fixture, not a product reconciliation.
+  await sql.run('DELETE FROM history_data WHERE importer = ?', ['Synthetic Unattributed Legacy']);
   const deleted = await fetch(`http://127.0.0.1:${address.port}/api/stats/history-files/${encodeURIComponent(firstId)}`,
     { method: 'DELETE', signal: AbortSignal.timeout(10000) });
   assert.equal(deleted.status, 200);

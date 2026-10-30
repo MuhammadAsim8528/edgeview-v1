@@ -28,7 +28,7 @@ export async function flushInitializedDatabase(): Promise<void> {
   if (initPromise) await initPromise;
   if (dbInstance) await dbInstance.flush();
 }
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 /** Re-open the isolated on-disk database for persistence regression tests. */
 export function resetDbInstanceForTests(): void {
@@ -409,6 +409,10 @@ export async function getDb(): Promise<DatabaseWrapper> {
     `);
 
     const hasColumn = (table: string, column: string) => db.exec(`PRAGMA table_info(${table});`)[0]?.values.some(row => row[1] === column);
+    if (!hasColumn('history_data', 'file_id')) {
+      await wrapper.exec('ALTER TABLE history_data ADD COLUMN file_id TEXT;');
+    }
+    await wrapper.exec('CREATE INDEX IF NOT EXISTS idx_history_file_id ON history_data(file_id);');
     if (!hasColumn('contact_cache', 'details_json')) {
       await wrapper.exec(`ALTER TABLE contact_cache ADD COLUMN details_json TEXT;`);
     }

@@ -105,7 +105,7 @@ try {
         assert.ok(backups.some(name => fs.readFileSync(path.join(directory, name)).equals(original)), 'immediate original bytes retained');
         const disk = new SQL.Database(fs.readFileSync(dbFile));
         assert.equal(disk.exec('PRAGMA integrity_check')[0].values[0][0], 'ok');
-        assert.equal(disk.exec('PRAGMA user_version')[0].values[0][0], 1); disk.close();
+        assert.equal(disk.exec('PRAGMA user_version')[0].values[0][0], 2); disk.close();
         // Current-version restart must not prune manually retained extra images.
         backup(dbFile, 0, 1600000000000);
         resetDbInstanceForTests();

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from './db';
 import { getHistoryFilesFromDb, deleteFileFromHistory } from './sqlite_persistence';
 import { getSafeContentDisposition } from './utils/header_encoder';
+import { hasUnattributedHistory, HISTORY_RECONCILIATION_REQUIRED } from './history_ownership';
 
 export const statsRouter = Router();
 
@@ -509,11 +510,11 @@ statsRouter.delete('/history-files/:id', async (req: Request, res: Response) => 
       });
     }
 
-    // Delete from SQLite disk storage
-    const deletedFromDisk = await deleteFileFromHistory(fileId);
-
     const fileInMem = db.files.get(fileId);
+    if (!fileInMem) return res.status(404).json({ success: false, code: 'FILE_NOT_FOUND', message: 'File not found.' });
     const fileName = fileInMem ? fileInMem.name : 'Uploaded file';
+    if (await hasUnattributedHistory(fileName)) return res.status(409).json(HISTORY_RECONCILIATION_REQUIRED);
+    const deletedFromDisk = await deleteFileFromHistory(fileId);
     let historyCleanupError: string | null = null;
 
     // Purge the file's shipment rows and flush the derived index before making
@@ -522,7 +523,7 @@ statsRouter.delete('/history-files/:id', async (req: Request, res: Response) => 
       const { getDb } = await import('./sqlite');
       const sqliteDb = await getDb();
       if (fileName && fileName !== 'Uploaded file') {
-        await sqliteDb.run('DELETE FROM history_data WHERE file_name = ?', [fileName]);
+        await sqliteDb.run('DELETE FROM history_data WHERE file_id = ?', [fileId]);
         await sqliteDb.flush();
       }
     } catch (sqlErr: any) {

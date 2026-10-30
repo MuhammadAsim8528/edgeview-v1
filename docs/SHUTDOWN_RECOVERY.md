@@ -108,3 +108,23 @@ Older builds do not honor the new gate. Do not run a mixed-version backup/startu
 workflow or claim this protocol protects against older binaries, arbitrary
 external file writers, power loss, or a compromised Windows user account. This
 change does not implement transactional restore, migration, or schema rollback.
+
+## Shipment-history ownership upgrade (SQLite schema 2)
+
+New uploads store their dataset ID beside the display filename in shipment
+history. Upload retry cleanup and both delete routes target the dataset ID;
+two different files may retain the same display name. The existing migration
+mechanism retains a byte-for-byte pre-upgrade backup before adding the nullable
+ownership column and index. A failed write must preserve the original database.
+
+Existing rows retain null ownership. A filename alone cannot prove which of
+several datasets owns an older row. Deletion for an affected filename currently
+returns `409 LEGACY_HISTORY_RECONCILIATION_REQUIRED` before deleting primary
+data. This is a temporary safety guard, not completed legacy reconciliation.
+Do not assign old rows by filename, discard them, or ask an end user to edit SQL.
+Reviewed owner recovery/reindexing and its interruption tests are still required.
+
+This is a physical schema upgrade, separate from contact-overlay policy versions.
+Installed-package downgrade and database rollback remain separate acceptance
+gates. No accepted automatic rollback procedure is provided by this change;
+the original operational installation has not been migrated during these tests.

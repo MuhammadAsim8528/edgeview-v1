@@ -34,6 +34,7 @@ jobs:
       - run: node --import tsx server/tests/export_blocks_endpoint.test.ts
       - run: node --import tsx server/tests/upload_extension_validation.test.ts
       - run: node --import tsx server/tests/upload_history_identity.test.ts
+      - run: node --import tsx server/tests/history_ownership_migration.test.ts
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/engine_ai_destination.test.ts
@@ -144,6 +145,7 @@ jobs:
       - run: node scripts/history-production-runtime.test.mjs
       - run: node scripts/runtime-bootstrap.test.mjs
       - run: node scripts/separate-data-runtime.test.mjs
+      - run: node scripts/history-owner-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release
       - run: npm run package:windows

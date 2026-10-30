@@ -13,6 +13,7 @@ import { normalizeRow, groupShipmentRows } from './server/grouping';
 import { computeSummary } from './server/summary';
 import { statsRouter } from './server/stats_router';
 import { uploadRouter } from './server/routes/upload';
+import { hasUnattributedHistory, HISTORY_RECONCILIATION_REQUIRED } from './server/history_ownership';
 import {
   saveFileToDb,
   loadAllFilesFromDb,
@@ -563,6 +564,7 @@ app.delete('/api/files/:id', async (req, res) => {
     }
 
     const file = db.files.get(id)!;
+    if (await hasUnattributedHistory(file.name)) return res.status(409).json(HISTORY_RECONCILIATION_REQUIRED);
 
     // 1. Persist the primary file deletion first so it cannot reappear after
     // restart. JSON persistence throws on an undurable write.
@@ -574,7 +576,7 @@ app.delete('/api/files/:id', async (req, res) => {
     try {
       const { getDb } = await import('./server/sqlite');
       const sqliteDb = await getDb();
-      await sqliteDb.run('DELETE FROM history_data WHERE file_name = ?', [file.name]);
+      await sqliteDb.run('DELETE FROM history_data WHERE file_id = ?', [id]);
       await sqliteDb.flush();
     } catch (sqlErr: any) {
       historyCleanupError = String(sqlErr?.message || sqlErr);
