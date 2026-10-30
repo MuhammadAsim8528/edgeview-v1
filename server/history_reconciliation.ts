@@ -44,7 +44,8 @@ export function planHistoryReconciliation(name: string, files: UploadedFileRecor
       .sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     if (!selected.length) throw new Refusal('NO_PRIMARY_DATASET');
     for (const file of selected) {
-      if (typeof file.id !== 'string' || !file.id || file.id.length > 256 || ids.has(file.id)
+      if ((file.source !== 'real' && file.source !== 'test')
+        || typeof file.id !== 'string' || !file.id || file.id.length > 256 || ids.has(file.id)
         || typeof file.file_hash !== 'string' || file.file_hash.length > 128
         || !Array.isArray(file.file_data?.rows) || !Number.isSafeInteger(file.row_count)
         || file.row_count !== file.file_data.rows.length) throw new Refusal('INVALID_INPUT');
