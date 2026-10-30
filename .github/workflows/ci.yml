@@ -90,6 +90,11 @@ jobs:
       - run: node --import tsx server/tests/storage_mutation_guard.test.ts
       - run: node --import tsx server/tests/model_credential_origin.test.ts
       - run: node --import tsx server/tests/outbound_retrieval_safety.test.ts
+      - run: node --import tsx server/tests/outbound_connection_binding.test.ts
+      - run: node --import tsx server/tests/provider_transport_boundary.test.ts
+      - run: node --import tsx server/tests/masked_key_resolution.test.ts
+      - run: node --import tsx server/tests/contact_projection_country_isolation.test.ts
+      - run: node --import tsx server/tests/ssrf_security_guard.test.ts
       - run: node --import tsx server/tests/provider_model_discovery_e2e.test.ts
       - run: node scripts/model-test-outcome.test.mjs
       - run: node --import tsx server/tests/bytestring_credential_regression.test.ts
