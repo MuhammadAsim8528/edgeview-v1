@@ -466,9 +466,19 @@ export const detectCountryNamesInText = detectCountriesInFreeText;
 const explicitCountryNames = new Map(ISO_3166_1.map(([, , name]) => [name.toLowerCase(), name]));
 const explicitCountryPattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${[...explicitCountryNames.values()]
   .sort((a, b) => b.length - a.length).map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+// These uppercase office abbreviations are explicit labels, not arbitrary ISO
+// codes. Preserve case: "us", "in" and the Spanish verb "usa" are prose.
+const explicitCountryAbbreviations = new Map([
+  ['UAE', 'United Arab Emirates'], ['UK', 'United Kingdom'], ['USA', 'United States'],
+]);
+const explicitAbbreviationPattern = /(?<![\p{L}\p{N}])(?:UAE|UK|USA|U\.A\.E\.?|U\.K\.?|U\.S\.A\.?)(?![\p{L}\p{N}])/gu;
 export function detectExplicitCountryNames(raw: string): string[] {
-  return [...new Set([...String(raw || '').matchAll(explicitCountryPattern)]
-    .map(match => explicitCountryNames.get(match[0].toLowerCase())!).filter(Boolean))];
+  const text = String(raw || '');
+  const matches = [
+    ...[...text.matchAll(explicitCountryPattern)].map(match => ({ at: match.index!, name: explicitCountryNames.get(match[0].toLowerCase())! })),
+    ...[...text.matchAll(explicitAbbreviationPattern)].map(match => ({ at: match.index!, name: explicitCountryAbbreviations.get(match[0].replace(/\./g, ''))! })),
+  ].sort((a, b) => a.at - b.at);
+  return [...new Set(matches.map(match => match.name).filter(Boolean))];
 }
 
 /** Compares two country names for semantic equivalence */

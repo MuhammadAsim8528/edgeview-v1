@@ -14,6 +14,18 @@ const project = (country: string, results: ReturnType<typeof page>[]) => project
 });
 
 const fixtures = [
+  { name: 'UAE office label must not inherit Kenyan navigation', country: 'Kenya',
+    pages: [page('abbreviated-offices', 'Kenya\nUAE office\nforeign@scopeanchor.test')],
+    allowed: [], forbidden: ['foreign@scopeanchor.test'] },
+  { name: 'dotted UK office label must not inherit Kenyan navigation', country: 'Kenya',
+    pages: [page('dotted-offices', 'Kenya\nU.K. office\nforeign@scopeanchor.test')],
+    allowed: [], forbidden: ['foreign@scopeanchor.test'] },
+  { name: 'USA office label must not inherit Kenyan navigation', country: 'Kenya',
+    pages: [page('usa-offices', 'Kenya\nUSA office\nforeign@scopeanchor.test')],
+    allowed: [], forbidden: ['foreign@scopeanchor.test'] },
+  { name: 'local UAE office remains admissible without full English name', country: 'United Arab Emirates',
+    pages: [page('local-abbreviation', 'UAE office\nlocal@scopeanchor.test')],
+    allowed: ['local@scopeanchor.test'], forbidden: [] },
   { name: 'Kenyan branch must not inherit Pakistan parent mailbox', country: 'Kenya',
     pages: [page('kenya', 'Scopeanchor Medical Kenya office\nNairobi, Kenya\nkenya@scopeanchor.test'),
       page('parent', 'Scopeanchor Medical Pakistan headquarters\nKarachi, Pakistan\nparent@scopeanchor.test')],
@@ -76,6 +88,14 @@ assert.deepEqual(fields.addresses, ['22 Acacia Road, Nairobi, Kenya']);
 assert.deepEqual(fields.phones_list, ['020 4455667'], 'unprefixed foreign-office phones cannot pass through country compatibility alone');
 assert.ok(!fields.evidence.some(item => String(item.value).includes('Foreign Leader')));
 assert.deepEqual(detectExplicitCountryNames('Contact us in South Sudan and Papua New Guinea'), ['South Sudan', 'Papua New Guinea']);
+assert.deepEqual(detectExplicitCountryNames('USA, Kenya, U.K., U.A.E., United States'),
+  ['United States', 'Kenya', 'United Kingdom', 'United Arab Emirates'], 'aliases preserve source order and deduplicate canonical countries');
+assert.deepEqual(detectExplicitCountryNames('Contact us in the office; usa este formulario. UKulele USAID EUAE'), [],
+  'ordinary words, lowercase prose and substrings are not country evidence');
+const abbreviated = page('abbreviated-contact', 'Kenya\nU.A.E. office\nforeign@scopeanchor.test\nPhone: +971 4 1234567');
+assert.equal(contactFactScope(abbreviated, 'foreign@scopeanchor.test', 'Kenya', 'email').scope, 'foreign');
+assert.equal(contactFactScope(abbreviated, '+971 4 1234567', 'Kenya', 'phone').scope, 'foreign');
+assert.equal(contactFactScope(abbreviated, 'foreign@scopeanchor.test', 'United Arab Emirates', 'email').scope, 'local');
 assert.equal(contactFactScope(page('unknown', 'Contact us for details'), 'details', 'Kenya').scope, 'unknown', 'missing evidence must never be labelled local');
 const parentHostedLocal = projectDeterministicContactFields({ company_name: 'Scopeanchor Medical', country: 'Kenya',
   identity_resolution: { official_domain: 'scopeanchor.pk' } as any,
