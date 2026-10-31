@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Finish saved Reports source/content export correction and its exact-source checks, then continue the known customer-readiness queue without reviving retired generation or introducing a new storage authority. All prior readiness gates remain in this ledger.
+Current active task: Reproduce and verify JOB01 interactive/batch same-company ordering and cancellation boundaries in isolation; saved Reports export correction passed its scoped checks and exact-source developer-package verification. All prior readiness gates remain open as recorded. All prior readiness gates remain in this ledger.
 
 ## Full owner acceptance checklist
 
@@ -2823,3 +2823,7 @@ Correction under verification: existing report map remains the source; browser r
 Acceptance pending: typecheck/lint/full V1, E2E typecheck, production build, rendered download + actual CSV/XLSX/DOCX/PDF/ZIP content and override rejection, release smoke, exact committed developer-package verification. Reports remain session-only in the existing map; there is no current UI creation caller. Durable report creation/restart, Unicode font coverage, final document visual QA and clean-Windows acceptance are NOT VERIFIED. Broad EXP01/customer-readiness is not closed by this sub-fix.
 
 Verification checkpoint: npm run check (typecheck, lint, full V1), npm run typecheck:e2e, npm run build, scoped saved-report/derived-file Playwright (3 passed), npm run test:release all exit0. Actual downloaded custom table marker/42 and long-text end survived standalone formats and ZIP PDF; stale/forged content requests returned400 INVALID_EXPORT_REQUEST. Existing bundle-size warning remains. Exact-source developer-package check is next; no customer/installed/final visual acceptance inferred.
+
+Exact-source package checkpoint: committed/pushed 0848752a823d07b26515541c1c8b283e35c1e628 rebuilt; isolated package checker PASS150manifest files, unchangedLaunchCheck/packagedBackupContract/privacyFileCheck PASS. Build662d73cd0262cbe7453e02f82931cdb7cfec895bba52516b1594773193dded55; disposable ZIP347a79b2c997bd47490f508e7c2f4d6ed318d9959f4d54035bdd976c1d3c9ddf, removed by owned checker. Still118 development files and installed Node/npm required; customerRuntimeReady=false. This is not self-contained/MSIX/clean-Windows/update acceptance.
+
+Next JOB01 unit: directly reproduce interactive versus batch same-company completion ordering and cancellation/retry boundaries with synthetic isolated providers/storage before changing behavior. Read-only trace found activeJobs guards job IDs, while interactive and batch independently await enrichment then durable overlay publication; absence of a matching grep is not proof of a race. Require controlled out-of-order completion evidence before a fix; preserve immutable history and stronger prior results. No new issue is marked confirmed yet.
