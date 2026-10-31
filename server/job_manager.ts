@@ -3,7 +3,7 @@ import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, type V1Run } from 
 import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
 import { hasInstitutionalRole } from './corporate_validation';
 import { hasExplicitCountryCallingCode, isCountryCompatiblePhone } from './phone_country';
-import { canonicalEntityIdentityKey } from './company_identity';
+import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './company_identity';
 import { normalizeV1ContactOverlay, V1_CONTACT_OVERLAY_VERSION } from '../shared/v1_contact_contract';
 import { OrderedFailureStreak } from './ordered_failure_tracker';
 import { contactFactScope, countryScopedFactSources, structuredContactFactScope } from './contact_country_scope';
@@ -265,18 +265,26 @@ function structuredLeadersFromOfficialPages(pages: Array<any>, companyName: stri
 }
 
 function leadershipFromLinkedInResults(results: Array<any>, companyName: string) {
-  const ignored = /^(?:the|and|company|co|limited|ltd|private|pvt|inc|llc|group|pharma|pharmaceuticals?)$/;
-  const identityTokens = companyName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ')
-    .filter(token => token.length >= 4 && !ignored.test(token));
+  const employerKey = (name: string) => canonicalCompanyIdentityKey(name).split(' ')
+    .filter(token => !/^(?:the|company|co|limited|ltd|private|pvt|inc|llc|plc)$/.test(token))
+    .map(token => /^pharmaceuticals?$/.test(token) ? 'pharma' : token).join(' ');
+  const targetEmployer = employerKey(companyName);
   const leaders: Array<{ name: string; designation: string; source_url: string; linkedin: string }> = [];
   for (const result of results) {
     const url = String(result.url || '');
-    if (!/linkedin\.com\/in\//i.test(url)) continue;
+    try { const parsed = new URL(url); if (!/(?:^|\.)linkedin\.com$/i.test(parsed.hostname) || !/^\/in\//i.test(parsed.pathname)) continue; } catch { continue; }
+    if (result.status !== 'success' || !targetEmployer) continue;
     const evidence = `${String(result.title || '')}\n${String(result.snippet || '')}`;
-    const normalizedEvidence = evidence.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
-    if (!identityTokens.some(token => normalizedEvidence.includes(token))) continue;
-    const roleMatch = evidence.match(/(?:^|\n)\s*(?:#{1,4}\s*)?([^\n]{2,120}?)\s+at\s+[^\n]{2,180}/i);
-    const designation = cleanLeadershipRole(String(roleMatch?.[1] || '').replace(/^\*+|\*+$/g, '').trim());
+    // A profile can describe several employers. Bind the role to its own
+    // explicit employer clause; target words elsewhere authorize nothing.
+    let designation = '';
+    for (const match of evidence.matchAll(/(?:^|\n|[;|•])\s*(?:#{1,4}\s*)?([^\n;|•]{2,120}?)\s+at\s+([^\n;|•]{2,180})/gi)) {
+      if (/\b(?:former(?:ly)?|previous(?:ly)?|past|retired|ex[- ])\b/i.test(match[1])) continue;
+      const employer = match[2].split(/\s+(?:in|based in|located in)\s+/i)[0].replace(/[.!?]+$/, '').trim();
+      if (employerKey(employer) !== targetEmployer) continue;
+      const role = cleanLeadershipRole(match[1].replace(/^\*+|\*+$/g, '').trim());
+      if (LEADERSHIP_ROLE.test(role)) { designation = role; break; }
+    }
     if (!LEADERSHIP_ROLE.test(designation)) continue;
     let name = String(result.title || '').split(/\s[-|]\s/)[0].trim();
     const headingName = evidence.match(/(?:^|\n)\s*#\s+([^\n#]{3,100})/);
@@ -375,10 +383,11 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const leaderMap = new Map<string, { name: string; designation: string; source_url: string; linkedin?: string }>();
   const companyName = String(run.company_name || '');
   const formalCards: FormalLeadershipCard[] = [];
+  const linkedInLeaders = leadershipFromLinkedInResults(results, companyName);
   for (const leader of structuredLeadersFromOfficialPages(officialPages, companyName, formalCards)) {
     leaderMap.set(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), leader);
   }
-  for (const leader of leadershipFromLinkedInResults(results, companyName)) {
+  for (const leader of linkedInLeaders) {
     if (!leaderMap.has(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())) {
       leaderMap.set(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), leader);
     }
@@ -412,6 +421,9 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const headquarters = localHeadquartersEvidence(officialPages, addresses, companyName, String(run.country || ''));
   const admit = (field: string, value: string, sourceUrl?: string, role = '') => {
     if (field === 'leader' && relatedLeadershipEmployer(role, companyName, String(run.country || ''))) return false;
+    if (field === 'leader' && /linkedin\.com\/in\//i.test(String(sourceUrl || ''))
+      && !linkedInLeaders.some(person => person.source_url === sourceUrl && person.name.toLowerCase() === value.toLowerCase()
+        && person.designation.toLowerCase() === role.toLowerCase())) return false;
     const card = field === 'leader' ? formalCards.find(item => item.name.toLowerCase() === value.toLowerCase() && item.source.url === sourceUrl) : undefined;
     const typed = card && structuredContactFactScope(card.source, value, String(run.country || ''));
     if (card && (foreignCurrentLeadershipLocation(role, card.text, String(run.country || ''))

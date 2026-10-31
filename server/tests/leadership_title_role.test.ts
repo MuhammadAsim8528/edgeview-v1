@@ -22,3 +22,22 @@ for (const role of ['Corporate Management', 'Professor Country Manager']) {
  const result=projectDeterministicContactFields({company_name:'Scopeanchor Medical',country:'Kenya',identity_resolution:{official_domain:'scopeanchor.test'} as any,results:[page] as any});
  assert.equal(result.contact_persons.length,0,'generic headings and rejected institutional roles cannot be laundered by title cleanup');
 }
+
+const multiEmployer = {id:'multi',provider:'direct-http',status:'success',rank:1,url:'https://ke.linkedin.com/in/alice-fixture',
+ title:'Alice Fixture - Chief Executive Officer at Different Holdings',
+ snippet:'Director Exports at Scopeanchor Medical in Kenya.',
+ text:'Alice Fixture is Chief Executive Officer at Different Holdings. Director Exports at Scopeanchor Medical in Kenya.',links:[],metadata:{}};
+const projectProfile=(source:any)=>projectDeterministicContactFields({company_name:'Scopeanchor Medical',country:'Kenya',identity_resolution:{official_domain:'scopeanchor.test'} as any,results:[source] as any});
+assert.deepEqual(projectProfile(multiEmployer).contact_persons.map(p=>p.designation),['Director Exports'],
+ 'a target-company mention cannot authorize a different employer role from the same profile');
+for(const suffix of ['Healthcare','Distributors']){
+ const other={...multiEmployer,title:`Alice Fixture - CEO at Scopeanchor ${suffix}`,snippet:'Scopeanchor Medical Kenya partner profile.',text:`Alice Fixture CEO at Scopeanchor ${suffix}. Scopeanchor Medical Kenya partner profile.`};
+ assert.deepEqual(projectProfile(other).contact_persons,[],'shared brand/partner mention is not an exact employer');
+}
+const former={...multiEmployer,title:'Alice Fixture - Former CEO at Scopeanchor Medical',snippet:'Former CEO at Scopeanchor Medical in Kenya.',text:'Alice Fixture was formerly CEO at Scopeanchor Medical in Kenya.'};
+assert.deepEqual(projectProfile(former).contact_persons,[],'explicit former employment cannot be presented as current leadership');
+const unboundClaim={field:'leader',value:'Alice Fixture',role:'CEO',source_type:'linkedin',source_result_id:former.id,source_url:former.url,quote:former.text};
+const claimed=projectDeterministicContactFields({company_name:'Scopeanchor Medical',country:'Kenya',identity_resolution:{official_domain:'scopeanchor.test'} as any,results:[former] as any,evidence_workspace:{accepted_claims:[unboundClaim]} as any});
+assert.deepEqual(claimed.contact_persons,[],'an already-admitted model claim cannot bypass deterministic employer/current-role checks');
+for(const altered of [{...multiEmployer,status:'error'},{...multiEmployer,url:'https://attacker.test/linkedin.com/in/alice-fixture'}])assert.deepEqual(projectProfile(altered).contact_persons,[],'failed or lookalike profile URLs do not establish employment');
+console.log('PASS LinkedIn role-to-employer binding, shared-brand collisions and explicit former role abstention');

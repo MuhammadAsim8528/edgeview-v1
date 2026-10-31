@@ -1,6 +1,14 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Finish the fresh-batch durability regression/checkpoint, then continue the existing country/provenance and release acceptance blockers. Corrected retained Emerchemie evidence now passes compiled HTTP/export/restart with no provider calls; final live/manual QA and wider real-company acceptance remain open. Live customer data remains untouched.
+Current active task: Verify the employer-bound leadership correction and exact integrated package, then continue the existing real-company/country and release acceptance blockers. Corrected retained Emerchemie evidence now passes compiled HTTP/export/restart with no provider calls; final live/manual QA and wider real-company acceptance remain open. Live customer data remains untouched.
+
+### CC02 role-to-employer projection boundary — 2026-10-31
+
+Reproduced the previously recorded multi-employer concern: synthetic LinkedIn title CEO at Different Holdings plus snippet Director Exports at Scopeanchor Medical/Kenya produced CEO for Scopeanchor. Corrected deterministic profile parsing to bind each candidate role to its own explicit employer clause, normalize legal suffix/Pharmaceutical spelling only, and require exact employer identity rather than one shared brand token elsewhere. Failed sources, lookalike profile hosts and explicit former/previous roles abstain. Existing accepted model claims cannot bypass the same deterministic LinkedIn role/name/employer check. Local country evidence still independently required; parent/global domain ownership does not change that. Official management cards remain separately evidence-checked.
+
+Focused regression red before correction, then PASS: distinct roles at two employers, shared-brand healthcare/distributor collisions, former roles, claimed-role bypass, failed/lookalike profiles, existing local/foreign title cases and formal management affiliation fixtures. Overlay policy30 withholds prior29 cached projections for explicit safe review, preserving SQL/raw recovery data and avoiding startup payload replay; previous-policy withholding test PASS. npm run check (typecheck/lint/full V1) PASS. This does not prove current real employment, resolve every date/alias/language or close Global/Thorne Berry truthset acceptance. Do not hard-code the user's expected CEO into product output.
+
+JOB01 durable fresh worker committed/pushed6377a71. Focused HTTP/worker regression and no-durable mutant PASS (mutant killed at pending disk-flush publication assertion), npm run check PASS, production build/release smoke PASS. The single injected overlay-flush failure is not a disk-full/whole-DB transaction or power-loss acceptance claim.
 
 ### JOB01 fresh batch publication boundary — 2026-10-31
 
