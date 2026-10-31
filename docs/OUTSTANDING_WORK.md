@@ -1,6 +1,61 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Close independently reproduced Serper malformed-sibling/provenance gaps, then reconcile stale main-branch guidance and safely wire remaining isolated local regressions. Local checks continue without paid hosted execution. Desktop working guides/progress are refreshed; final live/manual QA remains deferred and live customer data untouched.
+Current active task: Finish scoped guidance/test-isolation commits, then close the confirmed credentialed-provider transport gap using the existing hardened boundary. Preserve8MiB evidence/Serper replay contracts and structured HTTP failures. Local verification continues without paid CI; original/live/customer state remains untouched.
+
+## Live customer-readiness board — additional directive reconciled 2026-10-31
+
+Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accepted; [~] IN PROGRESS/partial; [x] VERIFIED for stated scope only; [!] BLOCKED by an identified external dependency. Detailed capability matrix and dated evidence below remain authoritative. Stop after known supported-path High/Medium findings and required acceptance close; do not expand into cosmetic/speculative hunting. Store publication still requires the owner's later checkpoint.
+
+### P0 BLOCKERS
+
+- [~] SEC01 / directiveA: active Serper/Hunter generic-fetch bypass confirmed statically atf27fdcd; settings tests have a separate path. Fix through existing pinned HTTPS provider transport, preserving time/body/response/error contracts; no new client architecture. Dynamic exploit/exfiltration not established. Fresh independent investigation completed; fix/test/review required.
+- [~] CC01–CC04 / directiveM,N: correct company-country, local/parent/distributor and every admitted field through history/UI/export. Scoped fixes verified; representative final truthsets and same-company concurrent completion ordering remain open.
+- [~] DATA02/MIG01/REC01 / directiveB,O: preserve JSON dataset/sql.js operations/immutable evidence/settings authorities; close cross-store upload/delete interruption, actual supported migration/restore/update/data rollback acceptance.
+- [ ] PG01 / directive10: inspect and enforce accepted Stable tag/artifact lineage; a v* tag alone must not promote arbitrary integration code. No publication during this work.
+
+### P1 HIGH-RISK
+
+- [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
+- [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
+- [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. No credential/customer material in source or distribution.
+
+### P2 MEDIUM-RISK
+
+- [ ] SCALE01 / directiveC,D,E: measure supported V1 workloads, pagination/search and evidence-view payload/browser cost. Fix demonstrated supported-path regressions only; disk-backed replacement remains post-V1 unless the target workload fails.
+- [~] TYPE01 / directiveF,G: tighten touched security/customer contracts. Large backend/component decomposition, global strict TypeScript and bundle splitting remain post-V1 improvements unless needed for a demonstrated blocker. Do not weaken gates or rewrite working architecture.
+
+### CUSTOMER EXPERIENCE
+
+- [ ] UX02 / directiveJ: verify FAILED/PARTIAL/COMPLETED toast language/colors and no false success.
+- [ ] UX03 / directiveK: reproduce/reject importer-directory stale cache after successful contact mutation; add focused regression if needed.
+- [ ] UX04 / directiveH,I: trace purported dead sent-status route and pseudo-confidence/objective code; remove only if dead/unsupported, never revive outreach or expose invented confidence.
+- [~] QA01/UX01 / directive7,8: each supported control needs expected action/code path/success/failure/executed evidence. Final live/manual QA stays last/deferred; isolated rendered regressions continue. Broader accessibility/offline/empty/error acceptance remains open.
+
+### OBSERVABILITY / SUPPORT
+
+- [~] MON01/MON02/DIAG01/PRIV01 / directive4–6,P,20: reuse strict existing adapters, visible opt-outs and diagnostics projection; no replay/unreviewed tracing, business payloads, private exceptions or hardware identifiers. Prior specific-build real dashboard receipt preserved; final-package receipt/crash/alert/retention acceptance remains open.
+- [!] Current account/browser verification blocked by supported tool kernel-assets initialization error; no guessed dashboard state or SDK-flush-only receipt claim.
+
+### PACKAGING / UPDATE
+
+- [~] DIST01/MS01/UPD01/REL01 / directive9–16: intended customer route MSIX/Store-managed Stable updates, account/signing still unverified. Bundle runtime, separate writable state and protect app/data compatibility. Do not build a competing updater for Stable or claim package downgrade is data rollback. Original tree remains preserved pending reviewed reconciliation.
+- [ ] Prepare correct version/build/schema/channel/checksum/SBOM/notes, actual package identity/assets and immutable candidate lineage. No final source/customer copy before acceptance, no public upload.
+
+### CLEAN-WINDOWS ACCEPTANCE
+
+- [ ] PILOT01 / directive17: exact self-contained install→configure→import→research/batch→evidence/export→close/reopen→monitoring/diagnostics→upgrade→restart→uninstall/reinstall/data-retention sequence without dev Node/npm/repository/config.
+- [~] PERF01 / directive18: supported target workload/time/RAM/navigation/research/export/idle/long trend evidence; five export repetitions are not a long leak test.
+
+### FINAL RELEASE GATES
+
+- [!] CI01: local checks continue; current hosted jobs cannot start due to account billing/spending restriction. No money requested, paid workaround or assumed November1 reset. Hosted success remains unverified until actually executed.
+- [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
+
+### NEW HIGH/MEDIUM FINDINGS
+
+- [~] Provider transport policy gap: reachable supported-path finding, fixed endpoints reduce exposure but do not supply DNS/redirect binding. Independent investigator identified8MiB response and resolver-request compatibility plus status preservation; must not fix security by silently shrinking legitimate evidence.
+- [x] Serper independent-review findings correctedf27fdcd: malformed sibling and changed/missing record identity probes now pass original reviewer reproductions. No final release approval inferred; deadline/cancellation/live UI remain outside this scope.
+- [~] Older test runner/doc claims: preserve already-integrated stronger code; correct actual stale guidance and owned temporary memory fixture before automated inclusion. Literal filename mentions are not execution evidence.
 
 ### Parallel review corrections and Desktop evidence — 2026-10-31
 
