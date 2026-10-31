@@ -88,7 +88,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [~] JOB01.CANCEL: actual stop while waiting on publication rejects early restart409 JOB_DRAINING; drained resume succeeds with no duplicate count. Multi-company unstarted work, UI feedback and other cancellation stages remain open.
   - [ ] JOB01.RETRY: supported retry/resume after provider and storage failures, exact counters/outcomes.
   - [ ] JOB01.CRASH: forced interruption/restart and graceful drain across the supported job path.
-  - [ ] JOB01.CONTROLS: final rendered progress/cancel/retry controls and representative real-provider acceptance.
+  - [~] JOB01.CONTROLS: rendered Resume409/503/private-text omission/actual15s deadline/success retry verified; wider progress, cancellation, modal-close/race and real-provider acceptance remain open.
 - [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
 - [~] EXP01 / directiveM: contact-download authority fixed through current stored contacts; wider file/derived endpoints still require their own acceptance.
   - [x] EXP01.CONTACT_FACTS: actual HTTP regression reproduced forged browser company/email in download; contact requests now resolve scoped IDs to current stored records and ignore client facts, including selected object values.
@@ -151,6 +151,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] Medium supported-path Resume feedback: rendered modal silently ignored JOB_DRAINING and other HTTP refusal. Browser RED reproduced missing alert; bounded/disabled action and safe draining/generic/timeout messages passed actual rendered refusal/held-request/retry checks; this is synthetic isolated UI acceptance, not final live/provider acceptance.
 
 - [x] High supported-path stopped-job ownership: actual HTTP stop/start accepted a duplicate loop while its predecessor was blocked in contact publication (200 versus expected409). Separate draining ownership and structured JOB_DRAINING refusal verified with full check/build/release and actual HTTP stop/drain/resume/single-count/restart assertions. Rendered resume-error acceptance remains separate.
 
@@ -2863,3 +2865,12 @@ Focused checks: actual stop while publication held, early restart refusal, first
 Prior exact-source package checkpoint f679bb57bd64b75eea6d0a3456f5b924553e467a: initial build failed ENOSPC, no package acceptance claimed. Inspection later observed1.1GB free; no files were deleted. Rebuild retry and isolated package checker then exited0:150manifest files, launch/backup/privacy checks PASS, build90e22bb79e3978509ad0c8f858e4299ac7c2f8356bb6a98fb4ebd5352c132197, disposable ZIPb2234bf58e0d9c3676eb9007055138ef7ed0cf5c203d8630ffaf65455a722098 removed. Still118 development files/requires Node/npm/customerRuntimeReady=false. This checkpoint does not cover subsequent stop/drain source edits.
 
 Stop/drain final local checkpoint: npm run check (typecheck/lint/full V1 including all3 overlap/stop scenarios and queue contract), npm run build, npm run test:release exited0. Exact-source packaging follows. Read-only UI trace: handleResumeJob currently ignores non-OK responses; next verify and correct rendered draining/failure feedback rather than claiming the new409 alone completes the user workflow. No native browser/live/customer change.
+
+
+## 2026-10-31 — JOB01 rendered Resume failure feedback
+
+Actual isolated browser RED: existing Resume from Checkpoint button received synthetic409 JOB_DRAINING but displayed no explanation (job-resume-feedback-red.log). Current change adds an accessible local error, disables Resume while pending, imposes15second abort deadline, cancels on modal close, maps only recognized draining code to a trusted message, and never displays server exception text. A subsequent successful response restores polling. Browser test covers409,503/private-text omission, held request/real deadline and successful retry; results pending. This test uses synthetic job responses and owned backend, not final real-provider/live/manual QA.
+
+Stop/drain exact-source package863a5e42e4598a57576608c24c087d9a67093ff3 passed:150manifest files, launch/backup/privacy PASS; buildba77b8677ec157c3cc0ebd687489409c41ab3340712435087aba778893944053; disposable ZIP69ae1c0c48480f8412c82a51582e586291065978e40c9001656b1381c7eeba81 removed. Still118 development files/Node+npm/customerRuntimeReady=false; no self-contained, installed-MSIX or clean-Windows claim. Subsequent modal changes are not covered by that package.
+
+Resume feedback final checks: typecheck, lint, E2E typecheck, production build, actual browser test (1 passed24.4s; test18.4s includes real15s held-request deadline), full test:v1 and release smoke all exited0. Known bundle warning retained. Synthetic recognized409 message and generic503 errors remain safe; no raw server text rendered. Existing Playwright testDir automatically includes the new regression; no new framework or production endpoint. Exact committed package verification follows.

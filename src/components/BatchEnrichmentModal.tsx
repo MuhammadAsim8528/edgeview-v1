@@ -28,6 +28,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   const [reportMode, setReportMode] = useState<'importer' | 'exporter'>('importer');
   
   // Job Tracking
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeBusy, setResumeBusy] = useState(false);
+  const resumeRequestRef = useRef<AbortController | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobData, setJobData] = useState<ResearchJob | null>(null);
   const [historicalJobs, setHistoricalJobs] = useState<any[]>([]);
@@ -111,6 +114,8 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   useEffect(() => {
     const controller = new AbortController();
     if (isOpen) {
+      setResumeError(null);
+      setResumeBusy(false);
       fetchGovernorInfo(controller.signal);
       fetchHistoricalJobs(controller.signal);
       void reattachActiveJob(controller.signal).then((restored) => {
@@ -119,7 +124,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     } else {
       stopPolling();
     }
-    return () => { controller.abort(); stopPolling(); };
+    return () => { controller.abort(); resumeRequestRef.current?.abort(); stopPolling(); };
   }, [isOpen]);
 
   // Toggle selection
@@ -329,18 +334,38 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   };
 
   const handleResumeJob = async () => {
-    if (!activeJobId) return;
+    if (!activeJobId || resumeBusy) return;
+    const controller = new AbortController();
+    resumeRequestRef.current = controller;
+    setResumeBusy(true);
+    setResumeError(null);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
     try {
-      const res = await fetch(`/api/enrich/job/${activeJobId}/start`, {
-        method: 'POST',
+      const res = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}/start`, {
+        method: 'POST', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ forceFetch: false }),
       });
-      if (res.ok) {
-        startPolling(activeJobId);
+      const result = await res.json();
+      if (!openRef.current || controller.signal.aborted) return;
+      if (!res.ok || result.success !== true) {
+        setResumeError(result.code === 'JOB_DRAINING'
+          ? 'Previous research work is finishing. Try resuming shortly.'
+          : 'Could not resume research. Check that EdgeView is running and try again.');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to resume job', err);
+      startPolling(activeJobId);
+    } catch {
+      if (openRef.current && (!controller.signal.aborted || timedOut)) setResumeError(timedOut
+        ? 'Resuming took too long. Check that EdgeView is running and try again.'
+        : 'Could not resume research. Check that EdgeView is running and try again.');
+    } finally {
+      clearTimeout(timeout);
+      if (resumeRequestRef.current === controller) {
+        resumeRequestRef.current = null;
+        if (openRef.current) setResumeBusy(false);
+      }
     }
   };
 
@@ -491,6 +516,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                   </div>
                 </div>
 
+                {resumeError && <p role="alert" className="text-xs text-amber-300">{resumeError}</p>}
                 {/* Queue Actions (Pause/Resume/Checkpoint reset) */}
                 <div className="flex items-center space-x-3 pt-1">
                   {['PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING'].includes(jobData.status) ? (
@@ -505,10 +531,11 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                     jobData.status !== 'COMPLETED' && (
                       <button
                         onClick={handleResumeJob}
+                        disabled={resumeBusy}
                         className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-xs font-semibold text-white flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
                       >
                         <Play className="w-4 h-4" />
-                        <span>Resume from Checkpoint</span>
+                        <span>{resumeBusy ? 'Resuming…' : 'Resume from Checkpoint'}</span>
                       </button>
                     )
                   )}
