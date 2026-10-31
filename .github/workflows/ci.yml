@@ -238,21 +238,5 @@ jobs:
       - run: docker build --target qa --tag edgeview-qa .
       - run: docker run --rm --network none --memory 2g --cpus 2 edgeview-qa
 
-  publish:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [verify, docker-qa, browser-e2e, native-launcher]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: EdgeView-V1-Windows
-          path: release
-      - name: Publish verified Windows package
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release/EdgeView-V1-Windows.zip release/EdgeView-V1-Windows.zip.sha256 release/EdgeView-V1-Windows.zip.sbom.cdx.json --verify-tag --generate-notes --title "EdgeView $RELEASE_TAG"
-
+  # Publication is intentionally absent until the exact customer artifact,
+  # installation/recovery evidence and owner review authorize a release route.

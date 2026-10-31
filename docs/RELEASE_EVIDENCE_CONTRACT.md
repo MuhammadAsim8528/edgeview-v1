@@ -41,3 +41,13 @@ states, exact-commit mismatch, missing PASS evidence, modified artifact digests,
 path traversal and an actual directory-link/junction ancestor. CLI without a
 manifest exited1 as required. Syntax and whitespace checks passed. Hosted job
 execution remains NOT VERIFIED. No application/runtime files were changed.
+
+## Current publication boundary
+
+CI produces private verification artifacts only. The former v-prefixed-tag publisher
+was removed because it could publish the developer ZIP without customer-package,
+clean-Windows/recovery or owner-review acceptance. A tag does not authorize shipping.
+No replacement publisher is enabled. After customer acceptance, bind the selected
+Microsoft release route to the exact approved source, version, channel and package
+bytes; do not rebuild different code during promotion. Hosted check execution,
+actual account protections and that future promotion remain separate unverified gates.

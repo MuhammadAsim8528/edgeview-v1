@@ -74,7 +74,11 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [x] SEC01.V1: npm run check (typecheck, lint, V1), production build and release smoke passed on the reviewed patch. Subsequent test-only8MiB assertions passed separately. Exact committed-source packaging is recorded in the following checkpoint when executed; hosted CI remains externally blocked.
 - [~] CC01–CC04 / directive8: correct company-country, local/parent/distributor and every admitted field through history/UI/export. Scoped fixes verified; representative final truthsets and same-company concurrent completion ordering remain open.
 - [~] DATA02/MIG01/REC01 / directiveB,O: preserve JSON dataset/sql.js operations/immutable evidence/settings authorities; close cross-store upload/delete interruption, actual supported migration/restore/update/data rollback acceptance.
-- [ ] PG01 / directive10: inspect and enforce accepted Stable tag/artifact lineage; a v* tag alone must not promote arbitrary integration code. No publication during this work.
+- [~] PG01 / directive10: verified arbitrary v* tags previously reached a write-permission publisher for the developer ZIP after CI; removed that automatic publication path. This intentionally prevents shipping while customer-artifact/acceptance gates are open, not a completed promotion system.
+  - [x] PG01.AUTO: parsed all3 workflow YAML files locally, confirmed read-only contents permission/no release-create action or command, retained every previous verification job; no tag or publication performed.
+  - [ ] PG01.IDENTITY: accepted source/app/build/schema/channel/tag consistency and frozen customer artifact lineage.
+  - [ ] PG01.EVIDENCE: exact accepted package, clean-Windows/recovery evidence and owner-review checkpoint.
+  - [ ] PG01.PROMOTION: select and test promotion through the approved Microsoft distribution route without rebuilding accepted bytes. No replacement custom updater/publisher added.
 
 ### P1 HIGH-RISK
 
@@ -118,7 +122,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 ### NEW HIGH/MEDIUM FINDINGS
 
-- [~] Provider transport policy gap: reachable supported-path finding, fixed endpoints reduce exposure but do not supply DNS/redirect binding. Independent investigator identified8MiB response and resolver-request compatibility plus status preservation; must not fix security by silently shrinking legitimate evidence.
+- [x] Provider transport policy gap corrected8dfa908; scoped tests and real Serper/Hunter positive controls recorded above. Fixed endpoints alone did not establish pinning;8MiB evidence/replay contracts preserved. Final release-wide security remains SEC01.
 - [x] Serper independent-review findings correctedf27fdcd: malformed sibling and changed/missing record identity probes now pass original reviewer reproductions. No final release approval inferred; deadline/cancellation/live UI remain outside this scope.
 - [~] Older test runner/doc claims: preserve already-integrated stronger code; correct actual stale guidance and owned temporary memory fixture before automated inclusion. Literal filename mentions are not execution evidence.
 
@@ -2677,3 +2681,7 @@ Owner-away continuation: recurring thread follow-up created to continue approved
 Only src/store/appStore.ts and SourceEvidenceModal.tsx code changed: removed the unused sent-status action and unreachable objective/fixed-confidence computation. Searches found no consumers. Typecheck and lint passed after both edits; unscoped_contact_presentation.test.tsx and contact_scope_presentation.test.tsx passed. No new test merely mirrors deletion; existing actual presentation checks cover retained behavior.
 
 Previous clean0178902 exact-source rebuild/isolated package passed149 files, launch/packaged backup/privacy checks; buildaad526c5c7e199b8af5eba43281c96ab4947f91ed9856f25fc7aff99366c819a and ZIP6872727340a52d131dd8a91d08ed9ce5609575f1623b44016ee4725aadb0a288. Output removed; still117 development files and installed Node/npm required, not customer MSIX/clean-Windows acceptance.
+
+## Release publication safety — 2026-10-31
+
+Confirmed current CI automatically ran a write-permission gh release create job for every v-prefixed tag after4verification jobs. Its artifact is explicitly the Node/npm-dependent developer ZIP, not a verified customer package; no evidence/owner gate existed. Removed only that publisher from ci.yml, preserving every verification/artifact-upload job and triggers. Locally parsed all3 workflows with PyYAML and asserted read-only contents permissions/no release-create step and the exact unchanged verification job set. YAML and whitespace checks passed; hosted execution still blocked by account billing, no tag/release created. Future authorized publication must be implemented against accepted customer artifact lineage and actual owner approval; this safety removal is not completed Store/update/release acceptance.
