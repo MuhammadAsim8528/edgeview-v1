@@ -18,7 +18,8 @@ export function serperLinkSubstitutions(original: unknown, resolved: unknown): M
   for(let index=0;index<first.length;index++){
     if(!isSerperGoogleRedirect(first[index]?.link))continue;
     const next=second[index];
-    if(!next||typeof next!=='object'||(first[index].position!==undefined&&next.position!==undefined&&first[index].position!==next.position))throw providerSchemaError('Serper resolution changed result identity');
+    if(!next||typeof next!=='object'||['position','title','snippet'].some(key=>
+      Object.hasOwn(first[index],key)&&(!Object.hasOwn(next,key)||first[index][key]!==next[key])))throw providerSchemaError('Serper resolution changed result identity');
     if(typeof next.link==='string'&&!isSerperGoogleRedirect(next.link)&&isSafeExternalUrl(next.link))links.set(index,next.link);
   }
   return links;

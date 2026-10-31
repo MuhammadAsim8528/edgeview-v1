@@ -454,9 +454,10 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
 }
 
 async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
-  const pending=run.raw_records.filter(record=>record.provider==='serper'&&record.kind==='search'&&!record.failure
+  const pending=run.raw_records.filter(record=>record.provider==='serper'&&record.kind==='search'
+    && record.http_status!==undefined&&record.http_status>=200&&record.http_status<300
     && Array.isArray((record.response as any)?.organic)
-    && (record.response as any).organic.some((item:any)=>isSerperGoogleRedirect(item?.link)));
+    && run.results.some(result=>result.raw_record_id===record.id&&isSerperGoogleRedirect(result.url)));
   if(!pending.length)return;
   const settings=getAppSettings(), deadline=Date.now()+45_000;
   let cursor=0;
@@ -500,6 +501,11 @@ async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
     }
   };
   await Promise.all(Array.from({length:Math.min(2,pending.length)},worker));
+  // A partial malformed-sibling warning must not strand usable siblings, and
+  // no skipped/failed source may leave an opaque link labelled successful.
+  for(const result of run.results)if(isSerperGoogleRedirect(result.url)){
+    result.status='failed';result.error='SERPER_LINK_UNRESOLVED';
+  }
 }
 
 async function searchTavily(run: V1Run, query: string): Promise<V1Result[]> {

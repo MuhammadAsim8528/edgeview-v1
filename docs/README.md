@@ -23,6 +23,7 @@ New instructions extend that ledger. This index is navigation, not another roadm
 - [Monitoring acceptance](MONITORING_ACCEPTANCE_2026-10-25.md)
 - [Getz Kenya acceptance](verification/GETZ_KENYA_2026-10-25.md)
 - [Slim Pharma acceptance](verification/SLIM_PHARMA_2026-10-25.md)
+- [Serper Google-link compatibility verification](verification/SERPER_LINK_RESOLUTION_2026-10-31.md)
 - [Bundled runtime and internal MSIX experiment](verification/BUNDLED_RUNTIME_MSIX_2026-10-26.md)
 - [Release evidence contract](RELEASE_EVIDENCE_CONTRACT.md)
 - [OSS inventory](OSS_INVENTORY.md)
