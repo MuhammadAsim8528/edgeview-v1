@@ -1,3 +1,5 @@
+import { selectFileViewRows, FileViewValidationError } from './file_view';
+
 export class ExportValidationError extends Error {
   constructor(message: string) { super(message); this.name = 'ExportValidationError'; }
 }
@@ -34,8 +36,21 @@ export function resolveStoredContactExport(input: unknown, contacts: Array<{ id:
 export function resolveStoredFileExport(input: unknown, rows: any[]) {
   if (!record(input)) throw new ExportValidationError('Export payload must be an object.');
   if (input.dataset !== undefined && input.dataset !== 'files') throw new ExportValidationError('Stored-file export requires the files dataset.');
-  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
-  const payload = { dataset: 'files', records: rows, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format };
+  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format', 'view'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
+  let selected = rows;
+  if (input.view !== undefined) {
+    try { selected = selectFileViewRows(rows, input.view); }
+    catch (error) { if (error instanceof FileViewValidationError) throw new ExportValidationError(error.message); throw error; }
+    if (!selected.length) throw new ExportValidationError('No stored rows match this file view.');
+    if (input.view.group_shipments === 'true' || input.view.group === 'true') {
+      // Grouping retains a sample row for display context. Do not let its raw
+      // ITEM/TOT_FC aliases override the computed grouped item/amount in export.
+      selected = selected.map(row => ({ Date: row.Date, Importer: row.Importer,
+        Country: row.Country, Exporter: row.Exporter, Item: row.Item,
+        'Total FC (USD)': row['Total FC (USD)'] }));
+    }
+  }
+  const payload = { dataset: 'files', records: selected, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format };
   validateExportRequest(payload);
   return payload;
 }

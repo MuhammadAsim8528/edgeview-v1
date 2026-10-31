@@ -861,6 +861,19 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   const [isExportingFiltered, setIsExportingFiltered] = useState(false);
   const handleExportFilteredCSV = async () => {
     if (isExportingFiltered || effectiveTotalCount === 0) return;
+    if (onOpenExport && file) {
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      onOpenExport({
+        dataset: 'files', title: `${file.name} (Filtered)`, records: [],
+        sourceFileId: file.id, recordCount: effectiveTotalCount,
+        sourceView: { group_shipments: String(isGrouped), search: debouncedSearch,
+          product: productFilter, country: countryFilter, importer: importerFilter,
+          start_date: startDate, end_date: endDate,
+          ...(sortColumn ? { sort_by: sortColumn, sort_dir: sortDirection } : {}) },
+        filenamePrefix: `EdgeView_${baseName}_Filtered`,
+      });
+      return;
+    }
     let exportRows = sortedRows;
     if (isServerSide && file) {
       setIsExportingFiltered(true);
@@ -881,18 +894,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
       }
     }
     if (exportRows.length === 0) return;
-
-    if (onOpenExport) {
-      const baseName = file?.name?.replace(/\.[^/.]+$/, '') || 'shipment_data';
-      onOpenExport({
-        dataset: 'files',
-        title: `${file?.name || 'File Data'} (Filtered)`,
-        records: exportRows,
-        columns: displayColumns.map((col) => ({ key: col.key, header: col.label })),
-        filenamePrefix: `EdgeView_${baseName}_Filtered`,
-      });
-      return;
-    }
 
     const headers = displayColumns.map((col) => col.label);
     const csvRows = [headers.join(',')];

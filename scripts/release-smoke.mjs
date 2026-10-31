@@ -216,34 +216,34 @@ try {
   const history = await jsonGet('/api/stats/history-files');
   assert.ok(!history.data.some(file => file.file_name === validName), 'test-mode records must remain excluded from the real history listing');
 
-  const exportRecords = [
-    { id: 'chosen', Date: '2026-01-01', Importer: 'Chosen Company', Country: 'Niger', Exporter: 'Fixture Exporter', Item: 'Fixture Product', TOT_FC: 100 },
-    { id: 'excluded', Date: '2026-01-02', Importer: 'Excluded Company', Country: 'Nigeria', Exporter: 'Fixture Exporter', Item: 'Fixture Product', TOT_FC: 200 },
-  ];
-  const exportPayload = { dataset: 'files', title: 'Release Fixture', records: exportRecords, selectedRows: ['chosen'], filenamePrefix: 'EdgeView_QA' };
+  const exportPayload = { dataset: 'files', title: 'Release Fixture', view: { country: 'Niger', importer: 'Alpha' }, filenamePrefix: 'EdgeView_QA' };
+  const exportUrl = `${base}/api/export/file/${encodeURIComponent(uploadedId)}`;
+  const unanchoredExport = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ dataset:'files', format:'csv', records:[{ Importer:'Forged Company', Country:'Niger', Item:'Not stored' }] }) });
+  assert.equal(unanchoredExport.status, 400, 'browser rows cannot supply file-export authority');
+  assert.equal((await unanchoredExport.json()).code, 'STORED_FILE_REQUIRED');
   for (const format of ['csv','xlsx','docx','pdf','all']) {
-    const response = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format }) });
+    const response = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format }) });
     assert.equal(response.status, 200, `export ${format}`);
     assert.ok(response.headers.get('content-disposition')?.includes('attachment'));
     assert.equal(response.headers.get('x-export-failed-formats'), null, `all requested formats must succeed: ${format}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.ok(bytes.length > 50);
     if (format === 'csv') {
-      assert.match(bytes.toString('utf8'), /Chosen Company/); assert.doesNotMatch(bytes.toString('utf8'), /Excluded Company/);
+      assert.match(bytes.toString('utf8'), /Alpha/); assert.doesNotMatch(bytes.toString('utf8'), /Alpha Trading|Exporter Three|Unicode Pharma/);
     } else if (format === 'pdf') assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
     else {
       const archive = await JSZip.loadAsync(bytes);
       if (format === 'xlsx' || format === 'docx') {
         const member = format === 'docx' ? 'word/document.xml' : 'xl/sharedStrings.xml';
         const content = await archive.file(member).async('string');
-        assert.match(content, /Chosen Company/); assert.doesNotMatch(content, /Excluded Company/);
+        assert.match(content, /Alpha/); assert.doesNotMatch(content, /Alpha Trading|Exporter Three|Unicode Pharma/);
       } else {
         for (const extension of ['csv','xlsx','docx','pdf']) assert.ok(Object.keys(archive.files).some(name => name.endsWith(`.${extension}`)), `ZIP contains ${extension}`);
       }
     }
   }
   for (const patch of [{ selectedRows: ['missing'] }, { selectedRows: ['chosen','missing'] }, { format: 'exe' }, { records: {} }]) {
-    const response = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format: 'csv', ...patch }) });
+    const response = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format: 'csv', ...patch }) });
     assert.equal(response.status, 400, 'invalid export or stale selection must not produce a wider download');
   }
 

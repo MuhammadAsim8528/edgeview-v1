@@ -9,7 +9,8 @@ import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { db } from './server/db';
 import { parseFile } from './server/parsers';
-import { normalizeRow, groupShipmentRows } from './server/grouping';
+import { normalizeRow } from './server/grouping';
+import { selectFileViewRows, FileViewValidationError } from './server/file_view';
 import { computeSummary } from './server/summary';
 import { statsRouter } from './server/stats_router';
 import { uploadRouter } from './server/routes/upload';
@@ -471,65 +472,7 @@ app.get('/api/files/:id/data', (req, res) => {
     const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
     if ((req.query.limit !== undefined && (typeof req.query.limit !== 'string' || !/^\d+$/.test(req.query.limit))) || !Number.isInteger(limit) || limit < 1 || limit > 1000
       || (req.query.offset !== undefined && (typeof req.query.offset !== 'string' || !/^\d+$/.test(req.query.offset))) || !Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ error: 'Pagination requires limit 1–1000 and a non-negative integer offset.' });
-    const search = (req.query.search as string || '').toLowerCase().trim();
-    const sortBy = req.query.sort_by as string;
-    const sortDir = (req.query.sort_dir as string || 'asc').toLowerCase();
-
-    const isGrouped = req.query.group_shipments === 'true' || req.query.group === 'true';
-    const productFilter = (req.query.product as string || '').toLowerCase().trim();
-    const countryFilter = (req.query.country as string || '').toLowerCase().trim();
-    const importerFilter = (req.query.importer as string || '').toLowerCase().trim();
-    const startDate = (req.query.start_date as string || '').trim();
-    const endDate = (req.query.end_date as string || '').trim();
-
-    let rows = (file.rows || []).map(normalizeRow);
-
-    if (isGrouped) {
-      rows = groupShipmentRows(rows);
-    }
-
-    if (productFilter) {
-      rows = rows.filter((r) => String(r.Item || r.item || '').toLowerCase().includes(productFilter));
-    }
-
-    if (countryFilter) {
-      rows = rows.filter((r) => String(r.Country || r.country || '').toLowerCase() === countryFilter);
-    }
-
-    if (importerFilter) {
-      rows = rows.filter((r) => String(r.Importer || r.importer || '').toLowerCase() === importerFilter);
-    }
-
-    if (startDate || endDate) {
-      rows = rows.filter((r) => {
-        const d = String(r.Date || r.date || '').trim();
-        if (!d) return true;
-        if (startDate && d < startDate) return false;
-        if (endDate && d > endDate) return false;
-        return true;
-      });
-    }
-
-    if (search) {
-      rows = rows.filter((r) =>
-        Object.values(r).some((v) => String(v).toLowerCase().includes(search))
-      );
-    }
-
-    if (sortBy) {
-      rows = [...rows].sort((a, b) => {
-        const valA = a[sortBy];
-        const valB = b[sortBy];
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          return sortDir === 'asc' ? valA - valB : valB - valA;
-        }
-        const strA = String(valA ?? '').toLowerCase();
-        const strB = String(valB ?? '').toLowerCase();
-        if (strA < strB) return sortDir === 'asc' ? -1 : 1;
-        if (strA > strB) return sortDir === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
+    const rows = selectFileViewRows(file.rows || [], req.query, true);
 
     const paginatedRows = rows.slice(offset, offset + limit);
 
@@ -550,6 +493,7 @@ app.get('/api/files/:id/data', (req, res) => {
       },
     });
   } catch (err: any) {
+    if (err instanceof FileViewValidationError) return res.status(400).json({ code: 'INVALID_FILE_VIEW', error: err.message });
     res.status(500).json({ error: err?.message || 'Failed to fetch file data' });
   }
 });
@@ -1926,6 +1870,7 @@ app.post('/api/export/file/:fileId', async (req, res) => {
 
 app.post('/api/export', async (req, res) => {
   try {
+    if (req.body?.dataset === 'files') return res.status(400).json({ success: false, code: 'STORED_FILE_REQUIRED', error: 'File exports require a stored file reference.' });
     const payload = req.body?.dataset === 'contacts'
       ? resolveStoredContactExport(req.body, Array.from(db.contacts.values()))
       : req.body;

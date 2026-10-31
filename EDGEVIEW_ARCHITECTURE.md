@@ -102,3 +102,12 @@ The pre-V1 campaign, orchestration, and autonomous-research modules were removed
 | Contacts and full evidence | `src/components/Contacts.tsx`, `src/components/SourceEvidenceModal.tsx` |
 | Live jobs/research | `src/components/BatchEnrichmentModal.tsx`, `src/components/ResearchWorkspace.tsx` |
 | Build/package/launch | `EdgeView.bat`, `scripts/build-if-needed.mjs`, `scripts/package-windows.mjs` |
+
+## Stored export boundary
+
+Contact downloads resolve requested IDs against stored contacts and ignore browser-provided facts.
+File downloads use a stored file ID; optional bounded view options share the paging calculation
+in `server/file_view.ts`. Grouped exports use computed grouped values rather than stale sample-row
+aliases. Generic browser-row file exports are rejected. Derived country/stats/summary/report
+exports still require separate authority acceptance; see the ledger rather than assuming all
+export datasets have this boundary.

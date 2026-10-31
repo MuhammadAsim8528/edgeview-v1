@@ -20,7 +20,7 @@ for (const [filter, expected] of [['EXPORTER', 'exporter'], ['IMPORTER', 'import
   assert.equal(override.body.report_type, 'international_importer');
 }
 assert.equal(renderToStaticMarkup(React.createElement(GlobalExportModal, { isOpen: false, onClose() {}, payload: null })), '');
-const fileRequest = buildExportRequest({ dataset: 'files', title: 'File', records: [] }, 'csv', 'exporter');
-assert.ok('report_type' in fileRequest.body);
-assert.equal(fileRequest.body.report_type, undefined);
+const fileRequest = buildExportRequest({ dataset: 'files', title: 'File', records: [], sourceFileId: 'synthetic-file' }, 'csv', 'exporter');
+assert.equal(Object.hasOwn(fileRequest.body, 'report_type'), false);
+assert.throws(() => buildExportRequest({ dataset: 'files', title: 'File', records: [] }, 'csv'), /stored file/i);
 console.log('PASS contact report scope defaults, explicit override, selection preservation and modal markup (not browser interaction)');
