@@ -141,7 +141,7 @@ files before recovery. Never delete quarantine material as part of routine clean
 
 ## Diagnostics and logs
 
-The Settings diagnostics panel is intentionally passive until the user selects the provider test action. Merely opening Settings does not spend search credits. `UNKNOWN` means a provider is configured but has not been verified in this process; it is not an error and is not reported as healthy. `RATE_LIMITED` is distinct from `AUTH_FAILED`.
+The Settings diagnostics panel is intentionally passive until the user selects the provider test action. Merely opening Settings does not spend search credits. **Unknown** means a provider is configured but lacks a current verified observation; it is not an error and is not reported as healthy. **Rate Limited** is distinct from **Authentication Failed**. **Timed Out** and **Degraded** also remain visible states; a configured key alone is not a successful provider test.
 
 The Activity Logs panel renders a bounded tail of `logs/edgeview_runtime.log` and immutable enrichment timelines. Logs rotate at 10 MB with three archives. API keys, authorization headers, cookies, passwords, access tokens, and credential query parameters are redacted before writing. The log API accepts only a bounded `tail` count and cannot read arbitrary paths.
 
