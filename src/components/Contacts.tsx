@@ -41,7 +41,7 @@ import { directoryPage as getDirectoryPage } from '../utils/directoryPagination'
 
 interface ContactsProps {
   contacts: CompanyContact[];
-  onFetchDetailsAutomated?: (companyName: string, id?: string, forceFetch?: boolean) => Promise<any>;
+  onFetchDetailsAutomated?: (companyName: string, id?: string, forceFetch?: boolean, reuseOnly?: boolean) => Promise<any>;
   onOpenExport?: (payload: GlobalExportPayload) => void;
   refreshData?: () => void;
 }
@@ -79,6 +79,8 @@ export const Contacts: React.FC<ContactsProps> = ({
   const { state: runtimeState } = useEdgeViewRuntimeState();
   const researchCapability = runtimeState.capabilities?.company_enrichment;
   const researchAvailable = Boolean(researchCapability?.available);
+  const savedEvidenceAvailable = Boolean(runtimeState.capabilities?.evidence_revalidation?.available);
+  const canRecheckSaved = (contact: CompanyContact | undefined) => savedEvidenceAvailable && contact?.can_revalidate_evidence === true;
   const researchReason = researchCapability?.reason || 'Checking company research capability...';
   const researchRemediation = researchCapability?.remediation || '';
 
@@ -176,13 +178,13 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   const handleFetchDetails = async (companyName: string, id: string, forceFetch: boolean = false) => {
     if (!onFetchDetailsAutomated) return;
-    if (!researchAvailable) {
+    if (!researchAvailable && (forceFetch || !canRecheckSaved(contacts.find(contact => contact.id === id)))) {
       console.warn(`Company research unavailable: ${researchReason}`);
       return;
     }
     setFetchingDetailsId(id);
     try {
-      await onFetchDetailsAutomated(companyName, id, forceFetch);
+      await onFetchDetailsAutomated(companyName, id, forceFetch, !forceFetch && !researchAvailable);
       await loadSummary();
     } catch (err) {
       console.error('Error fetching details:', err);
@@ -261,12 +263,12 @@ export const Contacts: React.FC<ContactsProps> = ({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsBatchModalOpen(true)}
-              disabled={!researchAvailable}
-              title={researchAvailable ? 'Research selected or eligible companies' : `${researchReason}${researchRemediation ? ` ${researchRemediation}` : ''}`}
+              disabled={!researchAvailable && !savedEvidenceAvailable}
+              title={researchAvailable ? 'Research selected or eligible companies' : savedEvidenceAvailable ? 'Recheck companies with retained evidence without provider calls' : `${researchReason}${researchRemediation ? ` ${researchRemediation}` : ''}`}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#10b981] hover:bg-[#10b981]/80 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#10b981]"
             >
               <Bot className="w-3.5 h-3.5 text-white" />
-              <span>Research Companies</span>
+              <span>{researchAvailable ? 'Research Companies' : savedEvidenceAvailable ? 'Recheck Saved Evidence' : 'Research Companies'}</span>
             </button>
 
 <button
@@ -318,7 +320,7 @@ export const Contacts: React.FC<ContactsProps> = ({
           <div className="px-4 py-2 bg-amber-950/50 border-y border-amber-900/60 text-[11px] text-amber-200 flex items-start space-x-2">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
             <div>
-              <span className="font-semibold">Company research unavailable:</span> {researchReason}
+              <span className="font-semibold">Fresh research unavailable:</span> {researchReason}
               {researchRemediation && <span className="text-amber-300/80"> {researchRemediation}</span>}
             </div>
           </div>
@@ -335,8 +337,8 @@ export const Contacts: React.FC<ContactsProps> = ({
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setIsBatchModalOpen(true)}
-                disabled={!researchAvailable}
-                title={researchAvailable ? 'Enrich selected companies' : researchReason}
+                disabled={!researchAvailable && !selectedIds.every(id => canRecheckSaved(contacts.find(contact => contact.id === id)))}
+                title={researchAvailable ? 'Enrich selected companies' : 'Recheck retained evidence for the selected companies'}
                 className="px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-sky-600"
               >
                 Enrich Selected ({selectedIds.length})
@@ -659,9 +661,9 @@ export const Contacts: React.FC<ContactsProps> = ({
                         <div className="flex flex-col items-center space-y-1.5">
                           <button
                             onClick={() => handleFetchDetails(contact.company_name, contact.id, false)}
-                            disabled={fetchingDetailsId === contact.id || !researchAvailable}
+                            disabled={fetchingDetailsId === contact.id || (!researchAvailable && !canRecheckSaved(contact))}
                             className="w-full inline-flex items-center justify-center space-x-1 px-2.5 py-1 rounded text-[10px] font-semibold bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] border border-[#10b981]/40 transition-colors shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#10b981]/20"
-                            title={researchAvailable ? 'Fetch details (uses existing evidence where available)' : researchReason}
+                            title={researchAvailable ? 'Fetch details (uses existing evidence where available)' : canRecheckSaved(contact) ? 'Recheck retained evidence; fresh research still needs provider setup' : researchReason}
                           >
                             {fetchingDetailsId === contact.id ? (
                               <RefreshCw className="w-3 h-3 animate-spin text-[#10b981]" />
@@ -757,7 +759,8 @@ export const Contacts: React.FC<ContactsProps> = ({
       <BatchEnrichmentModal
         isOpen={isBatchModalOpen}
         onClose={() => setIsBatchModalOpen(false)}
-        contacts={contacts}
+        contacts={!researchAvailable && savedEvidenceAvailable ? contacts.filter(contact => contact.can_revalidate_evidence === true) : contacts}
+        evidenceOnly={!researchAvailable && savedEvidenceAvailable}
         refreshData={refreshData}
       />
 

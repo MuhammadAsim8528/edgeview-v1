@@ -44,9 +44,9 @@ import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/uti
 import { getBackendLockPath, getProjectRoot, getRuntimeDataRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { getInstallationId } from './server/install_identity';
 import { selectContactEntity } from './server/contact_projection';
-import { canonicalCompanyIdentityKey } from './server/company_identity';
+import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './server/company_identity';
 import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
-import { persistV1ContactOverlay, projectHistoricalContactFields, stopJobsForShutdown } from './server/job_manager';
+import { persistV1ContactOverlay, projectHistoricalContactFields, reusableContactRun, reusableEvidenceContacts, reusableEvidenceSelection, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
 import { hasRecentProviderObservation, isRecentProviderOperation, projectV1ProviderUsage } from './shared/provider_telemetry';
@@ -636,7 +636,8 @@ app.get('/api/companies', async (req, res) => {
   await hydrateContactsFromCache();
 
   const contactsList = Array.from(db.contacts.values());
-  res.json(contactsList);
+  const reusable = reusableEvidenceContacts(contactsList);
+  res.json(contactsList.map(contact => ({ ...contact, can_revalidate_evidence: reusable.has(contact) })));
 });
 
 // Canonical International Importer Directory (concise projection, excl. Pakistan, A→Z)
@@ -654,7 +655,7 @@ app.get('/api/companies/:id', async (req, res) => {
   if (!contact) {
     return res.status(404).json({ error: 'Company contact not found' });
   }
-  res.json(contact);
+  res.json({ ...contact, can_revalidate_evidence: reusableEvidenceSelection([contact]) });
 });
 
 // Read-only, canonical trusted-intelligence projection. Opening this endpoint
@@ -913,7 +914,8 @@ app.post('/api/settings/test', async (req, res) => {
 app.post('/api/enrich/company', async (req, res) => {
   const monitoringStartedAt = Date.now();
   try {
-    const { company_name, id, forceFetch, country, entity_key } = req.body;
+    const { company_name, id, forceFetch, reuseOnly, country, entity_key } = req.body;
+    if ((forceFetch !== undefined && typeof forceFetch !== 'boolean') || (reuseOnly !== undefined && typeof reuseOnly !== 'boolean') || (forceFetch && reuseOnly)) return res.status(400).json({ success: false, error: 'Invalid research mode.' });
     let cleanCompany: string;
     let cleanCountry: string | undefined;
     try {
@@ -928,6 +930,12 @@ app.post('/api/enrich/company', async (req, res) => {
     let resolvedCountry = cleanCountry || '';
     const contactList = Array.from(db.contacts.values());
     let ctxContact = selectContactEntity(contactList, { id, company_name: cleanCompany, country: resolvedCountry, entity_key });
+    if (id && !ctxContact) return res.status(404).json({ success: false, error: 'Company contact not found.' });
+    if (ctxContact && (canonicalCompanyIdentityKey(ctxContact.company_name) !== canonicalCompanyIdentityKey(cleanCompany)
+      || (resolvedCountry && canonicalEntityIdentityKey(cleanCompany, resolvedCountry) !== canonicalEntityIdentityKey(ctxContact.company_name, ctxContact.country))
+      || (entity_key && String(entity_key).trim().toLowerCase() !== canonicalEntityIdentityKey(ctxContact.company_name, ctxContact.country)))) {
+      return res.status(409).json({ success: false, code: 'CONTACT_IDENTITY_MISMATCH', error: 'Contact id, company and country must identify the same entity.' });
+    }
     if (!ctxContact && !id && !country && !entity_key) {
       const matches = contactList.filter((contact) => canonicalCompanyIdentityKey(contact.company_name) === canonicalCompanyIdentityKey(cleanCompany));
       if (matches.length > 1) {
@@ -936,16 +944,18 @@ app.post('/api/enrich/company', async (req, res) => {
     }
     if (!resolvedCountry && ctxContact) resolvedCountry = String(ctxContact.country || ctxContact.normalized_country || '').trim();
     if (!resolvedCountry) return res.status(400).json({ success: false, error: 'Country is required for identity-anchored V1 enrichment.' });
+    const cachedRun = forceFetch ? null : reusableContactRun(ctxContact);
+    if (reuseOnly && !cachedRun) return res.status(409).json({ success: false, code: 'RETAINED_EVIDENCE_UNAVAILABLE', error: 'No reusable evidence exists for this company and country.' });
     const capability = buildV1Capabilities().company_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
-    void captureMonitoringEvent('research_started', { stage: 'run', outcome: 'started' });
-    const run = await runV1Enrichment(cleanCompany, resolvedCountry);
+    if (!cachedRun && !capability.available) return unavailableCapabilityResponse(res, capability);
+    if (!cachedRun) void captureMonitoringEvent('research_started', { stage: 'run', outcome: 'started' });
+    const run = cachedRun || await runV1Enrichment(cleanCompany, resolvedCountry);
     const monitoringDuration = Date.now() - monitoringStartedAt;
-    if (run.status === 'FAILED') {
+    if (!cachedRun && run.status === 'FAILED') {
       const failure = run.timeline.find(event => event.error)?.error || 'V1 enrichment failed';
       void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed', duration_ms: monitoringDuration });
       void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', duration_ms: monitoringDuration, error_code: classifyMonitoringError(failure) });
-    } else {
+    } else if (!cachedRun) {
       void captureMonitoringEvent('research_completed', { stage: 'run', outcome: 'success', duration_ms: monitoringDuration });
     }
     if (ctxContact) {
@@ -968,6 +978,7 @@ app.post('/api/enrich/company', async (req, res) => {
     // here made the Enrich button transfer megabytes before it could settle.
     res.status(200).json({
       success: true,
+      reused_evidence: Boolean(cachedRun),
       run: {
         id: run.id,
         status: run.status,
@@ -1001,13 +1012,15 @@ app.get('/api/v1/runs/:id', (req, res) => {
 app.post('/api/enrich/batch', async (req, res) => {
   const monitoringStartedAt = Date.now();
   try {
-    const { company_ids, forceFetch } = req.body;
-    if (!Array.isArray(company_ids) || company_ids.length === 0) {
-      return res.status(400).json({ success: false, error: 'Please select at least one company.' });
+    const { company_ids, forceFetch, reuseOnly } = req.body;
+    if ((forceFetch !== undefined && typeof forceFetch !== 'boolean') || (reuseOnly !== undefined && typeof reuseOnly !== 'boolean') || (forceFetch && reuseOnly)) return res.status(400).json({ success: false, error: 'Invalid research mode.' });
+    if (!validResearchSelection(company_ids)) {
+      return res.status(400).json({ success: false, error: 'Select 1–5000 distinct company ids, each up to 200 characters.' });
     }
 
     const capability = buildV1Capabilities().batch_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
+    if (reuseOnly && !reusableEvidenceSelection(company_ids.map(id => db.getContactById(id)))) return res.status(409).json({ success: false, code: 'RETAINED_EVIDENCE_UNAVAILABLE', error: 'Selection includes a company without reusable evidence.' });
+    if (!capability.available && (forceFetch || !reusableEvidenceSelection(company_ids.map(id => db.getContactById(id))))) return unavailableCapabilityResponse(res, capability);
     void captureMonitoringEvent('research_started', { stage: 'run', outcome: 'started' });
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1063,16 +1076,22 @@ app.post('/api/enrich/batch', async (req, res) => {
         try {
           const country = String(contact.country || '').trim();
           if (!country) throw new Error('Exact country is required for V1 enrichment');
-          const run = await runV1Enrichment(String(contact.company_name || '').trim(), country);
-          contact.last_updated = new Date().toISOString();
+          const cachedRun = forceFetch ? null : reusableContactRun(contact);
+          if (reuseOnly && !cachedRun) throw new Error('RETAINED_EVIDENCE_UNAVAILABLE');
+          const run = cachedRun || await runV1Enrichment(String(contact.company_name || '').trim(), country);
+          const projected = projectHistoricalContactFields(run);
+          await persistV1ContactOverlay(contact.id, run.id, projected, true);
+          Object.assign(contact, projected, { edgeview_v1_run_id: run.id, research_validation_status: 'current', last_updated: new Date().toISOString() });
+          db.rebuildIndexes();
 
           processedCount++;
 
-          const qStatus = run.status === 'COMPLETED' ? 'COMPLETE' : run.status === 'PARTIAL' ? 'PARTIAL' : 'FAILED';
+          const qStatus = projected.quality_status;
           if (qStatus === 'COMPLETE') summaryStats.completed++;
           else if (qStatus === 'PARTIAL') summaryStats.partial++;
-          else {
-            summaryStats.failed++;
+          else if (qStatus === 'NOT_FOUND') summaryStats.not_found++;
+          else summaryStats.failed++;
+          if (run.status === 'FAILED') {
             const failure = run.timeline.find(event => event.error)?.error || 'V1 enrichment failed';
             void captureMonitoringEvent('research_failed', { stage: 'run', outcome: 'failed' });
             void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', error_code: classifyMonitoringError(failure) });
@@ -1088,8 +1107,8 @@ app.post('/api/enrich/batch', async (req, res) => {
             id: currentId,
             company_name: contact.company_name,
             quality: qStatus,
-            success: true,
-            details: { edgeview_v1_run_id: run.id, queries: run.queries.length, results: run.results.length, raw_records: run.raw_records.length },
+            success: run.status !== 'FAILED',
+            details: { edgeview_v1_run_id: run.id, reused_evidence: Boolean(cachedRun), run_status: run.status, queries: run.queries.length, results: run.results.length, raw_records: run.raw_records.length },
             summary: summaryStats,
           });
         } catch (err: any) {
@@ -1140,18 +1159,20 @@ app.post('/api/enrich/batch', async (req, res) => {
 
 app.post('/api/enrich/jobs', async (req, res) => {
   try {
-    const { company_ids, mode } = req.body;
-    if (!Array.isArray(company_ids) || company_ids.length === 0) {
-      return res.status(400).json({ success: false, error: 'Please select at least one company.' });
+    const { company_ids, mode, reuseOnly } = req.body;
+    if (reuseOnly !== undefined && typeof reuseOnly !== 'boolean') return res.status(400).json({ success: false, error: 'Invalid research mode.' });
+    if (!validResearchSelection(company_ids) || (mode !== undefined && !['importer', 'exporter'].includes(mode))) {
+      return res.status(400).json({ success: false, error: 'Select 1–5000 distinct company ids and importer or exporter mode.' });
     }
     const capability = buildV1Capabilities().batch_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
+    if (reuseOnly && !reusableEvidenceSelection(company_ids.map(id => db.getContactById(id)))) return res.status(409).json({ success: false, code: 'RETAINED_EVIDENCE_UNAVAILABLE', error: 'Selection includes a company without reusable evidence.' });
+    if (!capability.available && !reusableEvidenceSelection(company_ids.map(id => db.getContactById(id)))) return unavailableCapabilityResponse(res, capability);
     
     const { getDb } = await import('./server/sqlite');
-    const db = await getDb();
+    const jobDatabase = await getDb();
     
     // Check for existing active compatible bulk enrichment job
-    const existingJob = await db.get(
+    const existingJob = await jobDatabase.get(
       `SELECT id, status, importer_exporter_mode, total_companies, completed_companies 
        FROM research_jobs 
        WHERE importer_exporter_mode = ? 
@@ -1176,7 +1197,7 @@ app.post('/api/enrich/jobs', async (req, res) => {
     }
     
     const { createJob } = await import('./server/job_manager');
-    const jobId = await createJob(company_ids, mode || 'importer');
+    const jobId = await createJob(company_ids, mode || 'importer', Boolean(reuseOnly));
     res.json({ success: true, jobId });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -1330,13 +1351,16 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
   try {
     const jobId = req.params.id;
     const { forceFetch } = req.body;
+    if (forceFetch !== undefined && typeof forceFetch !== 'boolean') return res.status(400).json({ success: false, error: 'Force Fetch must be true or false.' });
     const { getJob, runJobLoop } = await import('./server/job_manager');
     const job = await getJob(jobId);
     if (!job) {
       return res.status(404).json({ success: false, error: 'Job not found' });
     }
+    if (forceFetch && Object.values(job.company_states).some(state => state.reuse_only)) return res.status(409).json({ success: false, code: 'SAVED_EVIDENCE_ONLY', error: 'Create a fresh research job to use provider requests.' });
     const capability = buildV1Capabilities().batch_enrichment;
-    if (!capability.available) return unavailableCapabilityResponse(res, capability);
+    const pendingIds = job.company_ids.filter(id => ['pending', 'processing'].includes(job.company_states[id]?.status));
+    if (!capability.available && (forceFetch || (pendingIds.length > 0 && !reusableEvidenceSelection(pendingIds.map(id => db.getContactById(id)))))) return unavailableCapabilityResponse(res, capability);
     
     // Background execution
     const started = await runJobLoop(jobId, Boolean(forceFetch));
@@ -1454,6 +1478,11 @@ function buildV1ProviderReport() {
 }
 
 type V1CapabilityStatus = 'READY' | 'DEGRADED' | 'UNAVAILABLE';
+function validResearchSelection(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 5000
+    && value.every(id => typeof id === 'string' && id.length > 0 && id.length <= 200 && id.trim() === id && !/[\u0000-\u001f]/.test(id))
+    && new Set(value).size === value.length;
+}
 type V1Capability = {
   id: string;
   available: boolean;
@@ -1505,6 +1534,7 @@ function buildV1Capabilities(providerReport: Record<string, any> = buildV1Provid
   const aiVerified = [nvidia, groq].some((provider: any) => provider.status === 'healthy');
   const hunterUsable = hunter.configured && hunter.enabled && !['suppressed', 'cooldown'].includes(String(hunter.routingState || '')) && !['auth_failed', 'rate_limited'].includes(String(hunter.status || ''));
   const runCount = listV1RunSummaries(1).length;
+  const evidenceReady = getOperationalDatabaseStatus().status === 'ok' && reusableEvidenceContacts(Array.from(db.contacts.values())).size > 0;
 
   const companyEnrichment: V1Capability = {
     id: 'company_enrichment',
@@ -1525,6 +1555,13 @@ function buildV1Capabilities(providerReport: Record<string, any> = buildV1Provid
   return {
     company_enrichment: companyEnrichment,
     batch_enrichment: { ...companyEnrichment, id: 'batch_enrichment' },
+    evidence_revalidation: {
+      id: 'evidence_revalidation',
+      available: evidenceReady,
+      status: evidenceReady ? 'READY' : 'UNAVAILABLE',
+      reason: getOperationalDatabaseStatus().status !== 'ok' ? 'Operational storage is unavailable; saved evidence cannot be durably revalidated.' : evidenceReady ? 'Retained evidence can be rechecked for its exact company and country without provider calls.' : 'No eligible retained evidence is available for the loaded companies.',
+      dependencies: ['operational-database', 'retained-evidence'],
+    },
     ai_query_generation: {
       id: 'ai_query_generation',
       available: true,

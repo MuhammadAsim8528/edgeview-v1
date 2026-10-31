@@ -271,13 +271,13 @@ export function useAppStore() {
   };
 
   // Bounded V1 enrichment. It deliberately never changes the user's active tab.
-  const enrichCompanyAutomated = async (companyName: string, contactId?: string, forceFetch: boolean = false) => {
+  const enrichCompanyAutomated = async (companyName: string, contactId?: string, forceFetch: boolean = false, reuseOnly: boolean = false) => {
     try {
       showToast(`Starting bounded V1 enrichment for ${companyName}...`, 'info');
       const { ok, data, error: enrichErr } = await safeFetchJson<any>('/api/enrich/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_name: companyName, id: contactId, forceFetch }),
+        body: JSON.stringify({ company_name: companyName, id: contactId, forceFetch, reuseOnly }),
       });
 
       if (!ok || !data || !data.success) {
@@ -285,7 +285,7 @@ export function useAppStore() {
       }
 
       if (data.run?.id) localStorage.setItem('edgeview_v1_run_id', data.run.id);
-      showToast(`V1 enrichment ${data.run?.status?.toLowerCase() || 'finished'} for ${companyName}`, data.run?.status === 'PARTIAL' ? 'info' : 'success');
+      showToast(data.reused_evidence ? `Saved evidence rechecked for ${companyName}` : `V1 enrichment ${data.run?.status?.toLowerCase() || 'finished'} for ${companyName}`, data.run?.status === 'PARTIAL' ? 'info' : 'success');
       await fetchContacts();
       return data;
     } catch (err: any) {

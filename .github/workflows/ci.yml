@@ -154,6 +154,7 @@ jobs:
       - run: node scripts/separate-data-runtime.test.mjs
       - run: node scripts/legacy-data-runtime.test.mjs
       - run: node scripts/history-owner-runtime.test.mjs
+      - run: node scripts/cached-revalidation-runtime.test.mjs
       - run: node scripts/json-authority-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release
@@ -202,6 +203,7 @@ jobs:
       - run: npm run typecheck:e2e
       - run: npm run build
       - run: npx playwright install chromium
+      - run: node scripts/cached-revalidation-runtime.test.mjs --browser
       - run: npm run test:e2e
       - name: Capture synthetic review screenshots (not baseline approval)
         run: npm run test:visual:capture

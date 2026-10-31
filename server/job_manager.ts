@@ -489,6 +489,34 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   };
 }
 
+/** Only a retained run for this exact company+country can replace a provider
+ * request. Payload loading happens on an explicit action, never startup. */
+export function reusableContactRun(contact: { company_name?: string; country?: string; edgeview_v1_run_id?: string } | null | undefined): V1Run | null {
+  if (!contact?.edgeview_v1_run_id || !contact.company_name?.trim() || !contact.country?.trim()) return null;
+  const run = getV1Run(contact.edgeview_v1_run_id);
+  return run && ['COMPLETED', 'PARTIAL'].includes(run.status)
+    && canonicalEntityIdentityKey(run.company_name, run.country) === canonicalEntityIdentityKey(contact.company_name, contact.country)
+    ? run : null;
+}
+
+/** Capability preflight uses only the existing bounded-header representation,
+ * never hydrates every selected company's multi-megabyte payload. Actual reuse
+ * rechecks the loaded run before publishing anything. */
+type RetainedContact = { company_name?: string; country?: string; edgeview_v1_run_id?: string };
+export function reusableEvidenceContacts<T extends RetainedContact>(contacts: Array<T | null | undefined>): Set<T> {
+  const eligible = contacts.filter(contact => contact?.edgeview_v1_run_id && contact.company_name?.trim() && contact.country?.trim()) as T[];
+  const wanted = new Set(eligible.map(contact => contact.edgeview_v1_run_id));
+  const retained = new Map(listV1RunIdentityHeaders().filter(header => wanted.has(header.id)).map(header => [header.id, header]));
+  return new Set(eligible.filter(contact => {
+    const header = retained.get(contact.edgeview_v1_run_id!);
+    return header && ['COMPLETED', 'PARTIAL'].includes(header.status)
+      && canonicalEntityIdentityKey(header.company_name, header.country) === canonicalEntityIdentityKey(contact.company_name, contact.country);
+  }));
+}
+export function reusableEvidenceSelection(contacts: Array<RetainedContact | null | undefined>): boolean {
+  return contacts.length > 0 && reusableEvidenceContacts(contacts).size === contacts.length;
+}
+
 export function projectHistoricalContactFields(run: V1Run) {
   const entityName = canonicalEntityIdentityKey(run.company_name, run.country);
   // A company can have an older high-quality run far beyond the most recent
@@ -564,6 +592,15 @@ export async function hydrateV1ContactEnrichment(): Promise<number> {
     try {
       const storedOverlay = JSON.parse(String(row.overlay_json || '{}'));
       const entityKey = canonicalEntityIdentityKey(contact.company_name, contact.country);
+      runIdentityById ||= new Map(listV1RunIdentityHeaders().map(header => [header.id, header]));
+      const retainedIdentity = runIdentityById.get(String(row.run_id || ''));
+      if (retainedIdentity && canonicalEntityIdentityKey(retainedIdentity.company_name, retainedIdentity.country) !== entityKey) {
+        // Preserve recovery storage, but never attach another country's run to
+        // this record or count it as that entity's completed research.
+        if (contact.edgeview_v1_run_id === row.run_id) delete contact.edgeview_v1_run_id;
+        contact.research_validation_status = 'needs_revalidation';
+        continue;
+      }
       if (storedOverlay.schema_version !== V1_OVERLAY_VERSION || storedOverlay.entity_key !== entityKey) {
         // Keep the stored overlay and immutable run intact for revalidation.
         // Never certify old policy output or another entity by loading it.
@@ -595,6 +632,7 @@ export interface CompanyResearchState {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   stage: string;
   error?: string;
+  reuse_only?: boolean;
   durationMs?: number;
   resourceUsage: Record<ResearchProvider, number>;
   metrics?: {
@@ -650,7 +688,7 @@ export function isInternalId(name: string): boolean {
   return false;
 }
 
-export async function createJob(companyIds: string[], mode: 'importer' | 'exporter'): Promise<string> {
+export async function createJob(companyIds: string[], mode: 'importer' | 'exporter', reuseOnly = false): Promise<string> {
   if (shuttingDown) throw new Error('EdgeView is shutting down');
   const db = await getDb();
   const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -673,6 +711,7 @@ export async function createJob(companyIds: string[], mode: 'importer' | 'export
       status: statusVal,
       stage: stageVal,
       error: errorVal,
+      reuse_only: reuseOnly,
       resourceUsage: emptyProviderUsage(),
     };
   }
@@ -806,6 +845,9 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
     activeJobs.delete(jobId);
     return false;
   }
+  if (forceFetch && Object.values(job.company_states).some(state => state.reuse_only)) {
+    activeJobs.delete(jobId); return false;
+  }
 
   await updateJob(jobId, { status: 'PENDING' }, true);
   if (shuttingDown) { activeJobs.delete(jobId); return false; }
@@ -876,9 +918,9 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           // the persisted projection instead of paying providers for the same
           // company again. Force Fetch is the explicit refresh override.
           if (!forceFetch && contact?.edgeview_v1_run_id) {
-            const cachedRun = getV1Run(String(contact.edgeview_v1_run_id));
-            if (cachedRun && (cachedRun.status === 'COMPLETED' || cachedRun.status === 'PARTIAL')
-              && canonicalEntityIdentityKey(cachedRun.company_name, cachedRun.country) === canonicalEntityIdentityKey(companyName, country)) {
+            const reuseStarted = performance.now();
+            const cachedRun = reusableContactRun(contact);
+            if (cachedRun) {
               const revalidated = contact.research_validation_status !== 'current';
               if (revalidated) {
                 const projected = projectHistoricalContactFields(cachedRun);
@@ -901,7 +943,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
                 leadershipFound: Array.isArray(contact.contact_persons) && contact.contact_persons.length > 0,
                 websiteFound: Boolean(contact.website),
               };
-              companyState.durationMs = 0;
+              companyState.durationMs = Math.max(0, performance.now() - reuseStarted);
               job.current_company = companyName;
               job.current_stage = companyState.stage;
               job.completed_companies++;
@@ -917,6 +959,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           const startedAt = Date.now();
           let transportOutcome = false;
           try {
+            if (companyState.reuse_only) throw new Error('RETAINED_EVIDENCE_UNAVAILABLE: Saved-evidence review cannot start provider requests.');
             if (!companyName || isInternalId(companyName)) throw new Error('INVALID_INPUT / UNRESOLVED_COMPANY');
             if (!country) throw new Error('Exact country is required for identity-anchored V1 enrichment');
             let run: V1Run | undefined;

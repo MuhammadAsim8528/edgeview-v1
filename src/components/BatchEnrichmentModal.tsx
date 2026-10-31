@@ -13,6 +13,7 @@ interface BatchEnrichmentModalProps {
   onClose: () => void;
   contacts: CompanyContact[];
   refreshData?: () => void;
+  evidenceOnly?: boolean;
 }
 
 export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
@@ -20,6 +21,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   onClose,
   contacts,
   refreshData,
+  evidenceOnly = false,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'importers' | 'exporters'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -279,11 +281,10 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       const resCreate = await fetch('/api/enrich/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_ids: ids, mode: reportMode }),
+        body: JSON.stringify({ company_ids: ids, mode: reportMode, reuseOnly: evidenceOnly }),
       });
-      if (!resCreate.ok) throw new Error('Failed to create research job');
       const createData = await resCreate.json();
-      if (!createData.success) throw new Error(createData.error || 'Failed to create job');
+      if (!resCreate.ok || !createData.success) throw new Error(createData.message || createData.error || 'Failed to create job');
 
       const jobId = createData.jobId;
       setActiveJobId(jobId);
@@ -294,7 +295,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ forceFetch: false }),
       });
-      if (!resStart.ok) throw new Error('Failed to start research job');
+      if (!resStart.ok) { const failure = await resStart.json(); throw new Error(failure.message || failure.error || 'Failed to start research job'); }
 
       // 3. Start Polling
       startPolling(jobId);
@@ -356,11 +357,12 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
               <Bot className="w-5 h-5 text-sky-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white tracking-wide">EdgeView V1 Batch Enrichment</h3>
-              <p className="text-[11px] text-[#9ca3af]">Exact identity queries, deterministic retrieval, immutable evidence, resumable progress</p>
+              <h3 className="text-sm font-bold text-white tracking-wide">{evidenceOnly ? 'Review Saved Evidence' : 'EdgeView V1 Batch Enrichment'}</h3>
+              <p className="text-[11px] text-[#9ca3af]">{evidenceOnly ? 'Recheck retained sources for the same company and country. No provider calls.' : 'Exact identity queries, deterministic retrieval, immutable evidence, resumable progress'}</p>
             </div>
           </div>
           <button 
+            aria-label="Close batch enrichment"
             onClick={onClose} 
             disabled={jobData?.status === 'PENDING' || jobData?.status === 'DISCOVERING'} 
             className="text-[#9ca3af] hover:text-white p-1 rounded-md hover:bg-[#2a2a2a] transition-colors disabled:opacity-30"
@@ -565,7 +567,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                       <Sparkles className="w-4 h-4 text-sky-400" />
                       <span className="text-xs font-bold text-white uppercase tracking-wider">Configure Research Scope Presets</span>
                     </div>
-                    {selectedIds.size > 0 && (
+                    {selectedIds.size > 0 && !evidenceOnly && (
                       <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/30">
                         Est: ~{(selectedIds.size * 12 / 60).toFixed(1)}m duration
                       </span>
