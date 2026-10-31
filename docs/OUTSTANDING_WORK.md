@@ -9,7 +9,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 ### P0 BLOCKERS
 
 - [~] SEC01 / directiveA: active Serper/Hunter generic-fetch bypass confirmed statically atf27fdcd; settings tests have a separate path. Fix through existing pinned HTTPS provider transport, preserving time/body/response/error contracts; no new client architecture. Dynamic exploit/exfiltration not established. Fresh independent investigation completed; fix/test/review required.
-- [~] CC01–CC04 / directiveM,N: correct company-country, local/parent/distributor and every admitted field through history/UI/export. Scoped fixes verified; representative final truthsets and same-company concurrent completion ordering remain open.
+- [~] CC01–CC04 / directive8: correct company-country, local/parent/distributor and every admitted field through history/UI/export. Scoped fixes verified; representative final truthsets and same-company concurrent completion ordering remain open.
 - [~] DATA02/MIG01/REC01 / directiveB,O: preserve JSON dataset/sql.js operations/immutable evidence/settings authorities; close cross-store upload/delete interruption, actual supported migration/restore/update/data rollback acceptance.
 - [ ] PG01 / directive10: inspect and enforce accepted Stable tag/artifact lineage; a v* tag alone must not promote arbitrary integration code. No publication during this work.
 
@@ -17,6 +17,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 - [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
 - [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
+- [~] EXP01 / directiveM: verify server-authoritative export selection by IDs/filters/options; stale/mixed IDs must not widen to every record and browser-supplied rows must not become trusted business authority.
 - [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. No credential/customer material in source or distribution.
 
 ### P2 MEDIUM-RISK
@@ -58,6 +59,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [~] Older test runner/doc claims: preserve already-integrated stronger code; correct actual stale guidance and owned temporary memory fixture before automated inclusion. Literal filename mentions are not execution evidence.
 
 ### Parallel review corrections and Desktop evidence — 2026-10-31
+
+Test-isolation follow-up: export_memory_regression.test.ts now uses a unique owned OS temporary root for artifacts, JSON and SQLite instead of the fixed machine-specific opencode path. Normal and failure exits clean only that root after DB flush. Actual synthetic17,432trade rows/3,500contacts, CSV/XLSX/DOCX/PDF/ZIP and5repeats PASS; observed ALL peak RSS489MiB, repeat spread26MiB/max462MiB. Typecheck/lint PASS. Wired this formerly uninvoked case into CI. The broad inherited4GiB/400MiB assertions remain smoke ceilings, not supported target-device limits or long leak proof. No old29runner copied, live port touched or customer fixture used.
 
 User explicitly requested parallel real-world workflow. Separate read-only reviewers assessed Serper and original/main handoff; a non-overlapping documentation writer added only the Serper report/index. No agent edited shared source or merged/deployed work. Independent Serper review reproduced two28d2d58 blockers: malformed sibling excluded all opaque links from resolver despite valid normalized rows, and missing position/changed title/snippet permitted source misbinding. New regressions RED, corrected logic GREEN; retained actual provider response pair still yields5strictly matched links without network calls. Original partial-schema warnings/raw evidence preserved. Typecheck/lint/full V1 PASS. Final source/package successor checks still required; reviewer findings are not final release approval.
 

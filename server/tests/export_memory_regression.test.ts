@@ -1,22 +1,25 @@
-// Export Memory Regression — real-world scale. Verifies that contact exports at
-// ~17k-scale trade history + thousands of realistic contacts do NOT blow up RSS
-// or retain unbounded memory across repeated exports, and that every artifact
-// (CSV/XLSX/DOCX/PDF/ALL ZIP) remains valid.
+// Synthetic export regression: 17k trade rows and thousands of generated contacts.
+// Five repeat cycles and broad process ceilings are a smoke guard, not proof of
+// leak freedom, target-device performance or real customer-data correctness.
 
 import * as assert from 'assert';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import { db } from '../db';
-import { getDb } from '../sqlite';
+import { getDb, flushInitializedDatabase, resetDbInstanceForTests } from '../sqlite';
 import { parseFile } from '../parsers';
 import { computeSummary } from '../summary';
 import { processExportRequest } from '../export_manager';
 import { extractPdfText, pdfTextContains } from './pdf_inspect';
 
-const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_mem_tests';
-fs.mkdirSync(SCRATCH, { recursive: true });
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-export-memory-'));
+process.env.EDGEVIEW_TEST_MODE = '1';
+process.env.EDGEVIEW_TEST_DB_DIR = SCRATCH;
+process.env.EDGEVIEW_SQLITE_DB = path.join(SCRATCH, 'operations.db');
+process.env.EDGEVIEW_JSON_DB = path.join(SCRATCH, 'dataset.json');
 
 const TOTAL_RAW_ROWS = 17432;
 const FILE_ID = 'mem-regress-17k.csv';
@@ -275,7 +278,7 @@ async function main() {
   results.all = { before: b, peak: peakAll, after: a };
   console.log(`ALL ZIP: ${names.length} entries, ${(all.buffer as Buffer).length} bytes`);
 
-  // 6. ALL × 5 repeat (leak check)
+  // 6. ALL × 5 repeat (short allocation smoke, not a long leak test)
   const repeatRss: number[] = [];
   for (let i = 1; i <= 5; i++) {
     const before = process.memoryUsage().rss;
@@ -314,11 +317,15 @@ async function main() {
   assert.ok(db.files.has(FILE_ID), `seeded file ${FILE_ID} must be present`);
 
   console.log('\n✅ EXPORT MEMORY REGRESSION PASSED');
-  await cleanupSeed();
 }
 
 main().catch(async (err) => {
   console.error('❌ Export memory regression failed:', err);
+  process.exitCode = 1;
+}).finally(async () => {
   await cleanupSeed();
-  process.exit(1);
+  await flushInitializedDatabase();
+  resetDbInstanceForTests();
+  assert.strictEqual(path.dirname(fs.realpathSync(SCRATCH)), fs.realpathSync(os.tmpdir()), 'refuse cleanup outside owned temporary root');
+  fs.rmSync(SCRATCH, { recursive: true, force: true });
 });
