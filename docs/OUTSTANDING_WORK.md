@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Preserve the verified provider transport and customer-feedback/directory fixes; finish exact-source verification and continue the remaining known customer-readiness queue. Owner is away; no account, signing, spending, publication or live-runtime changes.
+Current active task: Verify the exact saved export-hardening package, then continue authoritative file/derived export paths and the remaining known customer-readiness queue. Owner-away boundaries and account-dependent gates remain unchanged.
 
 ## Full owner acceptance checklist
 
@@ -84,11 +84,12 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 - [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
 - [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
-- [~] EXP01 / directiveM: contact-download authority fixed through current stored contacts; wider file/derived/HTML endpoints still require their own acceptance.
+- [~] EXP01 / directiveM: contact-download authority fixed through current stored contacts; wider file/derived endpoints still require their own acceptance.
   - [x] EXP01.CONTACT_FACTS: actual HTTP regression reproduced forged browser company/email in download; contact requests now resolve scoped IDs to current stored records and ignore client facts, including selected object values.
   - [x] EXP01.CONTACT_SELECTION: actual HTTP rejects empty, missing, mixed stale, duplicate and out-of-scope IDs with400 INVALID_EXPORT_REQUEST; valid selected object IDs yield only the stored selected contact. Existing rendered selection/export workflow passes.
   - [x] EXP01.CONTACT_FORMATS: existing actual CSV/XLSX/DOCX/PDF/ZIP renderer contract passes; final production build and scoped browser/API checks pass. This is not final downloaded-document visual acceptance.
-  - [ ] EXP01.OTHER_PATHS: finish authoritative scoped filtered-file/derived exports and strict HTML company_ids validation; preserve legitimate explicit all-record workflows without silent widening.
+  - [x] EXP01.HTML_SELECTION: actual endpoint previously widened malformed string/null/object IDs to all contacts; now rejects malformed/stale/mixed/duplicate IDs400 INVALID_EXPORT_REQUEST. Existing explicit omitted-ID all export and empty-array none semantics preserved; hostile markup, multilingual data, field scope and failure-redaction checks pass.
+  - [ ] EXP01.OTHER_PATHS: finish authoritative scoped filtered-file/derived exports and quick full-file callers; preserve legitimate explicit all-record workflows without silent widening.
 - [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. No credential/customer material in source or distribution.
 
 ### P2 MEDIUM-RISK
@@ -125,6 +126,10 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] Medium supported-path export authority: actual HTTP contact download accepted browser-forged facts; fixedad578ae with stored-ID authority and adversarial stale/mixed/object-selection checks. Other datasets remain EXP01, not assumed fixed.
+- [x] Medium supported-path HTML selection: actual malformed company_ids widened a download to every contact. Exact endpoint regression reproduced200 instead of400, then passed after strict validation; explicit documented all/none behavior retained.
+- [x] Medium release governance: former any-v-tag publisher could ship the developer ZIP without customer acceptance; removed7c416d1. This blocks unintended publication, not a completed promotion pipeline.
 
 - [x] Provider transport policy gap corrected8dfa908; scoped tests and real Serper/Hunter positive controls recorded above. Fixed endpoints alone did not establish pinning;8MiB evidence/replay contracts preserved. Final release-wide security remains SEC01.
 - [x] Serper independent-review findings correctedf27fdcd: malformed sibling and changed/missing record identity probes now pass original reviewer reproductions. No final release approval inferred; deadline/cancellation/live UI remain outside this scope.
@@ -2695,3 +2700,11 @@ Confirmed current CI automatically ran a write-permission gh release create job 
 Reproduced against actual isolated compiled Express endpoint: a real stored contact ID with browser-forged company name/country/email produced a forged download. Added resolveStoredContactExport at the existing route boundary, retaining current selection UI and document generation. Supplied records carry IDs only for scope; facts come exclusively from the contact map. Selected object values cannot override authority. Missing/empty/duplicate/stale/mixed/out-of-scope IDs reject400 with structured INVALID_EXPORT_REQUEST. No global-record fallback is used.
 
 Executed: typecheck/lint, E2E typecheck, production build, V1 suite and release smoke PASS; actual contact-export-authority HTTP test plus rendered contact-export workflow PASS; existing export_selection_validation and contact_directory_export renderer contract PASS. Added empty-selection guard then rebuilt/reran both affected browser/API tests successfully. Synthetic owned data/config, no provider requests, real customer data or live runtime touched. Other export datasets and HTML ID validation remain explicit EXP01 follow-up, not claimed fixed.
+
+## HTML export selection boundary — 2026-10-31
+
+Actual endpoint regression RED: company_ids string yielded200/all contacts. Added strict shape, unique string IDs, bounded ID length and complete stored-ID match. Now malformed/null/object/missing/mixed/duplicate selections yield400 INVALID_EXPORT_REQUEST before rendering. Omitted company_ids deliberately retains existing all-contacts behavior; [] deliberately exports no cards. No silent partial match or malformed-to-all fallback.
+
+Executed export_blocks_endpoint.test.ts against its owned isolated actual server: PASS strict selection plus existing hostile markup, mixed-case/dangerous links, control characters, multilingual fields, complete local facts, country separation, headers and sanitized unexpected failure. Typecheck/lint, V1 suite, production build and release smoke PASS. Actual downloaded-document visual behavior remains NOT VERIFIED.
+
+Exact previousad578ae build/package check passed149 files, launch/packaged backup/privacy checks. Build954fabadd9daed6917944df68abd6d9436b60bb49823b3afcd05050431b40382; disposable developer ZIP d5446f4a01c7a5e7bcd84d3a5348c35c011a75db409e29c81244eaf5838e15de removed. Still not customer-runtime/MSIX/clean-Windows acceptance. Next trace: FileViewer full export already uses stored sourceFileId; App header quick export and store shortcut still fetch all rows into browser and submit generic rows, and filtered file/derived exports need scoped authority. Do not replace working report semantics blindly.

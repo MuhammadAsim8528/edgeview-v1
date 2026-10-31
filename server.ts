@@ -1972,10 +1972,15 @@ app.get('/api/export/csv/:fileId', (req, res) => {
 
 app.post('/api/export/blocks', (req, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new ExportValidationError('Export payload must be an object.');
     const { company_ids } = req.body;
     let contacts = Array.from(db.contacts.values());
-    if (company_ids && Array.isArray(company_ids)) {
-      contacts = contacts.filter(c => company_ids.includes(c.id));
+    if (company_ids !== undefined) {
+      if (!Array.isArray(company_ids) || !company_ids.every(id => typeof id === 'string' && id.trim() && id.length <= 200)
+        || new Set(company_ids).size !== company_ids.length) throw new ExportValidationError('Company selection must contain unique stored contact IDs.');
+      const ids = new Set(company_ids);
+      contacts = contacts.filter(contact => ids.has(contact.id));
+      if (contacts.length !== ids.size) throw new ExportValidationError('Selected contacts are no longer available. Refresh before exporting.');
     }
     
     // Sort by name
@@ -1985,6 +1990,7 @@ app.post('/api/export/blocks', (req, res) => {
     res.setHeader('Content-Disposition', getSafeContentDisposition('edgeview_blocks.html'));
     res.send(buildContactBlocksHtml(contacts).trim());
   } catch (err: any) {
+    if (err instanceof ExportValidationError) return res.status(400).json({ success: false, code: 'INVALID_EXPORT_REQUEST', error: err.message });
     console.error('Contact block export failed:', err);
     res.status(500).json({ success: false, code: 'EXPORT_BLOCKS_FAILED', message: 'Failed to export contact blocks.', recoverable: true });
   }

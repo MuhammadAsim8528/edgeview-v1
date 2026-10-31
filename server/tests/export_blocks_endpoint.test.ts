@@ -72,6 +72,11 @@ try {
   assert.equal((selected.match(/class="card-title"/g) || []).length, 1);
   assert.ok(!selected.includes('&lt;img src=x'), 'selection excludes unrelated contacts');
   assert.ok(!(await (await post({ company_ids: [] })).text()).includes('class="card-title"'));
+  for (const company_ids of ['ordinary', null, ['ordinary', 'missing'], ['missing'], ['ordinary', 'ordinary'], [null], {}]) {
+    const rejected = await post({ company_ids });
+    assert.equal(rejected.status, 400, 'malformed/stale HTML selection must not silently widen or partially export');
+    assert.equal((await rejected.json()).code, 'INVALID_EXPORT_REQUEST');
+  }
   await seed([
     { id: 'local-rich', company_name: 'Shared Synthetic Group', country: 'Kenya', type: 'Importer',
       email: 'office@synthetic.test', emails_list: ['office@synthetic.test', 'sales@synthetic.test'],
