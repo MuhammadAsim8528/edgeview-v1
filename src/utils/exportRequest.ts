@@ -13,6 +13,10 @@ export function buildExportRequest(payload: GlobalExportPayload, format: ExportF
     return { url: `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`, body: { ...common, ...(payload.sourceView ? { view: payload.sourceView } : {}) } };
   }
   if (payload.dataset === 'files') throw new Error('File exports require a stored file reference.');
+  if (payload.dataset === 'reports') {
+    if (!payload.sourceReportId) throw new Error('Choose a saved report before exporting.');
+    return { url: '/api/export', body: { ...common, report_id: payload.sourceReportId } };
+  }
   if (['summary','country','stats'].includes(payload.dataset)) {
     if (!Array.isArray(payload.sourceFileIds) || !payload.sourceFileIds.length) throw new Error('Choose stored files before exporting.');
     return { url: '/api/export', body: { ...common, source_file_ids: payload.sourceFileIds, ...(payload.dataset === 'stats' ? { filters: payload.filters } : {}) } };

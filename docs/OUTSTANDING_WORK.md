@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Verify the exact committed Stats export package, then resolve the remaining Reports export authority/actual-content path without reviving retired generation or introducing a new storage authority. All prior readiness gates remain in this ledger.
+Current active task: Finish saved Reports source/content export correction and its exact-source checks, then continue the known customer-readiness queue without reviving retired generation or introducing a new storage authority. All prior readiness gates remain in this ledger.
 
 ## Full owner acceptance checklist
 
@@ -145,6 +145,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] Medium supported-path saved-report export loss: actual custom table CSV became trade N/A fields; long text PDF lost its ending. Stored report-ID authority/custom content and flowing saved-report PDFs now pass real browser/API artifact assertions in all5formats, including ZIP PDF contents. Session durability/final visual acceptance remain unverified.
 
 - [x] Medium supported-path Stats export data loss: actual rendered product/value were exported as N/A/N/A because normalized shipment names were not mapped to renderer fields. Fixed through server-owned scoped projection and actual artifact checks.
 - [x] Medium retired export alias: outreach dataset bypassed the current contact authority and accepted invented rows. Reproduced200, then required410 tombstone under the V1 contract.
@@ -2810,3 +2812,14 @@ Scope limits: this is existing six-column Stats content/authority, not full invo
 Clean committed41e746a897b81b1049cecd6192406b9961d52be6 rebuilt and node scripts/check-package-isolated.mjs PASS150 manifest files, unchanged launch, packaged backup contract and private-file exclusion. Build6c23f3629e0d0286c586fa0e043981121c91e3c40a6b84e38578c22b2552b5fd; disposable developer ZIP SHA25646d0ca3eda4df63818d5cfbd374bc9ae48d478bacaf7d26594068746a0c4eedb removed. Still118 development files and installed Node/npm required; no customer-ready MSIX/update/clean-Windows acceptance inferred.
 
 Next report-path facts rechecked read-only: Reports displays stored custom column tables or content_text, whereas the current generic export manager projects non-contact datasets onto fixed trade columns. Verify actual report download content before choosing a correction; do not add generation/persistence or treat an empty tab as an accepted report workflow. Only server.ts and the ledger mention reports/upload; no current frontend creation caller was found. Existing in-memory report map is not durable-data evidence. All prior goals remain intact.
+
+
+## 2026-10-31 — saved Reports export correction in progress
+
+EXP01: actual rendered synthetic table displayed Product/Amount and marker/42, while its CSV downloaded trade headers with N/A values (saved-report-red.log). After binding exports to the existing stored report ID/custom columns/text, a second actual HTTP artifact probe exposed long prose clipped from PDF (saved-report-content-probe.log). This is a confirmed supported-path Medium finding, not proof of an exploit.
+
+Correction under verification: existing report map remains the source; browser records/columns/selection overrides and stale IDs are rejected. Table exports retain stored columns/scalars; text is kept in ordered continuation rows for spreadsheet cell capacity. Saved-report PDFs use existing PDFKit flowing text with automatic pagination in standalone PDF and ZIP, rather than the trade table's capped cell height. No report generation, new persistence authority, customer-data change or live runtime restart.
+
+Acceptance pending: typecheck/lint/full V1, E2E typecheck, production build, rendered download + actual CSV/XLSX/DOCX/PDF/ZIP content and override rejection, release smoke, exact committed developer-package verification. Reports remain session-only in the existing map; there is no current UI creation caller. Durable report creation/restart, Unicode font coverage, final document visual QA and clean-Windows acceptance are NOT VERIFIED. Broad EXP01/customer-readiness is not closed by this sub-fix.
+
+Verification checkpoint: npm run check (typecheck, lint, full V1), npm run typecheck:e2e, npm run build, scoped saved-report/derived-file Playwright (3 passed), npm run test:release all exit0. Actual downloaded custom table marker/42 and long-text end survived standalone formats and ZIP PDF; stale/forged content requests returned400 INVALID_EXPORT_REQUEST. Existing bundle-size warning remains. Exact-source developer-package check is next; no customer/installed/final visual acceptance inferred.

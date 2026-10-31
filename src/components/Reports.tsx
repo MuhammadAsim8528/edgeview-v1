@@ -124,8 +124,8 @@ export const Reports: React.FC<ReportsProps> = ({ reports, onOpenExport }) => {
                     onOpenExport({
                       dataset: 'reports',
                       title: selectedReport.title,
-                      records: selectedReport.rows || [{ report_content: selectedReport.content_text }],
-                      columns: selectedReport.columns?.map((col) => ({ key: col, header: col })),
+                      records: [], sourceReportId: selectedReport.id,
+                      recordCount: selectedReport.report_type === 'table' ? selectedReport.rows?.length ?? 0 : 1,
                       filenamePrefix: `EdgeView_Report_${selectedReport.title.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
                     });
                   }}

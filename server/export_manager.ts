@@ -495,6 +495,30 @@ export async function generateGenericDocxReport(
   return Packer.toBuffer(doc);
 }
 
+// Saved reports may contain long prose; PDFKit must paginate rather than clip cells.
+async function generateSavedReportPdf(title: string, columns: ColumnDef[], records: Record<string, unknown>[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'LETTER', margin: 36 });
+    const buffers: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', reject);
+    try {
+      doc.font('Helvetica-Bold').fontSize(14).text(title);
+      for (const record of records) {
+        for (const column of columns) {
+          doc.moveDown(0.5).font('Helvetica-Bold').fontSize(10).text(column.header);
+          doc.font('Helvetica').fontSize(10).text(sanitizeCell(record[column.key] ?? ''), { width: 540 });
+        }
+      }
+      doc.end();
+    } catch (error) {
+      doc.destroy();
+      reject(error);
+    }
+  });
+}
+
 // 4. Generic PDF Generator for Tabular Datasets (Landscape 8-Column)
 export async function generateGenericPdfReport(
   title: string,
@@ -1121,8 +1145,10 @@ export async function processFullDatasetExport(payload: NormalizedExportPayload)
     throw new Error('No valid records found in dataset to export.');
   }
 
-  const targetRecords = transformFullDatasetRecords(rawRecords);
-  const columns = FULL_DATASET_COLUMNS;
+  const savedReport = payload.dataset === 'reports';
+  if (savedReport && !payload.columns?.length) throw new Error('Saved report columns unavailable.');
+  const targetRecords = savedReport ? rawRecords : transformFullDatasetRecords(rawRecords);
+  const columns = savedReport ? payload.columns! : FULL_DATASET_COLUMNS;
 
   const currentDate = new Date().toISOString().split('T')[0];
   const safeTitle = (title || 'Dataset').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -1156,7 +1182,7 @@ export async function processFullDatasetExport(payload: NormalizedExportPayload)
   }
 
   if (format === 'pdf') {
-    const pdfBuf = await generateGenericPdfReport(title || 'Report', columns, targetRecords);
+    const pdfBuf = await (savedReport ? generateSavedReportPdf : generateGenericPdfReport)(title || 'Report', columns, targetRecords);
     return {
       buffer: pdfBuf,
       contentType: 'application/pdf',
@@ -1193,7 +1219,7 @@ export async function processFullDatasetExport(payload: NormalizedExportPayload)
     }
 
     try {
-      const pdfBuf = await generateGenericPdfReport(title || 'Report', columns, targetRecords);
+      const pdfBuf = await (savedReport ? generateSavedReportPdf : generateGenericPdfReport)(title || 'Report', columns, targetRecords);
       zip.file(`${baseFilename}_Report.pdf`, pdfBuf);
     } catch (err: any) {
       console.error('PDF export failed in ZIP:', err);

@@ -8,6 +8,41 @@ const validOptionalDate = (value: unknown) => value === undefined || value === '
   && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`))
   && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value);
 
+export function resolveStoredReportExport(input: unknown, reports: ReadonlyMap<string, { title: string; report_type: string; columns?: string[]; rows?: Record<string, unknown>[]; content_text?: string }>) {
+  if (!record(input) || input.dataset !== 'reports' || Object.keys(input).some(key => !['dataset','title','filenamePrefix','format','report_id'].includes(key))) throw new ExportValidationError('Report export requires a saved report ID without client content overrides.');
+  if (typeof input.report_id !== 'string' || !input.report_id.trim() || input.report_id.length > 200) throw new ExportValidationError('Select a saved report before exporting.');
+  const report = reports.get(input.report_id);
+  if (!report || typeof report.title !== 'string') throw new ExportValidationError('Saved report is no longer available. Refresh before exporting.');
+  let columns: Array<{ key: string; header: string }>;
+  let records: Record<string, unknown>[];
+  if (report.report_type === 'table') {
+    const keys = report.columns;
+    if (!Array.isArray(keys) || !keys.length || keys.length > 256 || new Set(keys).size !== keys.length
+      || !keys.every(key => typeof key === 'string' && key.trim() && key.length <= 200)
+      || !Array.isArray(report.rows) || !report.rows.length || !report.rows.every(record)) throw new ExportValidationError('Saved report table is invalid or empty.');
+    columns = keys.map(key => ({ key, header: key }));
+    records = report.rows.map(row => Object.fromEntries(keys.map(key => {
+      const value = Object.hasOwn(row, key) ? row[key] : '';
+      if (value !== null && value !== undefined && !['string','number','boolean'].includes(typeof value)) throw new ExportValidationError('Saved report contains unsupported cell values.');
+      return [key, value ?? ''];
+    })));
+  } else {
+    if (typeof report.content_text !== 'string' || !report.content_text.length) throw new ExportValidationError('Saved report has no text to export.');
+    columns = [{ key: 'report_content', header: 'Report Content' }];
+    records = [];
+    // Excel cells have a finite text capacity. Preserve longer document text
+    // in ordered continuation rows instead of truncating it or corrupting XLSX.
+    for (let start = 0; start < report.content_text.length;) {
+      let end = Math.min(start + 30000, report.content_text.length);
+      if (end < report.content_text.length && /[\uD800-\uDBFF]/.test(report.content_text[end - 1])) end--;
+      records.push({ report_content: report.content_text.slice(start, end) }); start = end;
+    }
+  }
+  const payload = { dataset: 'reports', title: report.title, format: input.format, filenamePrefix: input.filenamePrefix, columns, records };
+  validateExportRequest(payload);
+  return payload;
+}
+
 /** Derived scope is explicit stored file IDs, never a client row union. */
 export function resolveStoredDerivedExport(input: unknown, files: ReadonlyMap<string, { rows: Record<string, unknown>[] }>) {
   if (!record(input) || !['summary','country','stats'].includes(input.dataset)) throw new ExportValidationError('Unsupported stored dataset export.');

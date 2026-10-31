@@ -25,6 +25,7 @@ export interface GlobalExportPayload {
   filenamePrefix?: string;
   sourceFileId?: string;
   sourceFileIds?: string[];
+  sourceReportId?: string;
   sourceView?: Record<string, string>;
   recordCount?: number;
   defaultReportType?: ExportReportType;
