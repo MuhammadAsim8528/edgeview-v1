@@ -342,6 +342,37 @@ statsRouter.get('/importers/:importer/exporters', (req: Request, res: Response) 
   }
 });
 
+export function selectImporterShipments(rows: ReturnType<typeof extractRowData>[], scope: { importer: string; country?: string; exporter?: string; product?: string; start?: string; end?: string }) {
+  const importerParam = scope.importer.trim().toLowerCase();
+  const countryParam = (scope.country || '').trim().toLowerCase();
+  const exporterParam = (scope.exporter || '').trim().toLowerCase();
+  const productParam = (scope.product || '').trim().toLowerCase();
+  const startDate = scope.start;
+  const endDate = scope.end;
+  if (countryParam && countryParam !== 'all') {
+    rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
+  }
+
+  let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam);
+
+  if (exporterParam) {
+    matched = matched.filter((r) => r.exporter.toLowerCase() === exporterParam || r.exporter.toLowerCase().includes(exporterParam));
+  }
+  if (productParam) {
+    matched = matched.filter((r) => r.product.toLowerCase() === productParam || r.product.toLowerCase().includes(productParam));
+  }
+
+  matched = filterByDate(matched, startDate, endDate);
+
+  // Sort by date DESC by default
+  matched.sort((a, b) => {
+    if (a.date && b.date) return b.date.localeCompare(a.date);
+    return b.total_value - a.total_value;
+  });
+
+  return matched;
+}
+
 // 7. GET /api/stats/importers/:importer/shipments -> Individual shipment records
 statsRouter.get('/importers/:importer/shipments', (req: Request, res: Response) => {
   try {
@@ -355,26 +386,8 @@ statsRouter.get('/importers/:importer/shipments', (req: Request, res: Response) 
 
     let rows = getAllDatasetRows(fileId);
 
-    if (countryParam && countryParam !== 'all') {
-      rows = rows.filter((r) => r.country.toLowerCase() === countryParam);
-    }
-
-    let matched = rows.filter((r) => r.importer.toLowerCase() === importerParam);
-    
-    if (exporterParam) {
-      matched = matched.filter((r) => r.exporter.toLowerCase() === exporterParam || r.exporter.toLowerCase().includes(exporterParam));
-    }
-    if (productParam) {
-      matched = matched.filter((r) => r.product.toLowerCase() === productParam || r.product.toLowerCase().includes(productParam));
-    }
-
-    matched = filterByDate(matched, startDate, endDate);
-
-    // Sort by date DESC by default
-    matched.sort((a, b) => {
-      if (a.date && b.date) return b.date.localeCompare(a.date);
-      return b.total_value - a.total_value;
-    });
+    const matched = selectImporterShipments(rows, { importer: importerParam, country: countryParam,
+      exporter: exporterParam, product: productParam, start: startDate, end: endDate });
 
     res.json(matched);
   } catch (err: any) {

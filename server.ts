@@ -12,7 +12,7 @@ import { parseFile } from './server/parsers';
 import { normalizeRow } from './server/grouping';
 import { selectFileViewRows, FileViewValidationError } from './server/file_view';
 import { computeSummary } from './server/summary';
-import { statsRouter } from './server/stats_router';
+import { statsRouter, extractRowData, selectImporterShipments } from './server/stats_router';
 import { uploadRouter } from './server/routes/upload';
 import { hasUnattributedHistory, HISTORY_RECONCILIATION_REQUIRED } from './server/history_ownership';
 import {
@@ -1870,12 +1870,21 @@ app.post('/api/export/file/:fileId', async (req, res) => {
 
 app.post('/api/export', async (req, res) => {
   try {
+    if (req.body?.dataset === 'outreach') return res.status(410).json({ success: false, code: 'RETIRED_EXPORT_DATASET', error: 'Outreach exports are not supported by EdgeView V1.' });
     if (req.body?.dataset === 'files') return res.status(400).json({ success: false, code: 'STORED_FILE_REQUIRED', error: 'File exports require a stored file reference.' });
     const payload = req.body?.dataset === 'contacts'
       ? resolveStoredContactExport(req.body, Array.from(db.contacts.values()))
-      : ['summary','country'].includes(req.body?.dataset)
+      : ['summary','country','stats'].includes(req.body?.dataset)
       ? resolveStoredDerivedExport(req.body, db.files)
       : req.body;
+    if (payload?.dataset === 'stats') {
+      const scope = payload.stats_scope;
+      const shipments = selectImporterShipments(payload.records.map(extractRowData), { importer: scope.importer,
+        country: scope.country, start: scope.startDate, end: scope.endDate });
+      if (!shipments.length) throw new ExportValidationError('No stored shipments match this analytics scope.');
+      payload.records = shipments.map(row => ({ Date: row.date, Importer: row.importer, Country: row.country,
+        Exporter: row.exporter, Item: row.product, 'Total FC (USD)': row.total_value }));
+    }
     if (!payload || !payload.dataset || !payload.format) {
       return res.status(400).json({ error: 'Invalid export payload. Required: dataset and format.' });
     }

@@ -13,9 +13,9 @@ export function buildExportRequest(payload: GlobalExportPayload, format: ExportF
     return { url: `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`, body: { ...common, ...(payload.sourceView ? { view: payload.sourceView } : {}) } };
   }
   if (payload.dataset === 'files') throw new Error('File exports require a stored file reference.');
-  if (['summary','country'].includes(payload.dataset)) {
+  if (['summary','country','stats'].includes(payload.dataset)) {
     if (!Array.isArray(payload.sourceFileIds) || !payload.sourceFileIds.length) throw new Error('Choose stored files before exporting.');
-    return { url: '/api/export', body: { ...common, source_file_ids: payload.sourceFileIds } };
+    return { url: '/api/export', body: { ...common, source_file_ids: payload.sourceFileIds, ...(payload.dataset === 'stats' ? { filters: payload.filters } : {}) } };
   }
   return { url: '/api/export', body: { ...common, records: payload.records, columns: payload.columns,
     selectedRows: payload.selectedRows, filters: payload.filters, report_type: payload.dataset === 'contacts' ? reportType ?? payload.defaultReportType ?? 'importer' : undefined } };

@@ -109,5 +109,7 @@ Contact downloads resolve requested IDs against stored contacts and ignore brows
 File downloads use a stored file ID; optional bounded view options share the paging calculation
 in `server/file_view.ts`. Grouped exports use computed grouped values rather than stale sample-row
 aliases. Generic browser-row file exports are rejected. Summary/country downloads resolve explicit stored file IDs and reject client row overrides.
-Stats/report exports still require separate authority acceptance; see the ledger rather than
-assuming every dataset has this boundary.
+Stats downloads resolve explicit file IDs and applied filters through the shipment selector
+used by the read API, then project canonical renderer fields. Retired outreach exports return410.
+The Reports path still requires separate authority/content acceptance; see the ledger rather
+than assuming every dataset has this boundary.

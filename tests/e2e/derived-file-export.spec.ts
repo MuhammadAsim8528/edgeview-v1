@@ -35,12 +35,13 @@ test('summary and country downloads resolve explicit stored file scopes and reje
 });
 
 
-test('stored summary and country scope preserves actual contents in all five formats', async ({ request, runtime }) => {
+test('stored summary, country and stats scopes preserve actual contents in all five formats', async ({ request, runtime }) => {
   await runtime.identity();
   const response = await request.post('/api/files/upload', { multipart: { file: { name: 'derived-formats.csv', mimeType: 'text/csv', buffer: Buffer.from('Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,DerivedFormatBuyer,Kenya,Supplier,Product,10\n') } } });
   expect(response.status()).toBe(201); const uploaded = await response.json(); const id = uploaded.data?.id || uploaded.id;
-  for (const dataset of ['summary','country']) for (const format of ['csv','xlsx','docx','pdf','all']) {
-    const exported = await request.post('/api/export', { data: { dataset, format, source_file_ids: [id], title: 'Synthetic stored scope' } });
+  for (const dataset of ['summary','country','stats']) for (const format of ['csv','xlsx','docx','pdf','all']) {
+    const exported = await request.post('/api/export', { data: { dataset, format, source_file_ids: [id], title: 'Synthetic stored scope',
+      ...(dataset === 'stats' ? { filters: { importer: 'DerivedFormatBuyer', country: 'Kenya', startDate: '', endDate: '' } } : {}) } });
     expect(exported.status()).toBe(200); expect(exported.headers()['x-export-failed-formats']).toBeUndefined();
     const bytes = await exported.body();
     if (format === 'csv') expect(bytes.toString('utf8')).toContain('DerivedFormatBuyer');

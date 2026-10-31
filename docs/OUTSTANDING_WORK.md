@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Continue Stats/report export authority after the verified Summary/CountryView stored-scope change and analytics country/failure correction; all broader readiness goals and owner-away boundaries remain intact.
+Current active task: Verify the exact committed Stats export package, then resolve the remaining Reports export authority/actual-content path without reviving retired generation or introducing a new storage authority. All prior readiness gates remain in this ledger.
 
 ## Full owner acceptance checklist
 
@@ -98,7 +98,12 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [~] EXP01.DERIVED_REPORTS: preserve actual report semantics while binding each dataset to its existing authority; summary/country completed in the scope below, stats/report still open.
     - [x] EXP01.SUMMARY_COUNTRY_SCOPE: current Summary/CountryView buttons submit explicit stored file IDs instead of fetched row unions; server rejects absent/empty/stale/mixed/duplicate scopes and any row/selection overrides. Summary requires exactly one file; country can explicitly combine files without implicit fallback to all.
     - [x] EXP01.SUMMARY_COUNTRY_CONTENT: actual browser downloads include60 rows beyond page1 and exclude an unrelated stored file; explicit two-file API scope includes both. Separate actual API checks confirm marker content in CSV/XLSX/DOCX/PDF and all-format ZIP for both datasets. These are content/authority checks, not final visual or customer-installation acceptance.
-    - [ ] EXP01.STATS_AUTHORITY: bind existing importer/country/date/file scope to the actual stats source and verify product/value fields, without trusting submitted shipments.
+    - [x] EXP01.STATS_AUTHORITY: bound Stats downloads to stored files and the same normalized shipment selector as the read API, without browser shipment records; scoped checks below passed. Final real-data/visual acceptance remains QA01.
+      - [x] EXP01.STATS_VALUES: actual browser CSV RED displayed LOCALMED/50 but exported N/A/N/A; corrected server projection preserves product/value in existing six-column format.
+      - [x] EXP01.STATS_SCOPE: actual browser/API verifies selected file+Kenya, excludes Pakistan/unrelated file, allows explicit ALL and explicit two-file union, rejects stale/duplicate/missing/forged selections without fallback.
+      - [x] EXP01.STATS_APPLIED_RANGE: export uses the successfully loaded scope, not an unapplied edited date; impossible calendar date and no-match future range reject400. Broader period-control QA is not implied.
+      - [x] EXP01.STATS_FORMATS: actual stored marker verified in CSV/XLSX/DOCX/PDF/all ZIP; typecheck/lint/V1/build/release smoke and affected browser suites PASS.
+      - [x] EXP01.RETIRED_ALIAS: old outreach dataset alias independently reproduced200 with invented contact rows; generic API now returns410 RETIRED_EXPORT_DATASET. No retired outreach functionality revived.
     - [ ] EXP01.REPORT_AUTHORITY: verify stored report origin and active supported workflow before changing report download semantics; do not revive retired report generation or introduce persistence merely to fill an empty screen.
 - [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. Fresh ed69ff8 production registry audit reports10 moderate/0 high/0 critical findings; supported-path reachability and compatible remediation remain open. Do not reuse older zero-count results as current acceptance.
   - [x] SEC02.HISTORY_PATTERN: current bounded all-ref scan PASS306 commits/603 historical paths,0 prohibited paths/0 known credential-pattern file matches. Not an entropy scan, ignored-file audit or proof exposed credentials are safe.
@@ -140,6 +145,9 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] Medium supported-path Stats export data loss: actual rendered product/value were exported as N/A/N/A because normalized shipment names were not mapped to renderer fields. Fixed through server-owned scoped projection and actual artifact checks.
+- [x] Medium retired export alias: outreach dataset bypassed the current contact authority and accepted invented rows. Reproduced200, then required410 tombstone under the V1 contract.
 
 - [x] Medium supported-path analytics country attribution: mixed-country importer aggregate was labelled with the first country, and changing country for the same importer did not refresh its facts. Independent API and rendered browser failures reproduced; corrected label/scope reload and honest failure/timeout behavior. Wider research-country admission remains CC01, not newly marked fixed.
 
@@ -2786,3 +2794,13 @@ Previous clean36ae438 exact-source package check PASS150 manifest files, launch/
 Clean committed f48e8f41125a6708cb3cb2d104ee92cb587b270a rebuilt and node scripts/check-package-isolated.mjs passed150 manifest files, unchanged launch, packaged backup contract and private-file exclusion. Build053f40ab0f35c477d3d2d33832a02f2769de2cc07a1ef54600e5a7ca547fb829; disposable developer ZIP SHA256883049736202fa05eabe773e5897b6ca241107b2d609feebbd58cbcf4c72b6b2 removed. Still118 development files/installed Node/npm required; this is not self-contained customer/MSIX/clean-Windows/update acceptance.
 
 The saved Summary/CountryView authority change36ae438 and analytics country/failure correctionf48e8f4 are both pushed privately. No live3901 restart, historical/original checkout change, account action, real-data write or publication occurred. Current source remains NOT READY; next EXP01 work is Stats/report authority, and every earlier broader release requirement remains in this ledger.
+
+## Stats download source/content correction — 2026-10-31
+
+Actual browser download RED: page showed LOCALMED/50 but CSV contained N/A for both product and total. StatsTab no longer submits shipment records; it sends explicit stored source file IDs and validated applied importer/country/date filters. The generic route resolves those files and calls the same selectImporterShipments selector used by the existing shipment-read endpoint. Only server-normalized canonical date/importer/country/exporter/product/value fields reach the existing six-column renderer. This does not invent extra invoice columns or change the report template.
+
+The successful loaded scope is retained for export, so editing a pending date range without Apply does not silently change the displayed results' artifact. Invalid filter keys/types, missing importer/country, impossible calendar dates, reversed ranges and no matches reject instead of broadening. File set admission remains bounded and exact. Independent API RED also confirmed unsupported outreach alias could still export invented rows200; it now returns410 RETIRED_EXPORT_DATASET before rendering, matching the V1 retirement rule.
+
+Executed final npm run check (typecheck/lint/full V1), E2E typecheck, production build, release smoke: PASS. Affected actual browser/API suite PASS3tests: Summary/Country scopes, all5formats for summary/country/stats, Stats UI/content/scoping/adversarial input. The marker is checked inside actual XLSX/DOCX/PDF/CSV/ZIP artifacts, not only from HTTP success. Stats fixture verifies50.00/LOCALMED, excludes FOREIGNMED/OTHERFILEMED, explicit combined file set and ALL-country mode, stale/duplicate IDs/row overrides, invalid date and future no-match. Unapplied UI date edit retains applied empty range. Previous Stats refresh/failure/real15s deadline regression passed after the shared-selector extraction. No real providers, data, original checkout or live3901 touched.
+
+Scope limits: this is existing six-column Stats content/authority, not full invoice raw-column/visual/large-data acceptance. The Reports renderer/source path still needs its own verification, and EXP01 remains open until that required sub-item closes.

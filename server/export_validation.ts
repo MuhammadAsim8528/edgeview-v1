@@ -4,11 +4,24 @@ export class ExportValidationError extends Error {
   constructor(message: string) { super(message); this.name = 'ExportValidationError'; }
 }
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+const validOptionalDate = (value: unknown) => value === undefined || value === '' || (typeof value === 'string'
+  && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`))
+  && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value);
 
-/** Summary/country scope is explicit stored file IDs, never a client row union. */
+/** Derived scope is explicit stored file IDs, never a client row union. */
 export function resolveStoredDerivedExport(input: unknown, files: ReadonlyMap<string, { rows: Record<string, unknown>[] }>) {
-  if (!record(input) || !['summary','country'].includes(input.dataset)) throw new ExportValidationError('Unsupported stored dataset export.');
-  if (Object.keys(input).some(key => !['dataset','title','filenamePrefix','format','source_file_ids'].includes(key))) throw new ExportValidationError('Stored dataset export does not accept client rows or overrides.');
+  if (!record(input) || !['summary','country','stats'].includes(input.dataset)) throw new ExportValidationError('Unsupported stored dataset export.');
+  if (Object.keys(input).some(key => !['dataset','title','filenamePrefix','format','source_file_ids', ...(input.dataset === 'stats' ? ['filters'] : [])].includes(key))) throw new ExportValidationError('Stored dataset export does not accept client rows or overrides.');
+  let statsScope: { country: string; importer: string; startDate: string; endDate: string } | undefined;
+  if (input.dataset === 'stats') {
+    const filters = input.filters;
+    if (!record(filters) || Object.keys(filters).some(key => !['country','importer','startDate','endDate'].includes(key))
+      || typeof filters.importer !== 'string' || !filters.importer.trim() || filters.importer.length > 300
+      || typeof filters.country !== 'string' || !filters.country.trim() || filters.country.length > 120
+      || ['startDate','endDate'].some(key => !validOptionalDate(filters[key]))) throw new ExportValidationError('Invalid importer analytics scope.');
+    statsScope = { country: filters.country.trim(), importer: filters.importer.trim(), startDate: filters.startDate || '', endDate: filters.endDate || '' };
+    if (statsScope.startDate && statsScope.endDate && statsScope.startDate > statsScope.endDate) throw new ExportValidationError('Invalid analytics date range.');
+  }
   const ids = input.source_file_ids;
   if (!Array.isArray(ids) || !ids.length || ids.length > 10000
     || !ids.every(id => typeof id === 'string' && id.trim() && id.length <= 200)
@@ -20,7 +33,7 @@ export function resolveStoredDerivedExport(input: unknown, files: ReadonlyMap<st
   if (!records.length) throw new ExportValidationError('No stored rows in this file scope.');
   const payload = { dataset: input.dataset, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format, records };
   validateExportRequest(payload);
-  return payload;
+  return { ...payload, stats_scope: statsScope };
 }
 
 /** Browser records identify a scoped selection; their facts are never authority. */

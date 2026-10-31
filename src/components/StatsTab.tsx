@@ -74,6 +74,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
   const [isLoadingStats, setIsLoadingStats] = useState<boolean>(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const statsRequest = useRef<AbortController | null>(null);
+  const [appliedExportScope, setAppliedExportScope] = useState<{ fileIds: string[]; country: string; importer: string; startDate: string; endDate: string } | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
   const [exporterSearch, setExporterSearch] = useState<string>('');
@@ -247,7 +248,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
     } else {
       setImporterSummary(null);
       setProducts([]); setExporters([]); setShipments([]);
-      setStatsError(null); setIsLoadingStats(false);
+      setStatsError(null); setIsLoadingStats(false); setAppliedExportScope(null);
     }
     return () => { statsRequest.current?.abort(); statsRequest.current = null; };
   }, [selectedImporter, selectedCountry, selectedFileId]);
@@ -259,6 +260,8 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
     statsRequest.current = controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
     setStatsError(null);
+    setAppliedExportScope(null);
+    const exportScope = { fileIds: selectedFileId ? [selectedFileId] : files.map(file => file.id), country: selectedCountry, importer: selectedImporter, startDate, endDate };
     setIsLoadingStats(true);
     setCurrentPage(1);
     setSelectedExporterFilter('');
@@ -285,6 +288,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
         return;
       }
 
+      setAppliedExportScope(exportScope);
       if (sumRes.ok && sumRes.data) {
         const sumData = sumRes.data;
         setImporterSummary(sumData);
@@ -356,17 +360,14 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
     if (!selectedImporter) return;
 
     if (onOpenExport) {
+      if (!appliedExportScope) return;
       const cleanName = selectedImporter.replace(/[^a-zA-Z0-9_-]/g, '_');
       onOpenExport({
         dataset: 'stats',
         title: `Importer Intelligence: ${selectedImporter}`,
-        records: shipments,
-        filters: {
-          country: selectedCountry,
-          importer: selectedImporter,
-          startDate,
-          endDate,
-        },
+        records: [], sourceFileIds: appliedExportScope.fileIds, recordCount: shipments.length,
+        filters: { country: appliedExportScope.country, importer: appliedExportScope.importer,
+          startDate: appliedExportScope.startDate, endDate: appliedExportScope.endDate },
         filenamePrefix: `EdgeView_Stats_${cleanName}`,
       });
       return;
