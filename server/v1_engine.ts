@@ -8,6 +8,7 @@ import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } f
 import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_store';
 import { readProviderResponse, validateProviderEnvelope, providerSchemaError } from './provider_response';
 import { crawlOfficialPages, officialPageFallbackUrls } from './official_site_crawl';
+import { visibleHtmlText } from './html_evidence';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -658,7 +659,7 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
     result.raw_record_id = [result.raw_record_id, raw.id].filter(Boolean).join(',');
     if (!response.ok) throw new Error(`Direct retrieval returned HTTP ${response.status}`);
     result.html = text;
-    result.text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    result.text = visibleHtmlText(text);
     result.links = [...text.matchAll(/href=["']([^"'#]+)["']/gi)].map(match => {
       try { return new URL(match[1], result.url).toString(); } catch { return ''; }
     }).filter(Boolean).slice(0, 500);

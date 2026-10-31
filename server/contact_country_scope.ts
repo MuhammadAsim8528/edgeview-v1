@@ -1,18 +1,26 @@
 import { detectExplicitCountryNames, normalizeCountryName, normalizeCountryExact } from '../src/utils/countryNormalizer';
+import { stripHtmlComments, hiddenOnlyHtmlCarrier } from './html_evidence';
 
 type Source = { id: string; status?: string; url: string; title?: string; snippet?: string;
   text?: string; markdown?: string; html?: string; links?: string[] };
 export type ContactFactScope = 'local' | 'foreign' | 'ambiguous' | 'related_entity' | 'unknown';
 
-function visible(value: string, linkTargets = false) {
-  const withoutHidden = value.replace(/<!--[^]*?-->/g, ' ').replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ');
+function visible(value: string, field?: string) {
+  const withoutHidden = stripHtmlComments(value).replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ');
   // A social URL is often carried only by href, while the visible label is
   // "LinkedIn". Retain that carrier at its actual office position rather than
   // assigning every entry in the provider's links array the page-wide country.
-  const carried = linkTargets ? withoutHidden.replace(/<a\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, tag => {
+  const carried = ['social', 'email', 'phone'].includes(field || '') ? withoutHidden.replace(/<a\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, tag => {
     for (const attribute of tag.matchAll(/\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
       if (attribute[1].toLowerCase() !== 'href') continue;
       const href = attribute[2] ?? attribute[3] ?? attribute[4] ?? '';
+      if ((field === 'email' && /^mailto:/i.test(href)) || (field === 'phone' && /^tel:/i.test(href))) {
+        try {
+          const target = decodeURIComponent(href.slice(href.indexOf(':') + 1).split('?')[0]);
+          return target.length <= 512 && !/[\u0000-\u001f\u007f<>]/.test(target) ? ` ${target} ` : ' ';
+        } catch { return ' '; }
+      }
+      if (field !== 'social') return ' ';
       return /^https?:\/\//i.test(href) && !/[\u0000-\u0020\u007f<>]/.test(href) ? ` ${href} ` : ' ';
     }
     return ' ';
@@ -85,7 +93,7 @@ function structuredScope(scripts: string[], sought: string, country: string) {
 }
 
 export function structuredContactFactScope(source: Source, value: string, country: string) {
-  const scripts = [...String(source.html || '').matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
+  const scripts = [...stripHtmlComments(String(source.html || '')).matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
   const sought = value.toLowerCase().replace(/\s+/g, ' ').trim();
   return sought ? structuredScope(scripts, sought, country) : undefined;
 }
@@ -93,11 +101,12 @@ export function structuredContactFactScope(source: Source, value: string, countr
 /** Explicit evidence guard, not a complete entity resolver. Unknown country
  * stays explicit so legacy admission is distinguishable from local proof. */
 export function contactFactScope(source: Source, value: string, country: string, field?: string) {
+  if (hiddenOnlyHtmlCarrier(source.html || '', value)) return { scope: 'unknown' as const, quote: '' };
   const sought = value.toLowerCase().replace(/\s+/g, ' ').trim();
   const contains = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').includes(sought);
-  const scripts = [...String(source.html || '').matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
+  const scripts = [...stripHtmlComments(String(source.html || '')).matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
   const structured = scripts.join('\n');
-  const visibleHtml = visible(source.html || '', field === 'social');
+  const visibleHtml = visible(source.html || '', field);
   // A typed person location/relationship is not overridden by a repeated name
   // in a local footer or a visible card with no location of its own.
   const typedLeader = field === 'leader' && sought && scripts.length ? structuredScope(scripts, sought, country) : undefined;
@@ -117,11 +126,13 @@ export function contactFactScope(source: Source, value: string, country: string,
     return { scope: 'unknown' as const, quote: '' };
   }
   const htmlContext = `${visibleHtml}\n${structured}`;
+  if (source.html && ['email', 'phone', 'leader', 'social'].includes(field || '')
+    && sought && !contains(htmlContext)) return { scope: 'unknown' as const, quote: '' };
   // Use the representation actually carrying the value: a short provider text
   // summary must not confer Kenyan scope on a Pakistan-only HTML contact.
   // Direct retrieval may flatten every office into one text line. Prefer the
   // full HTML's visible block boundaries when they actually carry this fact.
-  const body = source.html && contains(htmlContext) ? htmlContext
+  const body = source.html ? htmlContext
     : source.text && contains(source.text) ? source.text
     : source.markdown && contains(source.markdown) ? source.markdown
     : source.html && contains(source.html) ? htmlContext
@@ -159,6 +170,7 @@ export function contactFactScope(source: Source, value: string, country: string,
 
 export function countryScopedFactSources(results: Source[], value: string, country: string, sourceUrl?: string, field?: string) {
   return results.filter(source => source.status === 'success' && (!sourceUrl || source.url === sourceUrl))
+    .filter(source => !hiddenOnlyHtmlCarrier(source.html || '', value))
     .filter(source => {
       const content = `${source.text || ''}\n${source.markdown || ''}\n${source.html || ''}\n${source.snippet || ''}`.toLowerCase();
       return content.includes(value.toLowerCase()) || Boolean(source.links?.some(link => link.replace(/\/$/, '') === value.replace(/\/$/, '')));

@@ -41,6 +41,7 @@ jobs:
       - run: node --import tsx server/tests/legacy_data_migration.test.ts
       - run: node --import tsx server/tests/json_authority_read_failure.test.ts
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
+      - run: node --import tsx server/tests/hidden_contact_evidence.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/engine_ai_destination.test.ts
       - run: node --import tsx server/tests/support_diagnostics.test.ts

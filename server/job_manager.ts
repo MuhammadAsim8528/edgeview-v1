@@ -8,6 +8,7 @@ import { normalizeV1ContactOverlay, V1_CONTACT_OVERLAY_VERSION } from '../shared
 import { OrderedFailureStreak } from './ordered_failure_tracker';
 import { contactFactScope, countryScopedFactSources, structuredContactFactScope } from './contact_country_scope';
 import { localHeadquartersEvidence, managementPublisherMatches, relatedLeadershipEmployer, foreignCurrentLeadershipLocation, foreignManagementSection } from './leadership_affiliation';
+import { stripHtmlComments } from './html_evidence';
 
 const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'] as const;
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
@@ -107,10 +108,11 @@ function normalizeLeadershipPerson(nameValue: string, roleValue: string, company
 }
 
 function htmlText(value: string): string {
-  return value.replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&').replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"').replace(/\s+/g, ' ').trim();
+  return stripHtmlComments(value).replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&').replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"').replace(/\s+/g, ' ').trim();
 }
 
 function jsonLdNodes(html: string): any[] {
+  html = stripHtmlComments(html);
   const nodes: any[] = [];
   const visit = (value: any) => {
     if (!value || typeof value !== 'object') return;
@@ -228,7 +230,7 @@ function structuredLeadersFromOfficialPages(pages: Array<any>, companyName: stri
         leaders.push({ name: normalized.name, designation: normalized.designation, source_url: String(page.url || '') });
       }
     }
-    const cardHtml = html.replace(/<!--[^]*?-->/g, ' ').replace(/<(?:script|style|nav)\b[\s\S]*?<\/(?:script|style|nav)>/gi, ' ');
+    const cardHtml = stripHtmlComments(html).replace(/<(?:script|style|nav)\b[\s\S]*?<\/(?:script|style|nav)>/gi, ' ');
     const cards = [...cardHtml.matchAll(pair)].slice(0, 100);
     const headings = [...cardHtml.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)];
     const activeHeadings: Array<{ level: number; text: string }> = [];
@@ -438,7 +440,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     // Domain ownership cannot override explicit foreign/other-entity evidence.
     // Unknown remains a marked legacy scope, not fabricated local-country proof.
     const local = sources.filter(source => source.scope === 'local'
-      || (source.scope === 'unknown' && field === 'phone' && hasExplicitCountryCallingCode(value, String(run.country || ''))))
+      || (source.scope === 'unknown' && source.quote && field === 'phone' && hasExplicitCountryCallingCode(value, String(run.country || ''))))
       .map(source => source.scope === 'unknown' ? { ...source, scope: 'local' as const, scope_basis: 'explicit_phone_country_code' } : source);
     const unknown = sources.length && sources.every(source => source.scope === 'unknown') ? sources : [];
     const eligible = local.length ? local : !run.country ? unknown : [];
