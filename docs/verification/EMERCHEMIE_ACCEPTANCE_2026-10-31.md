@@ -74,3 +74,29 @@ It retains three emails, seven phones and nine people after the hidden-contact
 correction. This closes the reproduced deterministic recall case in projection;
 it does not turn the earlier failed run into a passed fresh/provider/UI test.
 Full V1, typecheck, lint, build and release smoke passed for this scoped change.
+
+## Compiled saved-evidence acceptance after correction
+
+Source c6415cb5e6434e866f89950a6a8d81f8bd96bcf1; build
+9d31e311926a44a3a80d3afb0e255028925d31455f8f5e14c856d6fb1c20e8e1.
+Copied only the previous isolated public-company test state into a new private
+temporary root. Original fixture had no config/config.prev files; new config was
+empty, monitoring disabled and backend HTTP/HTTPS/fetch denied. No customer state
+or live3901 was touched.
+
+Actual ordinary company POST with reuseOnly:true returned200/reused_evidence:true
+for the original run-mvv9bnan-1bb1f23bea. The stale-policy overlay was withheld
+before action, then current projection contained3emails/7phones/2addresses/9people.
+Assertions checked independently published head-office and warehouse addresses,
+both role mailboxes, head-office phone and Group CEO designation. Comment-only
+stores mailbox was absent. HTML export contained warehouse address/mailbox and
+excluded the hidden mailbox. Normal shutdown/restart preserved the collections.
+All raw-run/blob file hashes stayed unchanged in both source fixture and copy;
+egress-attempt marker absent. Scoped result PASS, not a fresh provider capture or
+real-company rendered UI acceptance. Private summary retained under the owned
+temporary root edgeview-emerchemie-retained-2CTOGQ.
+
+Initial harness checked nonexistent title/role properties instead of the actual
+contact-person designation contract and failed; corrected that assertion to
+require CEO in designation, then reran the complete workflow successfully.
+No product result was changed to satisfy the assertion.

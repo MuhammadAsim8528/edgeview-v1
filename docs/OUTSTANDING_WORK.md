@@ -1,6 +1,14 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Verify corrected retained Emerchemie evidence through the compiled HTTP/restart/export workflow, then continue JOB01 durability and remaining release blockers. Synthetic saved-evidence HTTP and rendered controls now pass; final live/manual QA and wider real-company acceptance remain open. Live customer data remains untouched.
+Current active task: Finish the fresh-batch durability regression/checkpoint, then continue the existing country/provenance and release acceptance blockers. Corrected retained Emerchemie evidence now passes compiled HTTP/export/restart with no provider calls; final live/manual QA and wider real-company acceptance remain open. Live customer data remains untouched.
+
+### JOB01 fresh batch publication boundary — 2026-10-31
+
+New real-worker/HTTP regression reproduced fields published while the SQLite overlay insert was still pending. Fresh worker now awaits explicit durable overlay save before Object.assign/index publication, reuses the canonical projected fields/quality, and reports storage refusal through existing per-company failure state. Separate barriers test both pending insert and pending disk flush, plus controlled flush rejection, successful durable restart and discoverable raw evidence. Provider transport is explicitly synthetic, outbound requests denied; this does not verify provider service behavior or power-loss semantics. A build-only mutant removing the durable flag was killed specifically by the pending-disk-flush publication assertion. Initial test harness mismatched the SQL spelling and lacked the Windows stdin bootstrap; those invalid runs were corrected before accepting the red/green result. No live backend termination or customer mutation.
+
+### CC03/CC04 exact saved-review commit acceptance — 2026-10-31
+
+Committed/pushed c6415cb5e6434e866f89950a6a8d81f8bd96bcf1 rebuilt with clean tracked source. Isolated developer package PASS148files/116developmentfiles, launch/staged-backup/private-file checks PASS; build9d31e311926a44a3a80d3afb0e255028925d31455f8f5e14c856d6fb1c20e8e1, disposable ZIP SHA256f6300192e3079c2e2910f7d8a27be9e5e1c6021e8f55167edb6dd69ad1a0205c. ZIP removed by bounded checker, still requires installed Node/npm and is NOT customer-runtime/install acceptance. Retained actual Emerchemie capture copied to new isolated state with empty config, monitoring off and backend egress denied. Actual POST reused exact run, current policy produced3emails/7phones/2addresses/9people, independently published offices/mailboxes/headphone/CEO assertions PASS; hidden stores mailbox absent. HTML export and normal restart PASS, raw hashes unchanged in original isolated fixture and copy, zero provider calls. Detailed report verification/EMERCHEMIE_ACCEPTANCE_2026-10-31.md. Fresh provider re-run and rendered real-company UI remain NOT VERIFIED; prior fresh failure is not relabelled.
 
 ### CC03/JOB01 saved-evidence API and rendered workflow — 2026-10-31
 

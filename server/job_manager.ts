@@ -996,43 +996,14 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
             companyState.stage = `V1 ${run.status}: ${run.results.length} results, ${run.raw_records.length} raw records`;
             companyState.error = run.status === 'FAILED' ? run.timeline.find(event => event.error)?.error || 'No provider results' : undefined;
             if (contact) {
-              contact.emails_list = projected.emails_list;
-              contact.email = projected.emails_list[0] || '';
-              contact.phones_list = projected.phones_list;
-              contact.phone = projected.phones_list[0] || '';
-              contact.website = projected.website || '';
-              contact.linkedin_urls = projected.linkedin_urls;
-              contact.socials = projected.socials;
-              contact.linkedin = projected.linkedin_urls[0] || '';
-              contact.addresses = projected.addresses;
-              contact.address = projected.address;
-              contact.contact_persons = projected.contact_persons;
-              contact.evidence = projected.evidence;
-              contact.unscoped_facts = projected.unscoped_facts;
-              contact.research_validation_status = 'current';
-              contact.edgeview_v1_run_id = run.id;
-              const hasChannel = projected.emails_list.length > 0 || projected.phones_list.length > 0;
-              const hasIdentity = Boolean(projected.website);
-              const hasOrganizationDetail = projected.addresses.length > 0 || projected.contact_persons.length > 0;
-              contact.quality_status = run.status === 'FAILED' ? 'FAILED' : hasIdentity && hasChannel && hasOrganizationDetail ? 'COMPLETE' : hasIdentity || hasChannel || hasOrganizationDetail ? 'PARTIAL' : 'NOT_FOUND';
-              contact.last_updated = new Date().toISOString();
-              await persistV1ContactOverlay(companyId, run.id, {
-                emails_list: contact.emails_list,
-                email: contact.email,
-                phones_list: contact.phones_list,
-                phone: contact.phone,
-                website: contact.website,
-                linkedin_urls: contact.linkedin_urls,
-                socials: contact.socials,
-                addresses: contact.addresses,
-                address: contact.address,
-                contact_persons: contact.contact_persons,
-                evidence: contact.evidence,
-                unscoped_facts: contact.unscoped_facts,
-                schema_version: projected.schema_version,
-                entity_key: projected.entity_key,
-                quality_status: contact.quality_status,
+              // Match interactive/cached publication: an accepted raw run does
+              // not prove that the operational contact projection is durable.
+              await persistV1ContactOverlay(companyId, run.id, projected, true);
+              Object.assign(contact, projected, {
+                research_validation_status: 'current', edgeview_v1_run_id: run.id,
+                last_updated: new Date().toISOString(),
               });
+              pharmaDb.rebuildIndexes();
             }
             for (const provider of RESEARCH_PROVIDERS) job.resource_usage[provider] += companyState.resourceUsage[provider] || 0;
           } catch (error: any) {
