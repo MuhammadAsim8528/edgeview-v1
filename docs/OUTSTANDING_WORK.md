@@ -2,6 +2,58 @@
 
 Current active task: Finish scoped guidance/test-isolation commits, then close the confirmed credentialed-provider transport gap using the existing hardened boundary. Preserve8MiB evidence/Serper replay contracts and structured HTTP failures. Local verification continues without paid CI; original/live/customer state remains untouched.
 
+## Full owner acceptance checklist
+
+This is the full33-item acceptance view, not a replacement for the goal/evidence records below. A verified sub-fix does not close a broad item. [ ] not started/awaiting prerequisites, [~] partial/in progress, [x] fully verified for this acceptance item, [!] external blocker. The short board groups these requirements; new directive items are separately tracked there until reconciled. Detailed commits/tests/limitations remain in dated checkpoints and the capability matrix.
+
+### Research and data accuracy
+
+- [~] CC01: Complete company-country isolation across extraction, cache, history, UI and exports.
+- [~] CC02: Finish parent, subsidiary, distributor and field-level source attribution.
+- [~] CC04: Complete fresh Emerchemie official-page retrieval and rendered acceptance; corrected retained evidence is verified only in its stated scope.
+- [~] QA01: Verify Getz Kenya, Global Pharmaceuticals, Thorne Berry, Emerchemie and Slim Pharma against public sources through persistence/API/UI/export.
+- [ ] DATA01: Reconcile the real importer dataset, duplicates, exporter exclusions, weak profiles, contacts and counts.
+- [~] CORE01: Verify all four enabled providers, including quota, authentication, timeout and recovery.
+- [~] JOB01: Finish batch progress, cancellation, retries and interrupted-job recovery.
+
+### Data safety and recovery
+
+- [~] DATA02: Finish applying legacy-history reconciliation safely; isolated journaled repair is not live installation acceptance.
+- [~] MIG01: Complete stable-data-directory migration with backups and interruption recovery.
+- [~] REC01: Finish safe restore, link/junction protection and stale-file handling.
+- [ ] REC01: Prove compatible application and customer-data rollback together.
+- [~] DATA03/PERF01: Complete corruption, permission, disk-full and unexpected-termination acceptance across supported workflows.
+
+### Security, monitoring and support
+
+- [~] SEC01: Recheck security protections against the final integrated build, including the active provider-transport correction.
+- [~] SEC02/CI01: Resolve dependency findings and verify final secret/history/package scans, licenses and SBOM.
+- [!] SEC02: Rotate previously exposed provider keys; owner/account participation remains necessary.
+- [~] MON01/MON02: Verify fresh final-build Sentry/PostHog receipt, privacy controls and crash coverage; current browser-tool access is unavailable.
+- [~] DIAG01: Finish diagnostics, redaction, retention and support instructions/acceptance.
+- [~] PRIV01/UX01: Finish truthful privacy, external-provider disclosures, About and third-party notices.
+- [~] ID01: Verify installation-identity recovery; HWID/licensing remains deliberately deferred.
+
+### Release and installation
+
+- [ ] REL01: Safely reconcile accepted work into the intended permanent project after review; historical/original checkout stays untouched during current integration work.
+- [~] REL01: Freeze accepted version, commit, build, schema and channel identities.
+- [!] CI01: Obtain passing exact-source CI evidence; hosted jobs cannot currently start, local checks continue without paid changes.
+- [~] DIST01: Finish a self-contained customer package without installed Node/npm or developer files.
+- [!] DIST01/MS01: Verify trusted MSIX installation and native launch; signing/application-control/account gates remain open.
+- [ ] UPD01: Finish the selected Store-compatible update mechanism, post-update acceptance and recovery.
+- [ ] PILOT01: Test install, upgrade, interrupted upgrade and uninstall/reinstall on clean Windows.
+
+### Final acceptance and handoff
+
+- [ ] QA01: Complete final live visual/control QA after its prerequisites and owner-reopened gate.
+- [~] UX01: Complete accessibility, offline and essential-workflow acceptance.
+- [~] PERF01: Repeat representative current-build and target-device performance/long-running checks.
+- [~] FINAL01: Populate Desktop documentation, accepted version snapshots and installer folders accurately; working documentation alone is not final artifacts.
+- [ ] FINAL01: Produce separate full-source, private-data and customer-runtime artifacts.
+- [ ] FINAL01: Produce final checksums, notices, release notes and readiness report.
+- [ ] FINAL01: Stop with a verified owner-review packet before publication or uncle deployment.
+
 ## Live customer-readiness board — additional directive reconciled 2026-10-31
 
 Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accepted; [~] IN PROGRESS/partial; [x] VERIFIED for stated scope only; [!] BLOCKED by an identified external dependency. Detailed capability matrix and dated evidence below remain authoritative. Stop after known supported-path High/Medium findings and required acceptance close; do not expand into cosmetic/speculative hunting. Store publication still requires the owner's later checkpoint.

@@ -15,6 +15,15 @@ const escape = value => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&l
 const capabilities = ledger.split(/\r?\n/).filter(line => /^\| [A-Z]+\d+ P\d/.test(line));
 const rows = capabilities.map(line => '<tr>' + line.split('|').slice(1, -1).map(cell => `<td>${escape(cell.trim())}</td>`).join('') + '</tr>').join('\n');
 const current = ledger.match(/^Current active task: (.+)$/m)?.[1] || 'No current task recorded; inspect the authoritative ledger.';
+const acceptance = ledger.match(/## Full owner acceptance checklist\r?\n([\s\S]*?)(?=\r?\n## )/)?.[1] || '';
+const fullChecklist = acceptance.split(/\r?\n/).map(line => {
+  if (line.startsWith('### ')) return `<h3>${escape(line.slice(4))}</h3>`;
+  const task = line.match(/^- \[([ x~!])\] (.+)$/);
+  if (!task) return '';
+  const label = ({ ' ': 'NOT STARTED', x: 'VERIFIED', '~': 'IN PROGRESS', '!': 'BLOCKED' })[task[1]];
+  const symbol = ({ ' ': '☐', x: '✓', '~': '◐', '!': '!' })[task[1]];
+  return `<p data-task="acceptance"><strong>${symbol} ${label}</strong> — ${escape(task[2])}</p>`;
+}).join('\n');
 // New checkpoint notes are prepended; older evidence was appended. Show both.
 const latest = ledger.split(/^## Authoritative implementation ledger/m)[0]
   + '\nEarlier checkpoint evidence\n' + ledger.split(/(?=^### )/m).slice(-3).join('\n');
@@ -22,7 +31,8 @@ const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="v
 <style>body{font:17px/1.55 system-ui,sans-serif;background:#f5f7fa;color:#182331;margin:0}main{max-width:1200px;margin:auto;padding:32px}h1,h2{line-height:1.2}header,section{background:white;padding:24px;margin-bottom:20px;border:1px solid #d5dce5;border-radius:10px}.status{font-weight:700;color:#a02d19}table{width:100%;border-collapse:collapse;font-size:14px}td,th{border:1px solid #d5dce5;padding:12px;text-align:left;vertical-align:top}th{background:#eaf0f6}pre{white-space:pre-wrap;font:15px/1.6 system-ui}code{overflow-wrap:anywhere}@media(max-width:700px){main{padding:12px}section{overflow:auto}table{min-width:780px}}</style>
 <main><header><h1>EdgeView progress workspace</h1><p class="status">NOT READY for customer release</p><p>Updated ${escape(new Date().toISOString())} · Source <code>${escape(commit)}</code></p><p>This page reloads every 30 seconds to show saved checkpoints. Work does not continue while the session is stopped. This is the progress workspace, not the deployed EdgeView application. The repository goal ledger remains the authority.</p><button id="refresh-control" type="button" aria-pressed="false">Pause automatic refresh</button><p id="refresh-state" role="status">Automatic refresh enabled</p></header>
 <section><h2>Working now</h2><p>${escape(current)}</p><h2>Priority and timing</h2><p>Release blockers first: incorrect company and country facts, lost data, privacy and secrets, unsafe recovery, installation and essential workflows. Optional improvements go to follow-up patches. No guaranteed hourly ship promise.</p><p>Existing planning targets remain November 2 for a private candidate and November 6 for the release decision, conditional on prerequisites. Signing, clean Windows and final visual acceptance remain gates. Microsoft Store setup and public shipping are deferred.</p></section>
-<section><h2>Capability checklist</h2><p>Evidence and remaining criteria are copied from the canonical ledger. A test result does not establish whole-product correctness.</p><table><thead><tr><th>Goal</th><th>State</th><th>Existing evidence</th><th>Still required</th></tr></thead><tbody>${rows}</tbody></table></section>
+<section><h2>Full owner acceptance checklist</h2><p>The complete33-item list remains open until its full acceptance criteria pass. Verified sub-fixes are recorded below; the shorter work board does not replace these requirements.</p>${fullChecklist || '<p>No detailed checklist found; inspect the repository ledger.</p>'}</section>
+<section><h2>Capability evidence</h2><p>Evidence and remaining criteria are copied from the canonical ledger. A test result does not establish whole-product correctness.</p><table><thead><tr><th>Goal</th><th>State</th><th>Existing evidence</th><th>Still required</th></tr></thead><tbody>${rows}</tbody></table></section>
 <section><h2>Latest completed work and checks</h2><pre>${escape(latest)}</pre></section></main>
 <script>
 (() => {
