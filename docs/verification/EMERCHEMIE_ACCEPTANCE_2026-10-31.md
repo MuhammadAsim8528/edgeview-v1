@@ -58,3 +58,19 @@ Transient acquisition failures remain observable and are not counted as success.
 Remaining: deterministic warehouse-address recall, wider fact-by-fact source
 review, fresh integrated enrichment/export/restart after correction and actual
 rendered UI acceptance. No whole-company or whole-product correctness claim.
+
+## Subsequent scoped correction
+
+The ordinary-label regression failed before the parser change. It now extracts
+country-explicit street paragraphs following generic office/warehouse labels,
+without depending on this company's CSS or expected address. Fixtures reject
+foreign office paragraphs, distributor blocks, comments, stock/order prose and
+countryless addresses; existing country and hidden-evidence regressions pass.
+Equivalent address strings differing only in trailing punctuation are deduplicated.
+
+Offline reprojection of the actual captured run now returns both the head-office
+and warehouse addresses, each with official source URL and local-country evidence.
+It retains three emails, seven phones and nine people after the hidden-contact
+correction. This closes the reproduced deterministic recall case in projection;
+it does not turn the earlier failed run into a passed fresh/provider/UI test.
+Full V1, typecheck, lint, build and release smoke passed for this scoped change.

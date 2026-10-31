@@ -9,6 +9,7 @@ import { OrderedFailureStreak } from './ordered_failure_tracker';
 import { contactFactScope, countryScopedFactSources, structuredContactFactScope } from './contact_country_scope';
 import { localHeadquartersEvidence, managementPublisherMatches, relatedLeadershipEmployer, foreignCurrentLeadershipLocation, foreignManagementSection } from './leadership_affiliation';
 import { stripHtmlComments } from './html_evidence';
+import { detectExplicitCountryNames } from '../src/utils/countryNormalizer';
 
 const RESEARCH_PROVIDERS = ['serper', 'firecrawl', 'nvidia', 'groq', 'gemini', 'hunter', 'tavily', 'exa', 'linkup', 'apify'] as const;
 type ResearchProvider = typeof RESEARCH_PROVIDERS[number];
@@ -151,6 +152,16 @@ function structuredAddressesFromOfficialPages(pages: Array<any>): string[] {
     // Labelled office blocks need not use a particular site's CSS vocabulary.
     // Keep extraction separate from the field-level country admission below.
     for (const match of html.matchAll(/<(?:div|p|address)\b[^>]*>\s*<span\b[^>]*>\s*(?:(?:registered|office|postal)\s+)?address\s*:?\s*<\/span>([\s\S]{1,800}?)<\/(?:div|p|address)>/gi)) add(match[1]);
+    // Common ordinary CMS layout: an office label followed by its paragraph.
+    // A global domain or navigation country cannot supply missing local scope.
+    const officeHtml = stripHtmlComments(html).replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ');
+    for (const match of officeHtml.matchAll(/<(strong|b|h[1-6])\b[^>]*>([\s\S]{1,120}?)<\/\1>\s*(?:<br\s*\/?>\s*)?<p\b[^>]*>([\s\S]{1,800}?)<\/p>/gi)) {
+      const label = htmlText(match[2]), address = htmlText(match[3]);
+      if (!/^(?:(?:(?:head|regional|branch|registered|corporate|sales)\s+)?office|headquarters|warehouse(?:\s+complex)?|(?:(?:postal|office|registered)\s+)?address)\s*:?$/i.test(label)) continue;
+      const countries = detectExplicitCountryNames(address);
+      const street = /\b(?:street|st\.?|road|rd\.?|avenue|ave\.?|lane|building|floor|plot|postal|p\.?o\.?\s*box)\b/i.test(address);
+      if (countries.length === 1 && street && !/@|https?:|\b(?:telephone|fax)\b/i.test(address)) add(address);
+    }
   }
   return addresses.slice(0, 10);
 }
@@ -355,11 +366,12 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     .filter(claim => String(claim.role || '').toLowerCase() !== 'country')
     .map(claim => String(claim.value || '').trim())
     .filter(value => value && value.toLowerCase() !== targetCountry);
-  const addresses = [...new Set([
+  const addressKey = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').replace(/[.,;\s]+$/, '');
+  const addresses = [
     ...structuredAddressesFromOfficialPages(officialPages),
     ...labeledAddressesFromPublicProfiles(publicProfiles),
     ...citedAddresses,
-  ])].slice(0, 10);
+  ].filter((value, index, all) => all.findIndex(other => addressKey(other) === addressKey(value)) === index).slice(0, 10);
   const leaderMap = new Map<string, { name: string; designation: string; source_url: string; linkedin?: string }>();
   const companyName = String(run.company_name || '');
   const formalCards: FormalLeadershipCard[] = [];

@@ -1,6 +1,14 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Correct published-versus-hidden contact evidence, then deterministic office/warehouse-address recall. Fresh real Emerchemie capture now includes contacts and leadership but still misses the warehouse address; the actual acceptance remains FAIL and UI remains NOT VERIFIED. Live customer data remains untouched.
+Current active task: Finish integrated revalidation/provider/UI acceptance after correcting hidden contacts and the reproduced warehouse-address recall. Offline projection of real Emerchemie evidence now includes both offices; the prior fresh acceptance remains FAIL and rendered UI remains NOT VERIFIED. Live customer data remains untouched.
+
+### CC04 ordinary office and warehouse paragraph recall — 2026-10-31
+
+After hidden-carrier fix6b56ade, reproduced the missing address with synthetic strong-label/plain-paragraph markup; regression returned[] before correction. Added generic label/paragraph extraction, explicit street shape and exactly one explicitly named country, then existing per-field local/foreign/related-entity admission. No company-specific value or CSS, AI confidence or domain-only country inference. Countryless, foreign, distributor, stock/order prose and commented blocks abstain. Deduplicates equivalent trailing-punctuation address variants without merging different countries or records. New regression plus hidden/accordion/country fixtures PASS; typecheck/lint/full V1/build/release smoke PASS (runner43372 terminal0). New test wired into CI.
+
+Offline projection of actual retained run-mvv9bnan-1bb1f23bea now yields two independently published addresses: head office and warehouse, with exact official contact URL and local-country evidence, alongside3emails/7phones/9people. No raw evidence was fabricated, expected fact injected, provider re-run or live overlay published by this probe. Fresh provider→persistence/API/export/restart and actual rendered UI still require acceptance. Existing prior provider run remains honestly failed rather than rewritten. Source verification report updated.
+
+Next integration inspection: batch job creation/start currently applies live-provider capability before ordinary cached-evidence reuse. The unit offline revalidation test does not cover these HTTP guards; verify actual missing-provider behavior before claiming ordinary UI revalidation works offline. Keep this as part of existing CC03/JOB01 acceptance, not a separate engine or bypass of storage safety.
 
 ### CC04/QA01 fresh Emerchemie acceptance and hidden-contact defect — 2026-10-31
 
