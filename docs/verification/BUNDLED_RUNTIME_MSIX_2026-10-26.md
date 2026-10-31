@@ -75,3 +75,31 @@ Microsoft account setup and final visual QA remain deferred by the owner.
 Official schema references:
 https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-application
 https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/macros
+
+
+## 2026-10-31 current-source checkpoint
+
+The historical result above is not the latest runtime evidence. Existing factory on
+6b21ac0a4065c6208bc2491380b423c04207e5b9 produced an unsigned internal candidate
+with app1.0.0-rc.2/schema2 and build
+e898e332047b131affa370f1d940f61ea157938446c36488da315e388a1217e1.
+Exact MSIX SHA256:
+64048a2ed405e7f16c5aacb7fdd520e4f72cfb25ea9b87e2f0296ba68deb2816.
+
+Factory preflight/npm policy regressions passed. First actual attempt failed closed
+when two mapped PNGs disappeared; cause is unestablished. Three-file SDK control
+passed. Observational retry changed no factory logic and saw both PNGs present
+through copying/npm/compiler/mapping/SDK; full SDK validation passed27411files.
+This is not evidence that the first failure's cause was repaired.
+
+Exact-archive verify-msix-runtime exited0: complete re-extraction/file hashes,
+matching compiled artifact/vendor Node, System32-only PATH, empty initial data,
+synthetic Kenya/Pakistan separation on upload and scoped HTML export, missing-key503,
+private-marker-free diagnostics, durable owner-pipe shutdown/restart, stable UUID/data
+and no app-root state writes. Monitoring was disabled. No real customer data used.
+
+Native launcher compiled but was not executed. No installation, publisher/signing
+trust, clean-Windows, updater/rollback or real-provider acceptance. Current prototype
+still carries unnecessary frontend/build Node packages and needs runtime-payload,
+content, SBOM/license and asset/package-identity acceptance. NOT READY. Detailed
+commands, limitations and ongoing goals remain in ../OUTSTANDING_WORK.md.

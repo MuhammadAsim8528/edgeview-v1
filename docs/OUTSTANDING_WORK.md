@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Continue JOB01 multi-company cancellation/queued-work, retry and interrupted-job acceptance after verified publication ordering, drain ownership and bounded Resume feedback. Final real-provider/rendered and all other readiness gates remain open as recorded.
+Current active task: Finish runtime-only dependency/payload packaging from the verified current unsigned MSIX baseline. Preserve first-attempt missing-PNG warning; final native trust/install/update/clean-Windows gates and unfinished JOB01/provider/context checks remain open.
 
 ## Full owner acceptance checklist
 
@@ -137,6 +137,13 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 ### PACKAGING / UPDATE
 
 - [~] DIST01/MS01/UPD01/REL01 / directive9–16: intended customer route MSIX/Store-managed Stable updates, account/signing still unverified. Bundle runtime, separate writable state and protect app/data compatibility. Do not build a competing updater for Stable or claim package downgrade is data rollback. Original tree remains preserved pending reviewed reconciliation.
+  - [x] DIST01.CURRENT_SDK: existing factory on6b21ac0 produced SDK-validated unsigned internal MSIX; exact archive SHA256 recorded below. First missing-PNG attempt failed closed and remains unexplained WARN, not a claimed source fix.
+  - [x] DIST01.EXTRACTED_RUNTIME: exact current archive independently re-extracted; vendor Node bytes/source artifact/file hashes verified, global Node/npm absent from PATH, empty first launch, synthetic country-separated upload/HTML export, missing-provider503, safe diagnostics, owner-pipe shutdown/restart/UUID/data and no app-root writes passed. Not installed/native/clean Windows acceptance.
+  - [~] DIST01.RUNTIME_PAYLOAD: current27411-file prototype still includes frontend/build Node packages. Backend external-import graph measured; finish runtime-only dependencies while retaining compiled UI, required resources and proper license/SBOM evidence.
+  - [~] DIST01.CONTENT_LICENSE: developer-package content scanner and adversarial canary/failure/preservation regressions PASS; license-inventory helper PASS never confers clearance. Final MSIX-wide content/SBOM/license review remains open.
+  - [!] DIST01.TRUSTED_ACTIVATION: native launcher was compiled but NOT EXECUTED/installed in this probe; publisher identity, trusted signing and supported native activation remain unverified. No Windows security setting changes.
+  - [ ] DIST01.UPDATE_ACCEPTANCE: accepted installer-compatible updates, preserved user state and compatible application/data recovery.
+  - [ ] DIST01.CLEAN_WINDOWS: exact customer installation and target-device gate; PATH masking on this developer host is only scoped evidence.
 - [ ] Prepare correct version/build/schema/channel/checksum/SBOM/notes, actual package identity/assets and immutable candidate lineage. No final source/customer copy before acceptance, no public upload.
 
 ### CLEAN-WINDOWS ACCEPTANCE
@@ -151,6 +158,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [~] Medium customer-package factory: first current MakeAppx attempt refused missing mapped PNG files. Observational retry retained both PNGs at every copy/npm/compiler/SDK phase and produced a verified current internal MSIX; exact extraction/runtime checks passed. Original disappearance is unexplained WARN, not a source fix or Windows security diagnosis. Final runtime-only/customer acceptance remains open.
 
 - [x] Medium supported-path Pause feedback: actual rendered503 stop refusal produced no alert. Bounded mutual-exclusive Pause/Resume actions and safe refusal/timeout/checkpoint uncertainty feedback passed rendered regression and full local checks; stop acknowledgment alone must not halt checkpoint recovery.
 
@@ -2911,3 +2920,29 @@ Actual browser RED: Pause / Halt Traversal received synthetic503 and displayed n
 If stop is acknowledged but checkpoint read fails, keep polling and state explicitly that checkpoint is unconfirmed. If returned checkpoint is still active, display finishing-work message and continue polling. Only observed terminal checkpoint stops polling; subsequent terminal progress clears the uncertainty message. New browser test exercises503/private text omission, held stop/real15s abort, stop200+checkpoint503, continued progress requests and laterSTOPPED recovery. Focused browser/current checks pending; this is synthetic isolated feedback behavior, not final live/manual QA.
 
 Pause final checks: typecheck, lint, E2E typecheck, production build, scoped Pause+Resume browser tests (2passed48.1s;23.6s Pause and17.2s Resume), full test:v1 including three-scenario lifecycle runner, release smoke all exited0. Private stop/checkpoint strings absent; actual15s timeout and post-ack polling recovery observed. A temporary disabled-navigation assertion was discarded because it imposed an unevidenced UI policy; no navigation-disable requirement or verification is claimed. Exact committed package check follows. No unsupported broad JOB01 completion claim.
+
+
+## 2026-10-31 — current MSIX factory verification / asset disappearance
+
+Developer ZIP exact6b21ac0a4065c6208bc2491380b423c04207e5b9 package checker exited0:150manifest files; launch/packaged backup/privacy PASS; builde898e332047b131affa370f1d940f61ea157938446c36488da315e388a1217e1; disposable ZIP485fd1eb35695c73184856b929418c5a28b1559e16cd7700d421c7ba9cf184b3 removed. Still118 development files/Node/npm required, not customer ready.
+
+Existing package content-secret scanner is implemented in package-windows and its canary test; do not treat the stale older unfinished-scanner note as proof of missing code. MSIX factory remains an internal unsigned candidate, not the developer ZIP nor final customer acceptance. Existing factory tests PASS actual npm lifecycle suppression and exact Git/build refusal/positive controls.
+
+Actual clean-source factory on6b21ac0: production dependency staging and native launcher compilation completed; MakeAppx failed MSIX_PROTOTYPE_MAKEAPPX_FAILED. SDK log: missing Assets/PrototypeLogo.png, mapping line3,0x80070003; package creation0x8007000b. Read-only mapping inspection:27410 files, exactly2 mapped source files absent (logo and dist browser logo). No Windows Application Control cause established. No matching Defender1116/1117 events found in the scoped time query; this does not prove no security product action. No settings changed or files restored around a security block.
+
+Controlled three-file SDK probe using the same manifest/compiled launcher/logo passed validation and left all three source hashes unchanged. Not a runnable customer package, not signing/installation evidence. Official mapping contract checked: https://learn.microsoft.com/en-us/windows/uwp/packaging/create-app-package-with-makeappx-tool . Separate observational preload retry records PNG existence after copying and before/after dependency/compiler/SDK stages without altering factory results. Current trace: both copied PNGs exist immediately before npm. Retry still running; do not restart or claim pass/failure before its terminal result. All candidates remain private temporary internal probes, not Desktop release snapshots.
+
+
+## 2026-10-31 — current unsigned MSIX / extracted bundled-runtime evidence
+
+Observational factory retry terminal exit0. Core source6b21ac0a4065c6208bc2491380b423c04207e5b9, app1.0.0-rc.2/schema2, builde898e332047b131affa370f1d940f61ea157938446c36488da315e388a1217e1. Existing factory unchanged; read-only preload observed both PNGs present after copying, npm, compiler, before mapping/SDK and after SDK. First attempt's disappearance did not recur and remains unexplained; do not invent a fix/security diagnosis. Current prototype remains UNSIGNED_INTERNAL_NOT_RELEASE_READY, manifest0.0.0.2/development placeholder publisher.
+
+Private temporary candidate edgeview-msix-candidate-7cCG0N / EdgeView-1.0.0-rc.2-6b21ac0-UNSIGNED.msix,27411mapped files. Exact archive SHA25664048a2ed405e7f16c5aacb7fdd520e4f72cfb25ea9b87e2f0296ba68deb2816. MakeAppx full validation passed; no /nv, signing, install, trust changes, Store operation or public upload.
+
+node scripts/verify-msix-runtime.mjs with that independently observed hash exited0. It re-extracted the exact MSIX, checked all recorded files and build artifact, required bundled Node to be byte-identical to the already executing vendor runtime, then launched it with System32-only PATH/empty NODE_PATH and isolated empty storage. PASS: empty first launch, synthetic Kenya/Pakistan identity-separated CSV upload, scoped Kenya HTML export excluding Pakistan, missing-provider503, diagnostics omit private path/business markers, owner-pipe close durable shutdown, stable installation UUID/data across restart and no app-directory state writes. Evidence result.json retained privately under candidate runtime-acceptance-PPRxbk; raw test state not in MSIX. Native launcher NOT EXECUTED; installed activation/clean Windows/updates/rollback/real-company research NOT VERIFIED; monitoring disabled.
+
+Additional independent checks: node scripts/package-content-secrets.test.mjs exited0 (benign payload, credential/encoding canaries, scanner offline/HTTP/integrity failures, prior artifact preservation and no synthetic secret disclosure); node scripts/release-license-inventory.test.mjs exited0 (safe inventory semantics, not actual legal clearance). These reuse existing implementations, no new scanner.
+
+Next concrete payload evidence: production esbuild external graph contains12 backend packages plus developer-mode vite. Nine root production dependencies are not backend externals (@tailwindcss/vite, @vitejs/plugin-react, esbuild, lucide-react, motion, react, react-dom, recharts, tailwindcss). Current prototype carries them as Node packages in addition to compiled UI. Finish a reviewed runtime manifest/locked dependency boundary and preserve frontend bundled-component notices; do not simply delete canonical dependencies or lose license evidence.
+
+Supported browser inventory and documented Windows computer-use initialization were explicitly retried; both failed before any app/account access: failed to write kernel assets, system cannot find path, os error3. No dashboard observed or settings changed. This applies to account verification only; local engineering continues. No raw CDP/profile access/alternate-browser/security bypass.
