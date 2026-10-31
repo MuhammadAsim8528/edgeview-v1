@@ -82,7 +82,6 @@ export const SourceEvidenceModal: React.FC<SourceEvidenceModalProps> = ({
   const evidenceList: SourceEvidence[] = contact.evidence || [];
   const sourcesList = contact.sources || [];
   const traceList: any[] = (contact as any).research_trace || [];
-  const objectivesMap: Record<string, any> = (contact as any).objectives || {};
   const researchAssessment = contact.research_assessment;
   const contradictions = contact.contradictions || [];
 
@@ -150,34 +149,6 @@ export const SourceEvidenceModal: React.FC<SourceEvidenceModalProps> = ({
     }
   }
   const people = Array.from(peopleByName.values());
-
-  // Standard 12 explicit objectives fallback if not populated on old cache records
-  const getFallbackObjectives = (): Record<string, any> => {
-    const hasEmail = !!contact.email || (contact.emails_list && contact.emails_list.length > 0);
-    const hasPhone = !!contact.phone || (contact.phones_list && contact.phones_list.length > 0);
-    const hasAddress = !!contact.address || (contact.addresses && contact.addresses.length > 0);
-    const hasWebsite = !!contact.website;
-    const hasLeadership = !!contact.ceo || (contact.decision_makers && contact.decision_makers.length > 0) || (contact.contact_persons && contact.contact_persons.length > 0);
-    const hasSocials = !!contact.linkedin || (contact.socials && contact.socials.length > 0);
-    const sourceCount = sourcesList.length;
-
-    return {
-      'IDENTITY': { status: contact.company_name ? 'SATISFIED' : 'FAILED', confidence: 0.95, evidenceCount: evidenceList.length, remainingHypotheses: [] },
-      'OFFICIAL_WEBSITE': { status: hasWebsite ? 'SATISFIED' : 'UNKNOWN', confidence: hasWebsite ? 0.9 : 0.0, evidenceCount: hasWebsite ? 1 : 0, remainingHypotheses: hasWebsite ? [] : ['Search name-based domains'] },
-      'CONTACT': { status: (hasEmail && hasPhone) ? 'SATISFIED' : ((hasEmail || hasPhone) ? 'PARTIAL' : 'UNKNOWN'), confidence: (hasEmail && hasPhone) ? 0.85 : 0.4, evidenceCount: evidenceList.length, remainingHypotheses: [] },
-      'ADDRESS': { status: hasAddress ? 'SATISFIED' : 'UNKNOWN', confidence: hasAddress ? 0.85 : 0.0, evidenceCount: hasAddress ? 1 : 0, remainingHypotheses: [] },
-      'EMAIL': { status: hasEmail ? 'SATISFIED' : 'UNKNOWN', confidence: hasEmail ? 0.85 : 0.0, evidenceCount: hasEmail ? 1 : 0, remainingHypotheses: [] },
-      'PHONE': { status: hasPhone ? 'SATISFIED' : 'UNKNOWN', confidence: hasPhone ? 0.85 : 0.0, evidenceCount: hasPhone ? 1 : 0, remainingHypotheses: [] },
-      'LEADERSHIP': { status: hasLeadership ? 'SATISFIED' : 'UNKNOWN', confidence: hasLeadership ? 0.8 : 0.0, evidenceCount: hasLeadership ? 1 : 0, remainingHypotheses: [] },
-      'DECISION_MAKER_CONTACTS': { status: hasLeadership ? 'SATISFIED' : 'UNKNOWN', confidence: hasLeadership ? 0.8 : 0.0, evidenceCount: hasLeadership ? 1 : 0, remainingHypotheses: [] },
-      'SOCIAL_PROFILES': { status: hasSocials ? 'SATISFIED' : 'UNKNOWN', confidence: hasSocials ? 0.9 : 0.0, evidenceCount: hasSocials ? 1 : 0, remainingHypotheses: [] },
-      'COMPANY_DESCRIPTION': { status: contact.industry ? 'SATISFIED' : 'UNKNOWN', confidence: contact.industry ? 0.8 : 0.0, evidenceCount: contact.industry ? 1 : 0, remainingHypotheses: [] },
-      'TRADE_RELATIONSHIPS': { status: contact.type ? 'SATISFIED' : 'UNKNOWN', confidence: 0.85, evidenceCount: 1, remainingHypotheses: [] },
-      'SOURCE_VERIFICATION': { status: sourceCount >= 2 ? 'SATISFIED' : (sourceCount === 1 ? 'PARTIAL' : 'UNKNOWN'), confidence: sourceCount >= 2 ? 0.9 : 0.4, evidenceCount: evidenceList.length, remainingHypotheses: [] }
-    };
-  };
-
-  const activeObjectives = Object.keys(objectivesMap).length > 0 ? objectivesMap : getFallbackObjectives();
 
   return (
     <div id="source_evidence_modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 overflow-hidden">

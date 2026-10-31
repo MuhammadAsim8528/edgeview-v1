@@ -92,7 +92,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 - [x] UX02 / directiveJ: actual isolated rendered browser reproduces FAILED green-toast bug before fix, then verifies red FAILED, blue PARTIAL/NOT_FOUND, green COMPLETED and amber unknown feedback after correction. Production UI/store are real; endpoint outcomes synthetic. Broader real-provider workflows remain QA01/CORE01.
 - [x] UX03 / directiveK: reproduced stale directory after successful contact refresh in isolated rendered browser; corrected derived-view invalidation, obsolete-request cancellation and15s bound. Browser verifies current office replaces old,503 ends with retry UI, retry recovers, and adjacent contact-export selection remains correct. Wider customer-data accuracy remains QA01/CC01.
-- [ ] UX04 / directiveH,I: trace purported dead sent-status route and pseudo-confidence/objective code; remove only if dead/unsupported, never revive outreach or expose invented confidence.
+- [x] UX04 / directiveH,I: reference search confirmed unused store sent-status function/export and unused objective fallback computation; removed41 dead lines. Actual research_assessment display remains. Typecheck/lint and both actual rendered contact/evidence presentation regressions pass; no outreach backend added and no claim those unused scores were displayed.
 - [~] QA01/UX01 / directive7,8: each supported control needs expected action/code path/success/failure/executed evidence. Final live/manual QA stays last/deferred; isolated rendered regressions continue. Broader accessibility/offline/empty/error acceptance remains open.
 
 ### OBSERVABILITY / SUPPORT
@@ -2671,3 +2671,9 @@ Before: browser revisiting the importer directory after controlled enrichment re
 Executed successfully: typecheck; lint; full V1 suite; E2E typecheck; production build; release smoke; Playwright research-feedback, directory-refresh and contact-export. Controlled directory503 visibly exits loading and Retry succeeds. Synthetic endpoint outcomes test production rendered UI, not real enrichment truth or final live/manual QA. Forced out-of-order response and actual15s stall cases are not separately exercised.
 
 Owner-away continuation: recurring thread follow-up created to continue approved local engineering every30minutes when available. It preserves this ledger, narrow commits, external blocker honesty and the stop-before-publication boundary; no owner-dependent account/credential/signing action is delegated.
+
+## Unsupported UI remnants — 2026-10-31
+
+Only src/store/appStore.ts and SourceEvidenceModal.tsx code changed: removed the unused sent-status action and unreachable objective/fixed-confidence computation. Searches found no consumers. Typecheck and lint passed after both edits; unscoped_contact_presentation.test.tsx and contact_scope_presentation.test.tsx passed. No new test merely mirrors deletion; existing actual presentation checks cover retained behavior.
+
+Previous clean0178902 exact-source rebuild/isolated package passed149 files, launch/packaged backup/privacy checks; buildaad526c5c7e199b8af5eba43281c96ab4947f91ed9856f25fc7aff99366c819a and ZIP6872727340a52d131dd8a91d08ed9ce5609575f1623b44016ee4725aadb0a288. Output removed; still117 development files and installed Node/npm required, not customer MSIX/clean-Windows acceptance.

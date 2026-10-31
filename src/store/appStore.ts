@@ -259,17 +259,6 @@ export function useAppStore() {
     }
   };
 
-  const toggleMessageSent = async (contactId: string) => {
-    try {
-      const { ok } = await safeFetchJson(`/api/companies/${contactId}/sent`, { method: 'POST' });
-      if (ok) {
-        await fetchContacts();
-      }
-    } catch (err) {
-      console.error('Error toggling message sent:', err);
-    }
-  };
-
   // Bounded V1 enrichment. It deliberately never changes the user's active tab.
   const enrichCompanyAutomated = async (companyName: string, contactId?: string, forceFetch: boolean = false, reuseOnly: boolean = false) => {
     try {
@@ -372,7 +361,6 @@ export function useAppStore() {
     saveCurrentFileToHistory,
     deleteFile,
     seedSampleData,
-    toggleMessageSent,
     enrichCompanyAutomated,
     exportCurrentFileToCSV,
     exportModalOpen,
