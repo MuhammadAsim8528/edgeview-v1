@@ -574,6 +574,18 @@ export function projectHistoricalContactFields(run: V1Run) {
   });
 }
 
+// Serialize projection + durable save + visible publication for the same contact.
+// Different contacts retain their existing parallelism; failed saves release the queue.
+const contactPublications = new Map<string, Promise<void>>();
+export async function withContactPublication<T>(companyId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = contactPublications.get(companyId) ?? Promise.resolve();
+  const result = previous.catch(() => {}).then(operation);
+  const settled = result.then(() => {}, () => {});
+  contactPublications.set(companyId, settled);
+  try { return await result; }
+  finally { if (contactPublications.get(companyId) === settled) contactPublications.delete(companyId); }
+}
+
 export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown, durable = false) {
   const database = await getDb();
   const canonicalOverlay = normalizeV1ContactOverlay(overlay);
@@ -938,12 +950,14 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
             if (cachedRun) {
               const revalidated = contact.research_validation_status !== 'current';
               if (revalidated) {
-                const projected = projectHistoricalContactFields(cachedRun);
-                // Reuse retained evidence without calling providers. Persist
-                // before claiming completion or replacing the live projection.
-                await persistV1ContactOverlay(companyId, cachedRun.id, projected, true);
-                Object.assign(contact, projected, { research_validation_status: 'current',
-                  edgeview_v1_run_id: cachedRun.id, last_updated: new Date().toISOString() });
+                await withContactPublication(companyId, async () => {
+                  const projected = projectHistoricalContactFields(cachedRun);
+                  // Reuse retained evidence without calling providers. Persist
+                  // before claiming completion or replacing the live projection.
+                  await persistV1ContactOverlay(companyId, cachedRun.id, projected, true);
+                  Object.assign(contact, projected, { research_validation_status: 'current',
+                    edgeview_v1_run_id: cachedRun.id, last_updated: new Date().toISOString() });
+                });
               }
               companyState.status = 'completed';
               companyState.stage = revalidated ? 'Revalidated retained V1 evidence under current company-country rules; no provider calls'
@@ -1013,12 +1027,15 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
             if (contact) {
               // Match interactive/cached publication: an accepted raw run does
               // not prove that the operational contact projection is durable.
-              await persistV1ContactOverlay(companyId, run.id, projected, true);
-              Object.assign(contact, projected, {
-                research_validation_status: 'current', edgeview_v1_run_id: run.id,
-                last_updated: new Date().toISOString(),
+              await withContactPublication(companyId, async () => {
+                const latestProjection = projectHistoricalContactFields(run);
+                await persistV1ContactOverlay(companyId, run.id, latestProjection, true);
+                Object.assign(contact, latestProjection, {
+                  research_validation_status: 'current', edgeview_v1_run_id: run.id,
+                  last_updated: new Date().toISOString(),
+                });
+                pharmaDb.rebuildIndexes();
               });
-              pharmaDb.rebuildIndexes();
             }
             for (const provider of RESEARCH_PROVIDERS) job.resource_usage[provider] += companyState.resourceUsage[provider] || 0;
           } catch (error: any) {

@@ -47,7 +47,7 @@ import { getInstallationId } from './server/install_identity';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './server/company_identity';
 import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
-import { persistV1ContactOverlay, projectHistoricalContactFields, reusableContactRun, reusableEvidenceContacts, reusableEvidenceSelection, stopJobsForShutdown } from './server/job_manager';
+import { withContactPublication, persistV1ContactOverlay, projectHistoricalContactFields, reusableContactRun, reusableEvidenceContacts, reusableEvidenceSelection, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
 import { hasRecentProviderObservation, isRecentProviderOperation, projectV1ProviderUsage } from './shared/provider_telemetry';
@@ -903,16 +903,18 @@ app.post('/api/enrich/company', async (req, res) => {
       void captureMonitoringEvent('research_completed', { stage: 'run', outcome: 'success', duration_ms: monitoringDuration });
     }
     if (ctxContact) {
-      const projected = projectHistoricalContactFields(run);
-      // The directory must not expose a projection while its durable save is
-      // pending or after that save fails. Immutable evidence already survives.
-      await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);
-      Object.assign(ctxContact, projected, {
-        edgeview_v1_run_id: run.id,
-        research_validation_status: 'current',
-        last_updated: new Date().toISOString(),
+      await withContactPublication(ctxContact.id, async () => {
+        const projected = projectHistoricalContactFields(run);
+        // The directory must not expose a projection while its durable save is
+        // pending or after that save fails. Immutable evidence already survives.
+        await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);
+        Object.assign(ctxContact, projected, {
+          edgeview_v1_run_id: run.id,
+          research_validation_status: 'current',
+          last_updated: new Date().toISOString(),
+        });
+        db.rebuildIndexes();
       });
-      db.rebuildIndexes();
     }
     // A provider-level FAILED run is still a successfully captured V1 record.
     // Return it to the UI so the user can inspect every failure instead of
@@ -1023,10 +1025,13 @@ app.post('/api/enrich/batch', async (req, res) => {
           const cachedRun = forceFetch ? null : reusableContactRun(contact);
           if (reuseOnly && !cachedRun) throw new Error('RETAINED_EVIDENCE_UNAVAILABLE');
           const run = cachedRun || await runV1Enrichment(String(contact.company_name || '').trim(), country);
-          const projected = projectHistoricalContactFields(run);
-          await persistV1ContactOverlay(contact.id, run.id, projected, true);
-          Object.assign(contact, projected, { edgeview_v1_run_id: run.id, research_validation_status: 'current', last_updated: new Date().toISOString() });
-          db.rebuildIndexes();
+          const projected = await withContactPublication(contact.id, async () => {
+            const current = projectHistoricalContactFields(run);
+            await persistV1ContactOverlay(contact.id, run.id, current, true);
+            Object.assign(contact, current, { edgeview_v1_run_id: run.id, research_validation_status: 'current', last_updated: new Date().toISOString() });
+            db.rebuildIndexes();
+            return current;
+          });
 
           processedCount++;
 

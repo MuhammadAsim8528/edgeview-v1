@@ -83,6 +83,12 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 ### P1 HIGH-RISK
 
 - [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
+  - [x] JOB01.PUBLICATION: late same-contact publication loss reproduced and fixed across interactive/background batch; full V1/typecheck/lint/build/release, focused HTTP/restart and no-serialization mutant passed. Final rendered/real-provider acceptance is separate.
+  - [x] JOB01.QUEUE_FAILURE: isolated queue test confirms same-contact serialization, different-contact parallelism, exact persistence-code rejection and next-operation recovery; this is queue behavior, not entire job recovery acceptance.
+  - [ ] JOB01.CANCEL: actual stop/cancel while active and queued, honest UI and no subsequent work.
+  - [ ] JOB01.RETRY: supported retry/resume after provider and storage failures, exact counters/outcomes.
+  - [ ] JOB01.CRASH: forced interruption/restart and graceful drain across the supported job path.
+  - [ ] JOB01.CONTROLS: final rendered progress/cancel/retry controls and representative real-provider acceptance.
 - [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
 - [~] EXP01 / directiveM: contact-download authority fixed through current stored contacts; wider file/derived endpoints still require their own acceptance.
   - [x] EXP01.CONTACT_FACTS: actual HTTP regression reproduced forged browser company/email in download; contact requests now resolve scoped IDs to current stored records and ignore client facts, including selected object values.
@@ -145,6 +151,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] High supported-path research publication race: delayed earlier durable save could erase a newer completed projection. Reproduced with actual isolated HTTP/storage/immutable captures; per-contact serialized projection/save/publication correction passed full V1/typecheck/lint/build/release and focused HTTP/restart/mutation checks; exact-source developer packaging follows. Raw evidence remains preserved.
 
 - [x] Medium supported-path saved-report export loss: actual custom table CSV became trade N/A fields; long text PDF lost its ending. Stored report-ID authority/custom content and flowing saved-report PDFs now pass real browser/API artifact assertions in all5formats, including ZIP PDF contents. Session durability/final visual acceptance remain unverified.
 
@@ -2827,3 +2835,16 @@ Verification checkpoint: npm run check (typecheck, lint, full V1), npm run typec
 Exact-source package checkpoint: committed/pushed 0848752a823d07b26515541c1c8b283e35c1e628 rebuilt; isolated package checker PASS150manifest files, unchangedLaunchCheck/packagedBackupContract/privacyFileCheck PASS. Build662d73cd0262cbe7453e02f82931cdb7cfec895bba52516b1594773193dded55; disposable ZIP347a79b2c997bd47490f508e7c2f4d6ed318d9959f4d54035bdd976c1d3c9ddf, removed by owned checker. Still118 development files and installed Node/npm required; customerRuntimeReady=false. This is not self-contained/MSIX/clean-Windows/update acceptance.
 
 Next JOB01 unit: directly reproduce interactive versus batch same-company completion ordering and cancellation/retry boundaries with synthetic isolated providers/storage before changing behavior. Read-only trace found activeJobs guards job IDs, while interactive and batch independently await enrichment then durable overlay publication; absence of a matching grep is not proof of a race. Require controlled out-of-order completion evidence before a fix; preserve immutable history and stronger prior results. No new issue is marked confirmed yet.
+
+
+## 2026-10-31 — JOB01 overlapping contact publication
+
+Observed RED: synthetic first interactive request captured contact1 then paused at durable publication; a second request captured/published contact2; releasing the first erased contact2 from the directory. This was real Express/projector/sql.js publication with test-only provider/barrier seams and outbound networking disabled, not a helper-only model. Original test failed the explicit newer-evidence preservation assertion.
+
+Correction: one per-contact publication queue in existing job_manager protects historical projection, durable overlay save and visible Object.assign/index rebuild together. Interactive, SSE batch, background fresh batch and retained-evidence batch publication use it. Different contacts remain parallel; immutable retrieval/captures stay unchanged. Queued projection is recomputed after preceding publication, so a stale precomputed overlay cannot win later.
+
+Focused GREEN: interactive/interactive and interactive/background-batch overlap both retain contact1/contact2 through directory API and actual process restart. Each scenario confirms the second immutable capture occurs while the first save is held. A test-only unserialized wrapper mutant fails the exact lost-newer-evidence assertion. Existing pending/failed-save HTTP durability contract also passed. Full checks/build/release and exact-source package acceptance pending. Cancellation/retry/shutdown/different-contact parallelism/failure-queue recovery and rendered controls are separate JOB01 sub-items, not claimed complete here.
+
+Additional focused queue contract PASS: same-contact wait ordering, other-contact progress while held, exact PERSISTENCE_WRITE_FAILED propagation, queued success after failure and subsequent reuse. Wired both new regressions into test:v1. No cancellation/crash/real-provider acceptance inferred.
+
+Executed final local checkpoint: npm run check exited0 (including the new overlap HTTP/restart test); final npm run typecheck/lint and queue contract separately exited0 after adding the queue contract to test:v1; npm run build and npm run test:release exited0. Unserialized test-only mutant exited1 on lost-newer-evidence assertion, not a startup error. No source-level claim of full cancellation/retry/crash closure.
