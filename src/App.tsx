@@ -14,7 +14,6 @@ import { ToastContainer } from './components/Toast';
 import { GlobalExportModal } from './components/GlobalExportModal';
 import { RefreshCw, Download, FileText, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatFullCurrency } from './utils/formatters';
-import { fetchAllFileRows } from './utils/safeFetch';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ResearchWorkspace } from './components/ResearchWorkspace';
 
@@ -124,26 +123,7 @@ export default function App() {
                       </div>
 
                       <button
-                        onClick={async () => {
-                          if (!store.selectedFile) return;
-                          let exportRecords = store.selectedFile.rows || [];
-                          if (exportRecords.length === 0) {
-                            try {
-                              const { ok, data } = await fetchAllFileRows(store.selectedFile.id);
-                              if (ok && data) {
-                                exportRecords = data.rows;
-                              }
-                            } catch (err) {
-                              console.warn('Failed to load full dataset for quick export:', err);
-                            }
-                          }
-                          store.openGlobalExport({
-                            dataset: 'files',
-                            title: store.selectedFile.name,
-                            records: exportRecords,
-                            filenamePrefix: `EdgeView_${store.selectedFile.name.replace(/\.[^/.]+$/, '')}`,
-                          });
-                        }}
+                        onClick={() => { void store.exportCurrentFileToCSV(); }}
                         className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-[#10b981] hover:bg-[#0ea5e9] text-white font-medium text-xs shadow-xs transition-colors cursor-pointer"
                       >
                         <Download className="w-4 h-4 text-white" />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ParsedFile, CompanyContact, EdgeViewReport, ActiveTab } from '../types';
 import { ToastMessage } from '../components/Toast';
-import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
+import { safeFetchJson } from '../utils/safeFetch';
 import { GlobalExportPayload } from '../components/GlobalExportModal';
 
 export function useAppStore() {
@@ -320,21 +320,12 @@ export function useAppStore() {
 
   const exportCurrentFileToCSV = async () => {
     if (!selectedFile) return;
-    let exportRecords = selectedFile.rows || [];
-    if (exportRecords.length === 0) {
-      try {
-        const { ok, data } = await fetchAllFileRows(selectedFile.id);
-        if (ok && data) {
-          exportRecords = data.rows;
-        }
-      } catch (err) {
-        console.warn('Failed to load full dataset for CSV export:', err);
-      }
-    }
     openGlobalExport({
       dataset: 'files',
       title: selectedFile.name,
-      records: exportRecords,
+      records: [],
+      sourceFileId: selectedFile.id,
+      recordCount: selectedFile.summary?.total_rows ?? selectedFile.rows?.length ?? 0,
       filenamePrefix: `EdgeView_${selectedFile.name.replace(/\.[^/.]+$/, '')}`,
     });
   };
