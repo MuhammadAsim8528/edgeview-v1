@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Reproduce and verify JOB01 interactive/batch same-company ordering and cancellation boundaries in isolation; saved Reports export correction passed its scoped checks and exact-source developer-package verification. All prior readiness gates remain open as recorded. All prior readiness gates remain in this ledger.
+Current active task: Continue JOB01 multi-company cancellation/queued-work, retry and interrupted-job acceptance after verified publication ordering, drain ownership and bounded Resume feedback. Final real-provider/rendered and all other readiness gates remain open as recorded.
 
 ## Full owner acceptance checklist
 
@@ -2874,3 +2874,9 @@ Actual isolated browser RED: existing Resume from Checkpoint button received syn
 Stop/drain exact-source package863a5e42e4598a57576608c24c087d9a67093ff3 passed:150manifest files, launch/backup/privacy PASS; buildba77b8677ec157c3cc0ebd687489409c41ab3340712435087aba778893944053; disposable ZIP69ae1c0c48480f8412c82a51582e586291065978e40c9001656b1381c7eeba81 removed. Still118 development files/Node+npm/customerRuntimeReady=false; no self-contained, installed-MSIX or clean-Windows claim. Subsequent modal changes are not covered by that package.
 
 Resume feedback final checks: typecheck, lint, E2E typecheck, production build, actual browser test (1 passed24.4s; test18.4s includes real15s held-request deadline), full test:v1 and release smoke all exited0. Known bundle warning retained. Synthetic recognized409 message and generic503 errors remain safe; no raw server text rendered. Existing Playwright testDir automatically includes the new regression; no new framework or production endpoint. Exact committed package verification follows.
+
+## 2026-10-31 — exact Resume correction package checkpoint
+
+Committed/pushed5f6960287ac391dd4a65fe7a9c332656f1011ca4 rebuilt; isolated package runner terminal exit0.150manifest files, unchangedLaunchCheck/packagedBackupContract/privacyFileCheck PASS. Buildf6f9dd3ec89568aa6819f4664e455f84353965dbde460b77db5c4dea3946d7ef; disposable ZIPd1752fd43a82feeb0920f1484f6497b9ab1f82e0bcc1444b503df2949de73358 removed.118 development files and installed Node/npm requirement remain; customerRuntimeReady=false. Not self-contained installer/MSIX/clean-Windows/update acceptance.
+
+Current JOB01 evidence closes the reproduced stale-publication loss, stopped-loop duplicate ownership and silent/unbounded Resume sub-path only. Next acceptance must show multi-company stop preserves queued work, then resume/retry/counters and interruption recovery without duplicate provider work or weaker projection replacement. Modal-close/late response, other job-action error paths and full rendered real-provider workflow remain unverified. No original tree/live3901/customer data/account/publication changes. NOT READY.
