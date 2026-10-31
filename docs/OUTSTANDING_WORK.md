@@ -88,7 +88,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [~] JOB01.CANCEL: actual stop while waiting on publication rejects early restart409 JOB_DRAINING; drained resume succeeds with no duplicate count. Eight-company fixture now proves5 in-flight finish/3 remain queued across restart and explicit resume. Other cancellation stages/rendered Pause failure controls remain open.
   - [~] JOB01.RETRY: eight-company stopped/interrupted resume exact counters and no completed-company replay verified; actual provider/storage-failure retry and force-refresh acceptance remain open.
   - [~] JOB01.CRASH: actual on-disk5-company checkpoint survives owned-child SIGKILL; restart PAUSED5/3pending, explicit resume completes8 without completed-company replay. Actual registered shutdown handler also drains/flushes exit0 in test-only signal-delivery fixture. Windows launcher/OS signal delivery and real-provider acceptance remain unverified.
-  - [~] JOB01.CONTROLS: rendered Resume409/503/private-text omission/actual15s deadline/success retry verified; wider progress, cancellation, modal-close/race and real-provider acceptance remain open.
+  - [~] JOB01.CONTROLS: rendered Resume409/503/private-text omission/actual15s deadline/success retry and Pause503/15s timeout/unconfirmed checkpoint/continued polling/STOPPED recovery verified; wider progress, cancellation stages, modal-close/context races and real-provider acceptance remain open.
 - [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
 - [~] EXP01 / directiveM: contact-download authority fixed through current stored contacts; wider file/derived endpoints still require their own acceptance.
   - [x] EXP01.CONTACT_FACTS: actual HTTP regression reproduced forged browser company/email in download; contact requests now resolve scoped IDs to current stored records and ignore client facts, including selected object values.
@@ -151,6 +151,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] Medium supported-path Pause feedback: actual rendered503 stop refusal produced no alert. Bounded mutual-exclusive Pause/Resume actions and safe refusal/timeout/checkpoint uncertainty feedback passed rendered regression and full local checks; stop acknowledgment alone must not halt checkpoint recovery.
 
 - [x] Medium supported-path Resume feedback: rendered modal silently ignored JOB_DRAINING and other HTTP refusal. Browser RED reproduced missing alert; bounded/disabled action and safe draining/generic/timeout messages passed actual rendered refusal/held-request/retry checks; this is synthetic isolated UI acceptance, not final live/provider acceptance.
 
@@ -2893,3 +2895,19 @@ Initial standalone runner exit0. Test-only mutation changes the real resume filt
 Scope limits: deterministic fake provider behavior, single process/DB authority, no actual provider retry/auth/quota/timeouts, no rendered cancel/restart or target-device/clean-Windows acceptance. Graceful server shutdown, partial provider failures, force-retry, other error/control paths remain JOB01. No live3901/original project/customer changes. No new High/Medium defect was found by this lifecycle test.
 
 Extended lifecycle acceptance: added a third scenario invoking the actual registered SIGTERM shutdown handler from a test-only preload marker. Windows child.kill(SIGTERM) is forcible and is NOT used as evidence of graceful OS delivery. Handler stops new work, drains the5 held operations, flushes and exits0; restart retains STOPPED5/3pending, explicit resume completes8 with8 fixture calls. No new production endpoint/hook. All3 scenarios passed standalone; full check/build/release passed the same unchanged product implementation before the additional graceful scenario. Final replay-completed mutant still exits1 on the intended count inflation assertion. This closes stated synthetic application-handler/queue/checkpoint acceptance, not installed Windows/real provider/final UI acceptance. Exact-source package follows.
+
+
+## 2026-10-31 — exact lifecycle regression package checkpoint
+
+4e307a28f4679efd4a21f6f679440d79de1c8022 rebuilt and isolated package runner exited0:150manifest files, launch/packaged backup/privacy PASS, build4ad5078a99904fb2a9261c02346b984a9e8d008059f051af3f79d8180fb20027; disposable ZIPdbe3de5d4f2212033da20a703400c6ec62b7f30549b6f652c9f754b3671a6565 removed.118 development files and installed Node/npm remain, customerRuntimeReady=false. Not installer/native launch/clean Windows/update acceptance.
+
+Next reached JOB01 control: Pause currently ignores non-OK stop responses; successful stop stops local polling before its checkpoint refresh is confirmed. Trace this with rendered synthetic refusal/timeout/checkpoint failure before changing code. Current browser probe in progress; no new confirmed issue or acceptance tick yet.
+
+
+## 2026-10-31 — JOB01 Pause refusal / checkpoint uncertainty
+
+Actual browser RED: Pause / Halt Traversal received synthetic503 and displayed no error (job-pause-feedback-red.log, missing accessible alert assertion). Current correction shares existing control busy/error/abort ownership between Pause and Resume;15s total stop+checkpoint deadline, abort-on-close, no private server response text. Stop refusal remains distinct from acknowledged stop whose checkpoint is unavailable.
+
+If stop is acknowledged but checkpoint read fails, keep polling and state explicitly that checkpoint is unconfirmed. If returned checkpoint is still active, display finishing-work message and continue polling. Only observed terminal checkpoint stops polling; subsequent terminal progress clears the uncertainty message. New browser test exercises503/private text omission, held stop/real15s abort, stop200+checkpoint503, continued progress requests and laterSTOPPED recovery. Focused browser/current checks pending; this is synthetic isolated feedback behavior, not final live/manual QA.
+
+Pause final checks: typecheck, lint, E2E typecheck, production build, scoped Pause+Resume browser tests (2passed48.1s;23.6s Pause and17.2s Resume), full test:v1 including three-scenario lifecycle runner, release smoke all exited0. Private stop/checkpoint strings absent; actual15s timeout and post-ack polling recovery observed. A temporary disabled-navigation assertion was discarded because it imposed an unevidenced UI policy; no navigation-disable requirement or verification is claimed. Exact committed package check follows. No unsupported broad JOB01 completion claim.

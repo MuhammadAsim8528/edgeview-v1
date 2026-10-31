@@ -28,9 +28,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   const [reportMode, setReportMode] = useState<'importer' | 'exporter'>('importer');
   
   // Job Tracking
-  const [resumeError, setResumeError] = useState<string | null>(null);
-  const [resumeBusy, setResumeBusy] = useState(false);
-  const resumeRequestRef = useRef<AbortController | null>(null);
+  const [controlError, setControlError] = useState<string | null>(null);
+  const [controlAction, setControlAction] = useState<'pause' | 'resume' | null>(null);
+  const controlRequestRef = useRef<AbortController | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobData, setJobData] = useState<ResearchJob | null>(null);
   const [historicalJobs, setHistoricalJobs] = useState<any[]>([]);
@@ -114,8 +114,8 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   useEffect(() => {
     const controller = new AbortController();
     if (isOpen) {
-      setResumeError(null);
-      setResumeBusy(false);
+      setControlError(null);
+      setControlAction(null);
       fetchGovernorInfo(controller.signal);
       fetchHistoricalJobs(controller.signal);
       void reattachActiveJob(controller.signal).then((restored) => {
@@ -124,7 +124,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     } else {
       stopPolling();
     }
-    return () => { controller.abort(); resumeRequestRef.current?.abort(); stopPolling(); };
+    return () => { controller.abort(); controlRequestRef.current?.abort(); stopPolling(); };
   }, [isOpen]);
 
   // Toggle selection
@@ -254,6 +254,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
             // Check if job finished or hit limit
             const status = progress.status;
             if (['COMPLETED', 'FAILED', 'STOPPED', 'RESOURCE_LIMITED'].includes(status)) {
+              setControlError(null);
               stopPolling();
               // Trigger a background refetch on the parent to load newly enriched contacts on list
               if (refreshData) refreshData();
@@ -310,35 +311,58 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   };
 
   const handlePauseJob = async () => {
-    if (!activeJobId) return;
+    if (!activeJobId || controlAction !== null) return;
+    const controller = new AbortController();
+    controlRequestRef.current = controller;
+    setControlAction('pause');
+    setControlError(null);
+    let acknowledged = false;
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
     try {
-      const res = await fetch(`/api/enrich/job/${activeJobId}/stop`, {
-        method: 'POST',
+      const res = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}/stop`, {
+        method: 'POST', signal: controller.signal,
       });
-      if (res.ok) {
-        // Stop polling locally, retrieve final status
+      const result = await res.json();
+      if (!res.ok || result.success !== true) throw new Error('Stop refused');
+      acknowledged = true;
+      const checkpoint = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}`, { signal: controller.signal });
+      if (!checkpoint.ok) throw new Error('Checkpoint unavailable');
+      const data = await checkpoint.json();
+      const job = data.success ? normalizeBatchJobSnapshot(data.job) : null;
+      if (!job) throw new Error('Checkpoint invalid');
+      if (controller.signal.aborted || !openRef.current) return;
+      setJobData(job);
+      if (['STOPPED', 'COMPLETED', 'FAILED', 'RESOURCE_LIMITED'].includes(job.status)) {
         stopPolling();
-        // Refresh one last time to capture exact checkpoint
-        const resJob = await fetch(`/api/enrich/job/${activeJobId}`);
-        if (resJob.ok) {
-          const data = await resJob.json();
-          if (data.success) {
-            setJobData(previous => normalizeBatchJobSnapshot(data.job) || previous);
-          }
-        }
-        if (refreshData) refreshData();
+        refreshData?.();
+      } else {
+        setControlError('Stop requested. Finishing current work; EdgeView is checking the checkpoint.');
+        startPolling(activeJobId);
       }
-    } catch (err) {
-      console.error('Failed to stop/pause job', err);
+    } catch {
+      if (openRef.current && (!controller.signal.aborted || timedOut)) {
+        setControlError(acknowledged
+          ? 'Stop was requested, but its checkpoint could not be confirmed. EdgeView will keep checking.'
+          : timedOut ? 'Pausing took too long. The stop result is unknown; EdgeView will keep checking.'
+          : 'Could not pause research. Check that EdgeView is running and try again.');
+        if (acknowledged) startPolling(activeJobId);
+      }
+    } finally {
+      clearTimeout(timeout);
+      if (controlRequestRef.current === controller) {
+        controlRequestRef.current = null;
+        if (openRef.current) setControlAction(null);
+      }
     }
   };
 
   const handleResumeJob = async () => {
-    if (!activeJobId || resumeBusy) return;
+    if (!activeJobId || controlAction !== null) return;
     const controller = new AbortController();
-    resumeRequestRef.current = controller;
-    setResumeBusy(true);
-    setResumeError(null);
+    controlRequestRef.current = controller;
+    setControlAction('resume');
+    setControlError(null);
     let timedOut = false;
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
     try {
@@ -350,21 +374,21 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       const result = await res.json();
       if (!openRef.current || controller.signal.aborted) return;
       if (!res.ok || result.success !== true) {
-        setResumeError(result.code === 'JOB_DRAINING'
+        setControlError(result.code === 'JOB_DRAINING'
           ? 'Previous research work is finishing. Try resuming shortly.'
           : 'Could not resume research. Check that EdgeView is running and try again.');
         return;
       }
       startPolling(activeJobId);
     } catch {
-      if (openRef.current && (!controller.signal.aborted || timedOut)) setResumeError(timedOut
+      if (openRef.current && (!controller.signal.aborted || timedOut)) setControlError(timedOut
         ? 'Resuming took too long. Check that EdgeView is running and try again.'
         : 'Could not resume research. Check that EdgeView is running and try again.');
     } finally {
       clearTimeout(timeout);
-      if (resumeRequestRef.current === controller) {
-        resumeRequestRef.current = null;
-        if (openRef.current) setResumeBusy(false);
+      if (controlRequestRef.current === controller) {
+        controlRequestRef.current = null;
+        if (openRef.current) setControlAction(null);
       }
     }
   };
@@ -516,26 +540,27 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                   </div>
                 </div>
 
-                {resumeError && <p role="alert" className="text-xs text-amber-300">{resumeError}</p>}
+                {controlError && <p role="alert" className="text-xs text-amber-300">{controlError}</p>}
                 {/* Queue Actions (Pause/Resume/Checkpoint reset) */}
                 <div className="flex items-center space-x-3 pt-1">
                   {['PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING'].includes(jobData.status) ? (
                     <button
                       onClick={handlePauseJob}
+                      disabled={controlAction !== null}
                       className="flex-1 py-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] rounded-lg text-xs font-semibold text-white flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
                     >
                       <Pause className="w-4 h-4" />
-                      <span>Pause / Halt Traversal</span>
+                      <span>{controlAction === 'pause' ? 'Pausing…' : 'Pause / Halt Traversal'}</span>
                     </button>
                   ) : (
                     jobData.status !== 'COMPLETED' && (
                       <button
                         onClick={handleResumeJob}
-                        disabled={resumeBusy}
+                        disabled={controlAction !== null}
                         className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-xs font-semibold text-white flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
                       >
                         <Play className="w-4 h-4" />
-                        <span>{resumeBusy ? 'Resuming…' : 'Resume from Checkpoint'}</span>
+                        <span>{controlAction === 'resume' ? 'Resuming…' : 'Resume from Checkpoint'}</span>
                       </button>
                     )
                   )}
@@ -545,6 +570,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                       stopPolling();
                       setActiveJobId(null);
                       setJobData(null);
+                      setControlError(null);
                     }}
                     className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-xs font-medium text-white transition-colors cursor-pointer"
                   >
