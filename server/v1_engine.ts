@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { getAppSettings } from './settings';
+import { getAppSettings, type AppSettings } from './settings';
+import { V1_CONTACT_OVERLAY_VERSION } from '../shared/v1_contact_contract';
+import { isDeepStrictEqual } from 'node:util';
 import { getRuntimeDataRoot } from './db_paths';
 import { isSafeExternalUrl, safeFetchOutboundText, safeFetchProviderRequest } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
@@ -60,6 +62,46 @@ export interface V1Result {
   error?: string;
 }
 
+export interface V1ResearchContext {
+  format: 1;
+  pipeline_version: 1;
+  result_schema: number;
+  objective: 'company-contact-research';
+  profile: 'interactive' | 'bulk';
+  provider_fingerprint: string;
+}
+
+/** Request-context metadata, never credentials or a second evidence store.
+ * Actual attempted providers remain in immutable raw records/timeline. */
+export function createV1ResearchContext(profile: 'interactive' | 'bulk', settings: AppSettings = getAppSettings()): V1ResearchContext {
+  if (!['interactive', 'bulk'].includes(profile)) throw new Error('Invalid V1 research profile');
+  const selection = {
+    serper: { enabled: settings.serper_enabled === true, configured: Boolean(settings.serper_api_key?.trim()) },
+    hunter: { enabled: settings.hunter_enabled === true, configured: Boolean(settings.hunter_api_key?.trim()) },
+    nvidia: { enabled: settings.nvidia_enabled === true, configured: Boolean(settings.nvidia_api_key?.trim()), model: settings.nvidia_model, base: settings.nvidia_base_url },
+    groq: { enabled: settings.groq_enabled === true, configured: Boolean(settings.groq_api_key?.trim()), model: settings.groq_model },
+    primary: settings.primary_ai_provider,
+  };
+  return { format: 1, pipeline_version: 1, result_schema: V1_CONTACT_OVERLAY_VERSION, objective: 'company-contact-research', profile,
+    provider_fingerprint: crypto.createHash('sha256').update(JSON.stringify(selection)).digest('hex') };
+}
+
+export function v1ResearchCompatibility(run: { research_context?: V1ResearchContext }, expected: V1ResearchContext): 'unverified' | 'matches_current_context' | 'different_context' {
+  if (!run.research_context) return 'unverified';
+  return isDeepStrictEqual(run.research_context, expected) ? 'matches_current_context' : 'different_context';
+}
+
+/** Describes historical evidence; context equality is never live verification. */
+export function describeV1EvidenceReuse(run: { completed_at?: string; research_context?: V1ResearchContext }, expected: V1ResearchContext) {
+  const time = run.completed_at;
+  let captured_at: string | null = null;
+  if (typeof time === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(time) && Number.isFinite(Date.parse(time))) {
+    const normalized = new Date(time).toISOString();
+    if (normalized.slice(0, 19) === time.slice(0, 19)) captured_at = normalized;
+  }
+  return { captured_at, compatibility: v1ResearchCompatibility(run, expected), freshness: 'not_live_verified' as const };
+}
+
 export interface V1Run {
   id: string;
   company_name: string;
@@ -67,6 +109,7 @@ export interface V1Run {
   status: 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
   started_at: string;
   completed_at?: string;
+  research_context?: V1ResearchContext;
   queries: string[];
   results: V1Result[];
   raw_records: V1RawRecord[];
@@ -95,6 +138,7 @@ export interface V1RunSummary {
   result_count: number;
   raw_record_count: number;
   failure_count: number;
+  research_context?: V1ResearchContext;
 }
 
 const MAX_QUERIES = 4;
@@ -112,6 +156,7 @@ let summaryCache: V1RunSummary[] | null = null;
 type V1RunIdentityHeader = {
   id: string; company_name: string; country: string; status: V1Run['status'];
   started_at: string; completed_at?: string; query_count: number;
+  research_context?: V1ResearchContext;
 };
 let identityHeaderCache: V1RunIdentityHeader[] | null = null;
 const hardUnavailableProviders = new Map<string, string>();
@@ -216,7 +261,7 @@ export function resetV1ProviderFailureState(provider: string): void {
 }
 function runPath(runId: string) { return path.join(dataDir, `${runId}.json`); }
 function summarize(run: V1Run): V1RunSummary {
-  return { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length, result_count: run.results.length, raw_record_count: run.raw_records.length, failure_count: run.timeline.filter(event => event.status === 'failed').length };
+  return { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length, result_count: run.results.length, raw_record_count: run.raw_records.length, failure_count: run.timeline.filter(event => event.status === 'failed').length, ...(run.research_context ? { research_context: run.research_context } : {}) };
 }
 export function persistV1Run(run: V1Run) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -250,7 +295,7 @@ export function persistV1Run(run: V1Run) {
     recordProviderMetrics(run);
     if (summaryCache) summaryCache.unshift(summarize(run));
     if (identityHeaderCache) {
-      const header = { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length };
+      const header = { id: run.id, company_name: run.company_name, country: run.country, status: run.status, started_at: run.started_at, completed_at: run.completed_at, query_count: run.queries.length, ...(run.research_context ? { research_context: run.research_context } : {}) };
       identityHeaderCache.unshift(header);
       fs.appendFileSync(identityIndexPath, `${JSON.stringify(header)}\n`, 'utf8');
     }
@@ -304,10 +349,16 @@ export function listV1RunIdentityHeaders() {
       const queriesMatch = header.match(/"queries"\s*:\s*(\[[\s\S]*?\])\s*,\s*"results"/);
       let queryCount = 0;
       try { queryCount = queriesMatch ? JSON.parse(queriesMatch[1]).length : 0; } catch { /* header remains usable */ }
+      let researchContext: V1ResearchContext | undefined;
+      try {
+        const match = header.match(/"research_context"\s*:\s*(\{[^{}]*\})/);
+        if (match) researchContext = JSON.parse(match[1]);
+      } catch { /* Legacy/damaged metadata never becomes verified context. */ }
       if (idValue && company && countryValue) identityHeaderCache.push({
         id: idValue, company_name: company, country: countryValue,
         status: ['RUNNING', 'COMPLETED', 'PARTIAL', 'FAILED'].includes(statusValue) ? statusValue : 'PARTIAL',
         started_at: startedAt, ...(completedAt ? { completed_at: completedAt } : {}), query_count: queryCount,
+        ...(researchContext ? { research_context: researchContext } : {}),
       });
     } catch { /* one damaged header cannot hide other runs */ }
     finally { if (handle !== undefined) fs.closeSync(handle); }
@@ -880,11 +931,12 @@ export function classifyRunStatus(resultsCount: number, hasRecordedFailures: boo
 
 async function execute(companyName: string, country: string, profile: 'interactive' | 'bulk'): Promise<V1Run> {
   const bulk = profile === 'bulk';
-  const run: V1Run = { id: id('run'), company_name: companyName.trim(), country: country.trim(), status: 'RUNNING', started_at: now(), queries: [], results: [], raw_records: [], timeline: [], limits: bulk
+  const run: V1Run = { id: id('run'), company_name: companyName.trim(), country: country.trim(), status: 'RUNNING', started_at: now(), research_context: undefined, queries: [], results: [], raw_records: [], timeline: [], limits: bulk
     ? { max_queries: 4, max_results_per_query: 8, max_scrapes: 8, timeout_ms: 180_000 }
     : { max_queries: MAX_QUERIES, max_results_per_query: MAX_RESULTS, max_scrapes: MAX_SCRAPES, timeout_ms: RUN_TIMEOUT_MS } };
   run.timeline.push({ at: now(), stage: 'run', status: 'pending', message: `Started bounded V1 enrichment for ${run.company_name} in ${run.country}` });
   try {
+    run.research_context = createV1ResearchContext(profile);
     run.queries = await generateQueries(run, profile);
     // V1's supported retrieval path is intentionally narrow: Serper discovers
     // candidates, Hunter enriches the resolved company domain, and bounded

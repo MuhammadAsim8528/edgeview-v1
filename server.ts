@@ -45,7 +45,7 @@ import { getBackendLockPath, getProjectRoot, getRuntimeDataRoot, getSqlitePath, 
 import { getInstallationId } from './server/install_identity';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './server/company_identity';
-import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1RunPage, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
+import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1RunPage, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState, createV1ResearchContext, describeV1EvidenceReuse } from './server/v1_engine';
 import { withContactPublication, persistV1ContactOverlay, projectHistoricalContactFields, reusableContactRun, reusableEvidenceContacts, reusableEvidenceSelection, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
@@ -924,6 +924,8 @@ app.post('/api/enrich/company', async (req, res) => {
     res.status(200).json({
       success: true,
       reused_evidence: Boolean(cachedRun),
+      evidence_origin: cachedRun ? 'saved_evidence' : 'new_operation',
+      reuse_assessment: cachedRun ? describeV1EvidenceReuse(cachedRun, createV1ResearchContext('interactive')) : null,
       run: {
         id: run.id,
         status: run.status,

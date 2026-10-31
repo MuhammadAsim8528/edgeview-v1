@@ -63,6 +63,7 @@ async function verifyRenderedControls() {
     const replay = page.waitForResponse(response => response.url().endsWith('/api/enrich/company') && response.request().method() === 'POST');
     await row.getByRole('button', { name: 'Fetch Details', exact: true }).click();
     const response = await replay; assert.equal(response.status(), 200); assert.equal((await response.json()).reused_evidence, true);
+    await expect(page.getByText(/saved evidence rechecked; capture date unknown; not checked live/)).toBeVisible();
     await expect(row.getByText('office@scopeanchor.test', { exact: true })).toBeVisible();
     await page.reload(); await expect(row.getByText('office@scopeanchor.test', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Recheck Saved Evidence', exact: true }).click();
@@ -93,10 +94,10 @@ try {
   // Explicit synthetic retained evidence fixture; no simulated real-company or
   // provider success. The actual HTTP route, SQL and immutable store remain real.
   const seed = path.join(root, 'seed.cjs');
-  buildSync({ stdin: { contents: `import {persistV1Run} from ${JSON.stringify(path.join(repo, 'server/v1_engine.ts'))};
+  buildSync({ stdin: { contents: `import {persistV1Run,createV1ResearchContext} from ${JSON.stringify(path.join(repo, 'server/v1_engine.ts'))};
 import {persistV1ContactOverlay} from ${JSON.stringify(path.join(repo, 'server/job_manager.ts'))};
 import {getDb} from ${JSON.stringify(path.join(repo, 'server/sqlite.ts'))};
-async function main(){const run={id:'run-synthetic-cached-local',company_name:'Scopeanchor Medical',country:'Kenya',status:'COMPLETED',started_at:'2026-01-01T00:00:00Z',queries:[],raw_records:[],timeline:[],limits:{max_queries:4,max_results_per_query:8,max_scrapes:8,timeout_ms:10000},identity_resolution:{official_domain:'scopeanchor.test',confidence:'high',candidates:[]},results:[{id:'local-page',run_id:'run-synthetic-cached-local',raw_record_id:'synthetic',provider:'direct-http',status:'success',rank:1,url:'https://scopeanchor.test/contact',title:'',snippet:'',text:'Kenya office office@scopeanchor.test',links:[],metadata:{}}]};persistV1Run(run as any);for(const id of ${JSON.stringify([local.id, foreign.id])})await persistV1ContactOverlay(id,run.id,{schema_version:28,entity_key:'obsolete-fixture',email:'old@scopeanchor.test',emails_list:['old@scopeanchor.test']} as any,true);const second={...run,id:'run-synthetic-cached-batch',company_name:'Batchanchor Medical',identity_resolution:{official_domain:'batchanchor.test',confidence:'high',candidates:[]},results:[{...run.results[0],id:'batch-page',run_id:'run-synthetic-cached-batch',url:'https://batchanchor.test/contact',text:'Kenya office batch@batchanchor.test'}]};persistV1Run(second as any);await persistV1ContactOverlay(${JSON.stringify(batch.id)},second.id,{schema_version:28,entity_key:'obsolete-fixture',emails_list:[]} as any,true);await(await getDb()).flush();}main().catch(()=>{process.exitCode=1;});`,
+async function main(){const run={id:'run-synthetic-cached-local',company_name:'Scopeanchor Medical',country:'Kenya',status:'COMPLETED',started_at:'2026-01-01T00:00:00Z',queries:[],raw_records:[],timeline:[],limits:{max_queries:4,max_results_per_query:8,max_scrapes:8,timeout_ms:10000},identity_resolution:{official_domain:'scopeanchor.test',confidence:'high',candidates:[]},results:[{id:'local-page',run_id:'run-synthetic-cached-local',raw_record_id:'synthetic',provider:'direct-http',status:'success',rank:1,url:'https://scopeanchor.test/contact',title:'',snippet:'',text:'Kenya office office@scopeanchor.test',links:[],metadata:{}}]};persistV1Run(run as any);for(const id of ${JSON.stringify([local.id, foreign.id])})await persistV1ContactOverlay(id,run.id,{schema_version:28,entity_key:'obsolete-fixture',email:'old@scopeanchor.test',emails_list:['old@scopeanchor.test']} as any,true);const second={...run,research_context:createV1ResearchContext('interactive'),completed_at:'2026-01-01T00:00:01.000Z',id:'run-synthetic-cached-batch',company_name:'Batchanchor Medical',identity_resolution:{official_domain:'batchanchor.test',confidence:'high',candidates:[]},results:[{...run.results[0],id:'batch-page',run_id:'run-synthetic-cached-batch',url:'https://batchanchor.test/contact',text:'Kenya office batch@batchanchor.test'}]};persistV1Run(second as any);await persistV1ContactOverlay(${JSON.stringify(batch.id)},second.id,{schema_version:28,entity_key:'obsolete-fixture',emails_list:[]} as any,true);await(await getDb()).flush();}main().catch(()=>{process.exitCode=1;});`,
     resolveDir: repo, sourcefile: 'synthetic-cache-seed.ts', loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: seed, logLevel: 'silent' });
   const seeded = spawnSync(process.execPath, ['-r', denied, seed], { cwd: app, env, encoding: 'utf8', timeout: 30000, windowsHide: true });
   assert.equal(seeded.status, 0, seeded.stderr);
@@ -110,6 +111,8 @@ async function main(){const run={id:'run-synthetic-cached-local',company_name:'S
   const replay = await request('/api/enrich/company', { id: local.id, company_name: local.company_name, forceFetch: false });
   assert.equal(replay.status, 200, 'ordinary single-company action must revalidate retained evidence without configured providers');
   const replayed = await replay.json(); assert.equal(replayed.reused_evidence, true); assert.equal(replayed.run.id, 'run-synthetic-cached-local');
+  assert.equal(replayed.evidence_origin, 'saved_evidence');
+  assert.deepEqual(replayed.reuse_assessment, { captured_at: null, compatibility: 'unverified', freshness: 'not_live_verified' }, 'legacy evidence may be rechecked but cannot acquire invented compatibility/capture/freshness');
   const after = (await companies()).find(c => c.id === local.id);
   assert.equal(after.email, 'office@scopeanchor.test'); assert.equal(after.research_validation_status, 'current');
   assert.equal((await request('/api/enrich/company', { id: local.id, company_name: local.company_name, forceFetch: true })).status, 503,
@@ -142,6 +145,12 @@ async function main(){const run={id:'run-synthetic-cached-local',company_name:'S
   const exported = await request('/api/export/blocks', { company_ids: [local.id] }); assert.equal(exported.status, 200);
   assert.ok((await exported.text()).includes('office@scopeanchor.test'));
   await stop(); await start(); assert.equal((await companies()).find(c => c.id === local.id).email, 'office@scopeanchor.test');
+  const contextual = await (await request('/api/enrich/company', { id: batch.id, company_name: batch.company_name, reuseOnly: true })).json();
+  assert.deepEqual(contextual.reuse_assessment, { captured_at: '2026-01-01T00:00:01.000Z', compatibility: 'matches_current_context', freshness: 'not_live_verified' }, 'matching context must not turn an old capture into live verification');
+  fs.writeFileSync(path.join(state, 'config.json'), JSON.stringify({ groq_model: 'synthetic-changed-model' }));
+  const changedContext = await (await request('/api/enrich/company', { id: batch.id, company_name: batch.company_name, reuseOnly: true })).json();
+  assert.equal(changedContext.reuse_assessment.compatibility, 'different_context');
+  assert.equal(changedContext.reuse_assessment.freshness, 'not_live_verified');
   assert.equal(fs.existsSync(egress), false, 'neither revalidation nor rejected refresh may make outbound requests');
   console.log('PASS actual cached HTTP revalidation, force/provider refusal, cross-country ID/run isolation, durable export/restart and zero outbound calls; synthetic evidence only');
 } finally {

@@ -278,7 +278,10 @@ export function useAppStore() {
       const verifiedOutcome = outcome === 'COMPLETED' || outcome === 'PARTIAL' || outcome === 'FAILED' || outcome === 'NOT_FOUND';
       const feedbackType = outcome === 'COMPLETED' ? 'success' : outcome === 'FAILED' ? 'error' : verifiedOutcome ? 'info' : 'warning';
       const feedback = verifiedOutcome ? outcome.toLowerCase().replace('_', ' ') : 'status unverified';
-      showToast(`V1 enrichment ${feedback} for ${companyName}${data.reused_evidence ? ' (saved evidence rechecked)' : ''}`, feedbackType);
+      const capturedAt = data.reuse_assessment?.captured_at;
+      const capturedDate = typeof capturedAt === 'string' && Number.isFinite(Date.parse(capturedAt)) ? new Date(capturedAt).toLocaleDateString() : null;
+      const savedNote = data.reused_evidence ? ` (saved evidence rechecked; ${capturedDate ? `captured ${capturedDate}` : 'capture date unknown'}; not checked live)` : '';
+      showToast(`V1 enrichment ${feedback} for ${companyName}${savedNote}`, feedbackType);
       await fetchContacts();
       return data;
     } catch (err: any) {
