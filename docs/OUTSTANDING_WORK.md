@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Finish exact-source packaging evidence for stored filtered/grouped file exports, then continue derived-report authority and supported-path dependency assessment. Keep all broader company-country, recovery, monitoring and customer-installation gates open until evidenced.
+Current active task: Continue derived country/stats/summary/report export authority from the verified stored-file boundary, alongside supported-path dependency assessment. Exact dcc6c09 developer-package evidence is saved below; all broader company-country, recovery, monitoring and customer-installation gates remain open.
 
 ## Full owner acceptance checklist
 
@@ -2747,3 +2747,11 @@ Executed npm run check (typecheck/lint/V1), typecheck:e2e, production build, con
 Scope limits: no final live/manual/document-visual/clean-Windows or current-device performance acceptance; standalone FileViewer fallback without the product modal is retained but not a separate customer API authority. Country/stats/summary/report exports remain next EXP01 acceptance, not silently included in this completed file-authority slice. No original checkout, live3901, real data, provider/configuration or account changes.
 
 Previous clean56e912a exact-source package check PASS149 files; build414816e0e0f6b7065725b9a1340ce137dd8bc3891dc6dc3b7bb335cf00a472bb, ZIP855dd6b666da68676c137d68a0fd3bbef3e6a3b2e591e520093f05e4d999ed0c. Output removed, still a developer package needing installed Node/npm.
+
+## Exact saved filtered-export package checkpoint — 2026-10-31
+
+Committed/pushed dcc6c0938ab3370fb8ca6a8a9295e36e15da173c rebuilt with clean tracked source. node scripts/check-package-isolated.mjs PASS150 manifest files, unchanged launch, packaged backup contract and privacy file check. Build1967500e9b4319ff7a4f3510143d90eb05a077e5544e65fadebd4042eeb7afa8; disposable developer ZIP SHA25647b5288e4169203840abc4cbcc66865d1d06859b28861e87c661096c19964c09. Output removed by checker. Still118 development files and installed Node/npm required: not customer MSIX, native installed launch, update, clean-Windows or final visual acceptance. No published asset or accepted Desktop version snapshot created.
+
+Next actual remaining export paths traced read-only: CountryView builds a client row union after paging source files; Summary fetches selected file rows; StatsTab submits the current shipment response with filters; Reports submits selected report rows/content. Current processExportRequest uses the full-dataset renderer for these4 datasets, so preserve actual six-column behavior while binding each to its demonstrated server/file/report/history source. Do not manufacture a new hierarchy or persistence authority. These are remaining EXP01 requirements, not an accepted implementation.
+
+Primary dependency references inspected: https://github.com/advisories/GHSA-g3hv-75wg-m249 and https://github.com/advisories/GHSA-3g3m-2fjr-6pw4 . No blind major-version overrides/downgrades were applied. Current all-source dependency acceptance remains open despite locally verified export changes.
