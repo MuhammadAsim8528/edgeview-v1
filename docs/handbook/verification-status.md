@@ -3,7 +3,30 @@
 Working evidence guide — NOT READY for customer release. The authoritative live
 acceptance ledger is docs/OUTSTANDING_WORK.md in the development repository.
 
-Scoped observations recorded on 2026-10-26:
+Latest scoped observations — 2026-10-31:
+
+- Saved evidence can be rechecked for its exact company and country without
+  provider calls. Actual isolated HTTP and rendered controls/export/restart passed.
+- Country-scoped evidence excludes hidden comment contacts and binds profile
+  leadership roles to the named employer. These fixtures are not proof of every
+  real company or current job title.
+- Corrected retained Emerchemie evidence passed API/export/restart with both office
+  addresses. The earlier fresh acceptance stays recorded as failed; final rendered
+  company acceptance remains open.
+- Failed durable overlays are undone before later checkpoints can persist them.
+  Controlled disk-full/permission, prior-row retention and restart tests passed;
+  this does not establish general installed update/restore or power-loss safety.
+- Serper's new Google-link resolver is integrated. A live public-company probe
+  resolved all five opaque links in one eight-result response. Complete company
+  enrichment and final UI accuracy are separate acceptance checks.
+- Local typecheck/lint/V1/build/release and isolated package checks are evidence.
+  Current GitHub jobs cannot start due to the account billing/spending restriction.
+  No spending increase or paid service was configured. A November1 reset has not
+  been observed; hosted checks must actually run before being reported passed.
+- Desktop Progress.html is a saved-checkpoint view, not the running application.
+  It can refresh itself after one initial reload; work pauses when the session ends.
+
+Earlier scoped observations recorded on 2026-10-26:
 
 - Hosted commit 87d4659 passed release, browser and Docker workflows. This is
   automated isolated evidence, not acceptance of every company or installed build.

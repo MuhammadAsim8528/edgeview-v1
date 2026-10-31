@@ -43,6 +43,7 @@ jobs:
       - run: node --import tsx server/tests/search_snippet_email_admission.test.ts
       - run: node --import tsx server/tests/hidden_contact_evidence.test.ts
       - run: node --import tsx server/tests/ordinary_office_address.test.ts
+      - run: node --import tsx server/tests/serper_link_resolution.test.ts
       - run: node --import tsx server/tests/official_page_body_budget.test.ts
       - run: node --import tsx server/tests/engine_ai_destination.test.ts
       - run: node --import tsx server/tests/support_diagnostics.test.ts

@@ -27,3 +27,12 @@ from the captured evidence, not that no public information exists anywhere.
 Research retains captured responses and failures for inspection. Exports must
 reflect the selected scope. Keep exported business information private. Do not
 send operational files or keys as a bug report; use reviewed diagnostics.
+
+Fetch Details rechecks retained evidence when available for the exact company and
+country. Force Fetch requests fresh research and needs configured providers and
+network access. Without those providers, eligible records can still use Recheck
+Saved Evidence. This does not discover new information from the Internet.
+
+Some Google search links now require Serper's separate zero-credit resolution
+step, which can add about30seconds. EdgeView bounds that wait. Unresolved links
+are recorded as incomplete; they do not prove that a company has no public data.

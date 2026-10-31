@@ -9,6 +9,7 @@ import { externalizeV1RunForStorage, hydrateV1RunFromStorage } from './v1_blob_s
 import { readProviderResponse, validateProviderEnvelope, providerSchemaError } from './provider_response';
 import { crawlOfficialPages, officialPageFallbackUrls } from './official_site_crawl';
 import { visibleHtmlText } from './html_evidence';
+import { isSerperGoogleRedirect, serperLinkSubstitutions } from './serper_links';
 
 export type V1Status = 'pending' | 'success' | 'failed' | 'skipped';
 
@@ -452,6 +453,55 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
   }
 }
 
+async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
+  const pending=run.raw_records.filter(record=>record.provider==='serper'&&record.kind==='search'&&!record.failure
+    && Array.isArray((record.response as any)?.organic)
+    && (record.response as any).organic.some((item:any)=>isSerperGoogleRedirect(item?.link)));
+  if(!pending.length)return;
+  const settings=getAppSettings(), deadline=Date.now()+45_000;
+  let cursor=0;
+  // Search all query responses first, then resolve with two bounded workers.
+  // Google links age together instead of paying a fresh ~30s wait per query.
+  const worker=async()=>{
+    while(cursor<pending.length){
+      const source=pending[cursor++], query=String(source.request.q||'');
+      const request={operation:'resolve',source_raw_record_id:source.id,q:query};
+      const raw:V1RawRecord={id:id('raw'),run_id:run.id,kind:'search',provider:'serper-resolve',request,
+        requested_at:now(),completed_at:now(),latency_ms:0,sha256:''};
+      const started=performance.now();
+      try{
+        const remaining=deadline-Date.now();
+        if(remaining<=0)throw Object.assign(new Error('Serper link resolution budget exhausted'),{status:408});
+        const response=await boundedFetch('https://google.serper.dev/resolve',{method:'POST',redirect:'error',
+          headers:{'Content-Type':'application/json','X-API-KEY':settings.serper_api_key},body:JSON.stringify(source.response)},Math.min(40_000,remaining));
+        raw.http_status=response.status;
+        const captured=await readProviderResponse(response,8*1024*1024,Math.max(1,Math.min(20_000,deadline-Date.now())));
+        raw.response=captured.body;
+        if(captured.failure)throw Object.assign(new Error(captured.failure.message),captured.failure);
+        if(!response.ok)throw Object.assign(new Error(`Serper link resolution returned HTTP ${response.status}`),{status:response.status});
+        validateProviderEnvelope(captured.body,'serper');
+        const substitutions=serperLinkSubstitutions(source.response,captured.body);
+        const items=(source.response as any).organic;
+        for(const result of run.results.filter(result=>result.raw_record_id===source.id)){
+          const at=items.findIndex((item:any)=>item?.link===result.url&&String(item?.title||'').trim()===result.title);
+          const target=substitutions.get(at);
+          if(target){result.metadata={...result.metadata,original_google_link:result.url,link_resolution_raw_record_id:raw.id};result.url=target;result.raw_record_id+=','+raw.id;}
+        }
+        if(run.results.some(result=>result.raw_record_id===source.id&&isSerperGoogleRedirect(result.url)))throw Object.assign(new Error('SERPER_LINK_UNRESOLVED: Some Google links remain unresolved; provider retryAfter is retained in raw evidence.'),{status:response.status});
+      }catch(error){raw.failure=safeError(error);}
+      finally{
+        raw.completed_at=now();raw.latency_ms=Math.max(0,performance.now()-started);raw.sha256=sha(raw.response??raw.failure);run.raw_records.push(raw);
+        run.timeline.push({at:now(),stage:'search',provider:'serper-resolve',query,status:raw.failure?'failed':'success',latency_ms:raw.latency_ms,
+          message:raw.failure?'Some search links could not be resolved; existing real links retained':'Resolved Google search links to source URLs',...(raw.failure?{error:raw.failure.message}:{})});
+        for(const result of run.results.filter(result=>result.raw_record_id===source.id&&isSerperGoogleRedirect(result.url))){
+          result.status='failed';result.error='SERPER_LINK_UNRESOLVED';result.metadata={...result.metadata,link_resolution_raw_record_id:raw.id};result.raw_record_id+=','+raw.id;
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(2,pending.length)},worker));
+}
+
 async function searchTavily(run: V1Run, query: string): Promise<V1Result[]> {
   const settings = getAppSettings(); const provider = 'tavily';
   if (!settings.tavily_enabled || !settings.tavily_api_key) return [];
@@ -834,12 +884,13 @@ async function execute(companyName: string, country: string, profile: 'interacti
     // deterministic HTTP capture reads the official site. Other experimental
     // providers remain in the repository but cannot enter this critical path.
     for (const query of run.queries) run.results.push(...await searchSerper(run, query));
+    await resolveSerperSearchLinks(run);
     run.identity_resolution = resolveOfficialDomain(run.company_name, run.country, run.results);
     run.timeline.push({ at: now(), stage: 'resolution', status: run.identity_resolution.official_domain ? 'success' : 'skipped', message: run.identity_resolution.official_domain
       ? `Resolved official domain ${run.identity_resolution.official_domain} with ${run.identity_resolution.confidence} confidence`
       : 'No domain met the minimum company-ownership evidence threshold; directories remain evidence only' });
     run.results.push(...await enrichHunter(run, run.identity_resolution.official_domain));
-    const unique = [...new Map(run.results.filter(r => r.url).map(r => [r.url, r])).values()];
+    const unique = [...new Map(run.results.filter(r => r.url&&!isSerperGoogleRedirect(r.url)).map(r => [r.url, r])).values()];
     if (!bulk) await Promise.all(unique.filter(result => result.provider !== 'direct-http' && !result.text && !result.markdown).slice(0, MAX_SCRAPES).map(result => scrapeDirectFallback(run, result)));
     // Search providers may return the same URL for several queries. Fetch it
     // once, then project that captured page/failure onto every normalized row
@@ -847,16 +898,20 @@ async function execute(companyName: string, country: string, profile: 'interacti
     const fetchedByUrl = new Map(unique.map(result => [result.url, result]));
     for (const result of run.results) {
       const fetched = fetchedByUrl.get(result.url);
-      if (!fetched || fetched === result) continue;
+      if (!fetched || fetched === result || !fetched.metadata.scrape_status) continue;
       result.raw_record_id = `${result.raw_record_id},${fetched.raw_record_id.split(',').slice(-1)[0]}`;
       result.text = fetched.text; result.markdown = fetched.markdown; result.html = fetched.html;
-      result.links = fetched.links; result.metadata = { ...result.metadata, ...fetched.metadata };
+      result.links = fetched.links;
+      result.metadata = { ...result.metadata, ...Object.fromEntries(['scrape_status','direct_http_status','content_type']
+        .filter(key=>fetched.metadata[key]!==undefined).map(key=>[key,fetched.metadata[key]])) };
       result.scrape_latency_ms = fetched.scrape_latency_ms; result.status = fetched.status; result.error = fetched.error;
     }
     await crawlOfficialWebsite(run, run.identity_resolution.official_domain);
     await extractStructuredEvidence(run, profile);
-    const successfulSearchRequests = run.raw_records.filter(record => record.kind === 'search' && record.response !== undefined && !record.failure).length;
-    run.status = classifyRunStatus(run.results.length, run.timeline.some(e => e.status === 'failed'), successfulSearchRequests);
+    const successfulSearchRequests = run.raw_records.filter(record => record.provider === 'serper' && record.kind === 'search' && record.response !== undefined && !record.failure).length;
+    const usableCount=run.results.filter(result=>result.status==='success').length;
+    run.status = run.results.length>0&&usableCount===0 ? 'FAILED'
+      : classifyRunStatus(usableCount, run.timeline.some(e => e.status === 'failed'), successfulSearchRequests);
   } catch (error) {
     run.status = run.results.length ? 'PARTIAL' : 'FAILED';
     run.timeline.push({ at: now(), stage: 'run', status: 'failed', message: 'Run stopped before all stages completed', error: safeError(error).message });

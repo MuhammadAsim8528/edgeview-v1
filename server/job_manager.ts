@@ -568,7 +568,7 @@ export function projectHistoricalContactFields(run: V1Run) {
     addresses: addresses.slice(0, 10), address: addresses[0] || '',
     contact_persons: contactPersons,
     decision_makers: [], ceo: '',
-    quality_status: website && hasChannel && hasOrganizationDetail ? 'COMPLETE' : website || hasChannel || hasOrganizationDetail ? 'PARTIAL' : 'NOT_FOUND',
+    quality_status: website && hasChannel && hasOrganizationDetail ? 'COMPLETE' : website || hasChannel || hasOrganizationDetail ? 'PARTIAL' : run.status === 'FAILED' ? 'FAILED' : 'NOT_FOUND',
     evidence: projections.flatMap((projection: any) => projection.evidence || []),
     unscoped_facts: projections.flatMap((projection: any) => projection.unscoped_facts || []),
   });
