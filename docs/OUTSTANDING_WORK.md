@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Verify exact-source package evidence for Summary/CountryView authority, then continue Stats/report export assessment from their real sources. All prior company-country, dependency, recovery, monitoring and customer-installation goals remain open in this ledger.
+Current active task: Continue Stats/report export authority after the verified Summary/CountryView stored-scope change and analytics country/failure correction; all broader readiness goals and owner-away boundaries remain intact.
 
 ## Full owner acceptance checklist
 
@@ -115,6 +115,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [x] UX02 / directiveJ: actual isolated rendered browser reproduces FAILED green-toast bug before fix, then verifies red FAILED, blue PARTIAL/NOT_FOUND, green COMPLETED and amber unknown feedback after correction. Production UI/store are real; endpoint outcomes synthetic. Broader real-provider workflows remain QA01/CORE01.
 - [x] UX03 / directiveK: reproduced stale directory after successful contact refresh in isolated rendered browser; corrected derived-view invalidation, obsolete-request cancellation and15s bound. Browser verifies current office replaces old,503 ends with retry UI, retry recovers, and adjacent contact-export selection remains correct. Wider customer-data accuracy remains QA01/CC01.
 - [x] UX04 / directiveH,I: reference search confirmed unused store sent-status function/export and unused objective fallback computation; removed41 dead lines. Actual research_assessment display remains. Typecheck/lint and both actual rendered contact/evidence presentation regressions pass; no outreach backend added and no claim those unused scores were displayed.
+- [x] UX01.STATS_COUNTRY: actual browser reproduced same-importer country change retaining foreign products, and API reproduced mixed-country950 total labelled Kenya. Corrected complete-scope reload and truthful All Countries aggregate label. Pending/error scopes withhold old metrics,503 Retry recovers, and4 held real browser requests reach a visible15s timeout with Retry enabled. This is analytics scope/failure acceptance, not completed research/company-country truthsets.
 - [~] QA01/UX01 / directive7,8: each supported control needs expected action/code path/success/failure/executed evidence. Final live/manual QA stays last/deferred; isolated rendered regressions continue. Broader accessibility/offline/empty/error acceptance remains open.
 
 ### OBSERVABILITY / SUPPORT
@@ -139,6 +140,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] Medium supported-path analytics country attribution: mixed-country importer aggregate was labelled with the first country, and changing country for the same importer did not refresh its facts. Independent API and rendered browser failures reproduced; corrected label/scope reload and honest failure/timeout behavior. Wider research-country admission remains CC01, not newly marked fixed.
 
 - [x] Medium supported-path grouped export data loss: actual download selected stale raw ITEM/TOT_FC aliases over computed grouped values. Corrected server-owned view export; independent two-item/summed30.00 CSV assertions pass. Full unrelated grouping/date semantics are not newly claimed.
 
@@ -2767,3 +2770,13 @@ Actual rendered browser RED showed Summary posted a client row union without sou
 Executed typecheck/lint/full V1 via npm run check, E2E typecheck, production build, release smoke: PASS. Derived browser/API suite plus filtered-export regression PASS3tests. Browser verifies60-row summary/country downloads with no records in request and no unrelated-file leakage. Actual two-file scope union and invalid/mixed/override probes pass. Separate actual API loop verifies the stored marker in CSV, XLSX shared strings, DOCX XML, inspected PDF text, and CSV inside the four-member all-format ZIP, for both summary/country. Adjacent upload/paging/country-keyboard/restart workflow also PASS. No final visual/install/provider/customer-data claims. React checklist applied: existing event-only controls/names preserved, large redundant row fetch removed, no new effects/state authority.
 
 Next source assessment facts: stats_router.getAllDatasetRows currently reads db.files, normalizes through extractRowData and filters exact importer/country/date; do not assume a separate SQLite shipment authority from the History tab name. Reports UI has no active report-creation caller; POST reports/upload and in-memory report map require supported-flow assessment before adding/retiring anything. No archived AI report generation is authorized.
+
+## Analytics country/failure scope correction — 2026-10-31
+
+Two independent reproduced faults: actual browser changing Kenya/Pakistan for the same Shared Buyer left3 FOREIGNMED elements displayed under Kenya; actual unfiltered importer summary summed50+900 across2countries but labelled950 as Kenya. The first bounded UI correction exposed the second rather than changing the fixture expectation to agree with it. Backend now labels a genuinely mixed-country aggregate All Countries; this preserves intentional global analytics instead of falsely assigning it to the first country.
+
+StatsTab reloads on importer+country+file changes, cancels superseded/unmounted requests and guards publication against obsolete controllers. Selected metric/product/exporter/shipment panels are withheld while loading or after failure. Four requests share a15s deadline; failures show a generic accessible alert and Retry analytics, never raw errors or stale foreign facts. Empty importer selection clears its old state. Manual date-range Apply semantics are preserved; other option-list/selection races and full date/file workflows remain broader QA, not claimed closed.
+
+Executed typecheck/lint, full V1, E2E typecheck, production build/release smoke PASS. Actual stats-scope-refresh browser/API test PASS: aggregate label+950, same importer Kenya-only LOCALMED, forced Pakistan503 hides both old/new products, Retry yields Pakistan-only FOREIGNMED. Then4actual browser requests held without replies exercise the real15s timeout; visible timeout alert/Retry and absence of stale facts PASS (17.6s test). Adjacent Summary/CountryView all-format/content suite PASS as well. Forced late-reply ordering and separate file-picker transition are not individually exercised. Source change is server/stats_router.ts plus StatsTab.tsx and one focused E2E test. No claim Getz research admission or final real-world QA is complete.
+
+Previous clean36ae438 exact-source package check PASS150 manifest files, launch/packaged backup/privacy checks; build844eb1b0b1d3c43d221259f8cdf04d83db088fc572ce8a64dc75f40264a39c79, disposable ZIP36543d1be407cfdd2b5be7d8770c08bd9ecd4a7370911d91e93d9c988f30fab7 removed. Still118 development files and installed Node/npm required, not customer installation acceptance.

@@ -224,7 +224,9 @@ statsRouter.get('/importers/:importer/summary', (req: Request, res: Response) =>
     totalVal += r.total_value;
   }
 
-  const displayCountry = matched.length > 0 ? matched[0].country : (req.query.country as string || 'All Countries');
+  const matchedCountries = new Set(matched.map(row => row.country));
+  const displayCountry = matchedCountries.size > 1 ? 'All Countries'
+    : matched.length > 0 ? matched[0].country : (req.query.country as string || 'All Countries');
   const displayImporter = matched.length > 0 ? matched[0].importer : safeDecode(req.params.importer);
 
   res.json({

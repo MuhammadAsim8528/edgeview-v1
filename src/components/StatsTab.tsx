@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import { safeFetchJson } from '../utils/safeFetch';
 import {
@@ -72,6 +72,8 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
 
   // UI & Filter Search States
   const [isLoadingStats, setIsLoadingStats] = useState<boolean>(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const statsRequest = useRef<AbortController | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
   const [exporterSearch, setExporterSearch] = useState<string>('');
@@ -238,15 +240,25 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
     fetchImportersForCountry(cName, '');
   };
 
-  // 3. Load Stats & Detailed Shipments when selected importer changes
+  // 3. Reload the complete selected scope, including the same importer in another country.
   useEffect(() => {
     if (selectedImporter) {
       loadImporterStats();
+    } else {
+      setImporterSummary(null);
+      setProducts([]); setExporters([]); setShipments([]);
+      setStatsError(null); setIsLoadingStats(false);
     }
-  }, [selectedImporter]);
+    return () => { statsRequest.current?.abort(); statsRequest.current = null; };
+  }, [selectedImporter, selectedCountry, selectedFileId]);
 
   const loadImporterStats = async () => {
     if (!selectedImporter) return;
+    statsRequest.current?.abort();
+    const controller = new AbortController();
+    statsRequest.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    setStatsError(null);
     setIsLoadingStats(true);
     setCurrentPage(1);
     setSelectedExporterFilter('');
@@ -260,11 +272,18 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
       const queryStr = `?${fileParam}${cParam}${startParam}${endParam}`.replace('?&', '?');
 
       const [sumRes, prodRes, expRes, shipRes] = await Promise.all([
-        safeFetchJson<ImporterStatsSummary>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/summary${queryStr}`),
-        safeFetchJson<any[]>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/products${queryStr}`),
-        safeFetchJson<any[]>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/exporters${queryStr}`),
-        safeFetchJson<any[]>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/shipments${queryStr}`),
+        safeFetchJson<ImporterStatsSummary>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/summary${queryStr}`, { signal: controller.signal }),
+        safeFetchJson<any[]>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/products${queryStr}`, { signal: controller.signal }),
+        safeFetchJson<any[]>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/exporters${queryStr}`, { signal: controller.signal }),
+        safeFetchJson<any[]>(`/api/stats/importers/${encodeURIComponent(selectedImporter)}/shipments${queryStr}`, { signal: controller.signal }),
       ]);
+
+      if (statsRequest.current !== controller) return;
+      if (controller.signal.aborted || !sumRes.ok || !sumRes.data || !prodRes.ok || !Array.isArray(prodRes.data)
+        || !expRes.ok || !Array.isArray(expRes.data) || !shipRes.ok || !Array.isArray(shipRes.data)) {
+        setStatsError(controller.signal.aborted ? 'Analytics loading timed out. Retry when EdgeView is available.' : 'Could not load this analytics scope. Retry before using these results.');
+        return;
+      }
 
       if (sumRes.ok && sumRes.data) {
         const sumData = sumRes.data;
@@ -292,9 +311,10 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
         setShipments(shipRes.data);
       }
     } catch (err) {
-      console.error('Failed to load importer stats:', err);
+      if (statsRequest.current === controller) setStatsError('Could not load this analytics scope. Retry before using these results.');
     } finally {
-      setIsLoadingStats(false);
+      clearTimeout(timeout);
+      if (statsRequest.current === controller) setIsLoadingStats(false);
     }
   };
 
@@ -745,7 +765,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
             <Filter className="w-4 h-4 text-[#10b981]" />
             <h2 className="text-xs font-semibold text-white uppercase tracking-wider">Analytics Filter & Auto-Sync</h2>
           </div>
-          {importerSummary && (
+          {importerSummary && !isLoadingStats && !statsError && (
             <span className="text-[11px] text-[#10b981] font-mono bg-[#10b981]/10 border border-[#10b981]/20 px-2.5 py-0.5 rounded-full">
               Synced to: {importerSummary.country}
             </span>
@@ -879,7 +899,14 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
       </div>
 
       {/* 3. Main Dashboard Stats for Selected Importer */}
-      {selectedImporter ? (
+      {selectedImporter && isLoadingStats ? (
+        <p role="status" className="p-4 text-sm text-gray-400">Loading selected analytics scope…</p>
+      ) : selectedImporter && statsError ? (
+        <div role="alert" className="p-4 rounded-lg border border-rose-800 text-rose-200">
+          <p>{statsError}</p>
+          <button onClick={() => { void loadImporterStats(); }} className="mt-2 px-3 py-1 rounded bg-[#262626] border border-[#444]">Retry analytics</button>
+        </div>
+      ) : selectedImporter ? (
         <div className="space-y-6">
           {/* Header & Importer Summary Row */}
           <div className="bg-[#1a1a1a] border border-[#262626] rounded-xl p-5 space-y-4 shadow-sm">
