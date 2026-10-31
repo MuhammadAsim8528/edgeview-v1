@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {progressModel,progressHtml,safeStatusText} from './render-progress-workspace.mjs';
+
+const ledger=fs.readFileSync('docs/OUTSTANDING_WORK.md','utf8');
+const model=progressModel(ledger,{version:'1.0.0-rc.2',branch:'integration/test',commit:'a'.repeat(40),dirty:true,refreshed:'31/10/2026, 12:00:00'});
+assert.equal(model.sections.length,9);assert.equal(model.acceptance.length,33,'the full original acceptance checklist must remain visible');
+assert.equal(model.verdict,'NOT READY');
+const total=model.sections.reduce((count,section)=>count+section.items.length,0);
+assert.equal(Object.values(model.counts).reduce((sum,count)=>sum+count,0),total);
+assert.ok(model.sections[0].items.some(item=>item.nested),'reached parent goals expose individually tracked sub-items');
+const secret='nvapi-'+'CANARY000000000000000000000000';
+for(const canary of [secret,'person@private.example','https://private.example/path?token=private','C:\\Users\\Private\\secret.db'])assert.ok(!safeStatusText(canary).includes(canary),'dashboard status projection must omit private value patterns');
+const html=progressHtml(model);
+assert.ok(!html.includes('Latest completed work and checks'),'do not copy unrestricted historical notes/raw logs');
+assert.ok(html.includes("connect-src 'none'"));assert.ok(!html.includes('http://127.0.0.1:3901'));
+assert.throws(()=>progressModel(ledger.replace('### P0 BLOCKERS','### MISSING BLOCKERS'),{}),/all nine/,'never silently display a partial queue');
+const malicious=progressModel(ledger.replace('SEC01 / directiveA:','<img src=x onerror=alert(1)> SEC01 / directiveA:'),model);
+assert.ok(!progressHtml(malicious).includes('<img src=x'),'ledger content is inert text');
+console.log(`PASS read-only dashboard projection:9queues/33acceptance items/${total}board entries, status counts, private-pattern omission, HTML escaping and missing-section refusal`);

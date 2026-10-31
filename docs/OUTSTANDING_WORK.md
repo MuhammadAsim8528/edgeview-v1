@@ -1,6 +1,8 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Finish scoped guidance/test-isolation commits, then close the confirmed credentialed-provider transport gap using the existing hardened boundary. Preserve8MiB evidence/Serper replay contracts and structured HTTP failures. Local verification continues without paid CI; original/live/customer state remains untouched.
+Current readiness verdict: NOT READY
+
+Current active task: Complete the provider-transport account-error suppression regression and final scoped verification using the existing hardened boundary. Preserve8MiB evidence/Serper replay contracts and structured HTTP failures. The local read-only dashboard is verified; original/live/customer state remains untouched.
 
 ## Full owner acceptance checklist
 
@@ -61,6 +63,15 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 ### P0 BLOCKERS
 
 - [~] SEC01 / directiveA: active Serper/Hunter generic-fetch bypass confirmed statically atf27fdcd; settings tests have a separate path. Fix through existing pinned HTTPS provider transport, preserving time/body/response/error contracts; no new client architecture. Dynamic exploit/exfiltration not established. Fresh independent investigation completed; fix/test/review required.
+  - [~] SEC01.SERPER: active search and resolver use the existing hardened boundary in the working patch; positive actual-wire3MiB replay regression passes; full failure/recovery acceptance pending.
+  - [~] SEC01.HUNTER: active research uses the same boundary in the working patch; positive pinned wire regression passes; account-error suppression regression pending.
+  - [~] SEC01.DIAGNOSTICS: settings tests use the same boundary; private DNS, valid JSON and status preservation focused tests pass; final affected-suite rerun pending.
+  - [x] SEC01.DNS: working-patch provider_request_path.test.ts and outbound_connection_binding.test.ts pass private/mixed-answer refusal, numeric-address connection and retained TLS/Host controls using synthetic wire/DNS.
+  - [x] SEC01.REDIRECT: working-patch actual provider/settings caller tests reject redirects before a second destination and preserve observed302; existing outbound helper regression passes.
+  - [~] SEC01.BOUNDS: preserve8MiB responses/256KiB diagnostics, default2MiB request bound and explicit bounded8MiB Serper replay;3MiB replay and default-limit negative tests pass, final integrated checks pending.
+  - [~] SEC01.ERRORS: observed HTTP/body failure status is retained; independent review found account suppression can be missed after transport rejection of401/403/429. Reproduce and correct before acceptance.
+  - [~] SEC01.FOCUSED: new actual diagnostic/research wire and scoped lint regression pass; reviewer correction and final focused rerun still required.
+  - [~] SEC01.V1: affected V1 tests passed before the final account-error correction; rerun after that correction. Parent stays open until every required sub-item has evidence.
 - [~] CC01–CC04 / directive8: correct company-country, local/parent/distributor and every admitted field through history/UI/export. Scoped fixes verified; representative final truthsets and same-company concurrent completion ordering remain open.
 - [~] DATA02/MIG01/REC01 / directiveB,O: preserve JSON dataset/sql.js operations/immutable evidence/settings authorities; close cross-store upload/delete interruption, actual supported migration/restore/update/data rollback acceptance.
 - [ ] PG01 / directive10: inspect and enforce accepted Stable tag/artifact lineage; a v* tag alone must not promote arbitrary integration code. No publication during this work.
@@ -101,6 +112,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 ### FINAL RELEASE GATES
 
+- [x] OPS01: small read-only local dashboard verified in current source. scripts/progress-workspace.test.mjs PASS9queues/33acceptance/35board entries/counts/private-pattern omission/HTML escaping/missing-section refusal; actual isolated browser PASS dark render/currentHEAD/counters/pause-resume-persistence/manual refresh/no CSP or page errors. Only status projection, no raw notes/logs/business storage or customer runtime changes. This internal view does not close release acceptance.
 - [!] CI01: local checks continue; current hosted jobs cannot start due to account billing/spending restriction. No money requested, paid workaround or assumed November1 reset. Hosted success remains unverified until actually executed.
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 

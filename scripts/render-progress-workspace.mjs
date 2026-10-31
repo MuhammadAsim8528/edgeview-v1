@@ -1,50 +1,63 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
-// A generated view of the authoritative ledger, never another planning store.
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const destination = process.argv[2];
-if (!destination || !path.isAbsolute(destination) || !destination.endsWith('.html')) {
-  throw new Error('Provide an absolute HTML output path');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const names=['P0 BLOCKERS','P1 HIGH-RISK','P2 MEDIUM-RISK','CUSTOMER EXPERIENCE','OBSERVABILITY / SUPPORT','PACKAGING / UPDATE','CLEAN-WINDOWS ACCEPTANCE','FINAL RELEASE GATES','NEW HIGH/MEDIUM FINDINGS'];
+const labels={' ':'Not started','~':'In progress',x:'Verified','!':'Blocked'};
+const symbols={' ':'☐','~':'◐',x:'✓','!':'!'};
+const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]);
+export function safeStatusText(value){
+ return String(value).replace(/https?:\/\/\S+/gi,'[link omitted]')
+  .replace(/(?:\b[A-Za-z]:[\\/]|\\\\|\/(?:Users|home)\/).*$/gm,'[local path omitted]')
+  .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'[email omitted]')
+  .replace(/\b(?:nvapi|gsk|sk|phc|phx)[_-][A-Za-z0-9_-]{8,}/g,'[credential omitted]')
+  .replace(/\b(?:api[_-]?key|authorization|secret|token|password)\s*[:=]\s*\S+/gi,'[private value omitted]')
+  .replace(/\s+/g,' ').trim().slice(0,600);
 }
-const ledger = fs.readFileSync(path.join(root, 'docs/OUTSTANDING_WORK.md'), 'utf8');
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-const escape = value => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const capabilities = ledger.split(/\r?\n/).filter(line => /^\| [A-Z]+\d+ P\d/.test(line));
-const rows = capabilities.map(line => '<tr>' + line.split('|').slice(1, -1).map(cell => `<td>${escape(cell.trim())}</td>`).join('') + '</tr>').join('\n');
-const current = ledger.match(/^Current active task: (.+)$/m)?.[1] || 'No current task recorded; inspect the authoritative ledger.';
-const acceptance = ledger.match(/## Full owner acceptance checklist\r?\n([\s\S]*?)(?=\r?\n## )/)?.[1] || '';
-const fullChecklist = acceptance.split(/\r?\n/).map(line => {
-  if (line.startsWith('### ')) return `<h3>${escape(line.slice(4))}</h3>`;
-  const task = line.match(/^- \[([ x~!])\] (.+)$/);
-  if (!task) return '';
-  const label = ({ ' ': 'NOT STARTED', x: 'VERIFIED', '~': 'IN PROGRESS', '!': 'BLOCKED' })[task[1]];
-  const symbol = ({ ' ': '☐', x: '✓', '~': '◐', '!': '!' })[task[1]];
-  return `<p data-task="acceptance"><strong>${symbol} ${label}</strong> — ${escape(task[2])}</p>`;
-}).join('\n');
-// New checkpoint notes are prepended; older evidence was appended. Show both.
-const latest = ledger.split(/^## Authoritative implementation ledger/m)[0]
-  + '\nEarlier checkpoint evidence\n' + ledger.split(/(?=^### )/m).slice(-3).join('\n');
-const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EdgeView progress</title>
-<style>body{font:17px/1.55 system-ui,sans-serif;background:#f5f7fa;color:#182331;margin:0}main{max-width:1200px;margin:auto;padding:32px}h1,h2{line-height:1.2}header,section{background:white;padding:24px;margin-bottom:20px;border:1px solid #d5dce5;border-radius:10px}.status{font-weight:700;color:#a02d19}table{width:100%;border-collapse:collapse;font-size:14px}td,th{border:1px solid #d5dce5;padding:12px;text-align:left;vertical-align:top}th{background:#eaf0f6}pre{white-space:pre-wrap;font:15px/1.6 system-ui}code{overflow-wrap:anywhere}@media(max-width:700px){main{padding:12px}section{overflow:auto}table{min-width:780px}}</style>
-<main><header><h1>EdgeView progress workspace</h1><p class="status">NOT READY for customer release</p><p>Updated ${escape(new Date().toISOString())} · Source <code>${escape(commit)}</code></p><p>This page reloads every 30 seconds to show saved checkpoints. Work does not continue while the session is stopped. This is the progress workspace, not the deployed EdgeView application. The repository goal ledger remains the authority.</p><button id="refresh-control" type="button" aria-pressed="false">Pause automatic refresh</button><p id="refresh-state" role="status">Automatic refresh enabled</p></header>
-<section><h2>Working now</h2><p>${escape(current)}</p><h2>Priority and timing</h2><p>Release blockers first: incorrect company and country facts, lost data, privacy and secrets, unsafe recovery, installation and essential workflows. Optional improvements go to follow-up patches. No guaranteed hourly ship promise.</p><p>Existing planning targets remain November 2 for a private candidate and November 6 for the release decision, conditional on prerequisites. Signing, clean Windows and final visual acceptance remain gates. Microsoft Store setup and public shipping are deferred.</p></section>
-<section><h2>Full owner acceptance checklist</h2><p>The complete33-item list remains open until its full acceptance criteria pass. Verified sub-fixes are recorded below; the shorter work board does not replace these requirements.</p>${fullChecklist || '<p>No detailed checklist found; inspect the repository ledger.</p>'}</section>
-<section><h2>Capability evidence</h2><p>Evidence and remaining criteria are copied from the canonical ledger. A test result does not establish whole-product correctness.</p><table><thead><tr><th>Goal</th><th>State</th><th>Existing evidence</th><th>Still required</th></tr></thead><tbody>${rows}</tbody></table></section>
-<section><h2>Latest completed work and checks</h2><pre>${escape(latest)}</pre></section></main>
-<script>
-(() => {
-  const button = document.getElementById('refresh-control'), status = document.getElementById('refresh-state');
-  let paused = false;
-  try { paused = sessionStorage.getItem('edgeview-progress-paused') === 'true'; const top = Number(sessionStorage.getItem('edgeview-progress-scroll')); if (Number.isFinite(top)) window.scrollTo(0, Math.max(0, top)); } catch {}
-  function render() { button.setAttribute('aria-pressed', String(paused)); button.textContent = paused ? 'Resume automatic refresh' : 'Pause automatic refresh'; status.textContent = paused ? 'Automatic refresh paused' : 'Automatic refresh enabled'; }
-  button.addEventListener('click', () => { paused = !paused; try { sessionStorage.setItem('edgeview-progress-paused', String(paused)); } catch {} render(); });
-  render();
-  setInterval(() => { if (paused || document.hidden || String(window.getSelection() || '') || document.activeElement === button) return; try { sessionStorage.setItem('edgeview-progress-scroll', String(window.scrollY)); } catch {} window.location.reload(); }, 30000);
-})();
-</script></html>`;
-fs.mkdirSync(path.dirname(destination), { recursive: true });
-fs.writeFileSync(destination, html, 'utf8');
-console.log(`Progress workspace refreshed: ${capabilities.length} capability records`);
+function tasksFrom(text){
+ return text.split(/\r?\n/).flatMap(line=>{const match=line.match(/^(\s*)- \[([ x~!])\] (.+)$/);return match?[{state:match[2],text:safeStatusText(match[3]),nested:match[1].length>0}]:[];});
+}
+export function progressModel(ledger,metadata){
+ const board=ledger.match(/## Live customer-readiness board[^\n]*\n([\s\S]*?)(?=\n## )/)?.[1]||'';
+ const sections=[];let active;
+ for(const line of board.split(/\r?\n/)){
+  if(line.startsWith('### ')){const title=line.slice(4).trim();active=names.includes(title)?{title,items:[]}:undefined;if(active)sections.push(active);}
+  else if(active)active.items.push(...tasksFrom(line));
+ }
+ if(sections.length!==names.length||new Set(sections.map(section=>section.title)).size!==names.length)throw Error('Expected all nine ledger queue sections');
+ const items=sections.flatMap(section=>section.items);
+ if(items.length>250)throw Error('Board exceeds its supported display bound; no partial dashboard generated');
+ const evidence=new Map();
+ for(const line of ledger.split(/\r?\n/).filter(line=>/^\| [A-Z]+\d+ P\d/.test(line))){const cells=line.split('|').slice(1,-1).map(cell=>cell.trim());evidence.set(cells[0].split(' ')[0],safeStatusText(cells[2]||''));}
+ for(const item of items){const id=item.text.match(/\b[A-Z]+\d+\b/)?.[0];item.evidence=id?evidence.get(id)||'':'';item.commits=[...new Set((item.text+' '+item.evidence).match(/\b[a-f0-9]{7,40}\b/g)||[])].slice(0,4);}
+ const counts=Object.fromEntries(Object.keys(labels).map(state=>[state,items.filter(item=>item.state===state).length]));
+ const acceptance=tasksFrom(ledger.match(/## Full owner acceptance checklist\r?\n([\s\S]*?)(?=\n## )/)?.[1]||'');
+ const verdict=ledger.match(/^Current readiness verdict: (.+)$/m)?.[1]?.trim()||'NOT VERIFIED';
+ return{...metadata,verdict:safeStatusText(verdict),current:safeStatusText(ledger.match(/^Current active task: (.+)$/m)?.[1]||'No current task recorded'),sections,counts,acceptance,
+  findings:sections.find(section=>section.title==='NEW HIGH/MEDIUM FINDINGS').items.filter(item=>item.state!=='x').length};
+}
+export function progressHtml(model){
+ const task=(item,priority='')=>`<article class="task ${item.nested?'nested':''}" data-status="${item.state}"><div><span class="badge s${item.state===' '?'n':item.state==='!'?'b':item.state==='~'?'p':'v'}">${symbols[item.state]} ${labels[item.state]}</span>${priority?` <small>${escape(priority)}</small>`:''}</div><p>${escape(item.text)}</p>${item.evidence?`<details><summary>Evidence / checks</summary><p>${escape(item.evidence)}</p></details>`:''}${item.commits?.length?`<small>Referenced commits: ${item.commits.map(escape).join(' · ')}</small>`:''}</article>`;
+ const css=`*{box-sizing:border-box}body{margin:0;background:#10151d;color:#e6edf5;font:14px/1.5 system-ui,sans-serif}main{max-width:1400px;margin:auto;padding:24px}header,.panel{border:1px solid #303c4c;background:#171f2b;border-radius:10px;padding:18px;margin-bottom:16px}h1{font-size:25px;margin:0 0 8px}h2{font-size:15px;letter-spacing:.04em;margin:0 0 12px}p{margin:7px 0}small,.muted{color:#aebccd}code{overflow-wrap:anywhere;color:#b7d7ff}.counts,.grid{display:grid;gap:12px}.counts{grid-template-columns:repeat(auto-fit,minmax(135px,1fr));margin:16px 0}.count{background:#202c3b;padding:10px;border-radius:7px}.count strong{font-size:23px;display:block}.grid{grid-template-columns:repeat(auto-fit,minmax(350px,1fr))}.task{border-top:1px solid #303c4c;padding:12px 0}.task p{overflow-wrap:anywhere}.nested{padding-left:15px;border-left:2px solid #40546a}.badge{display:inline-block;border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700}.sn{background:#394252}.sp{background:#604a17;color:#ffe6a6}.sv{background:#174a35;color:#aff4c7}.sb{background:#623035;color:#ffd2d7}.verdict{color:#ffd297;font-weight:bold}button{background:#263f5c;border:1px solid #4c7199;color:white;padding:7px 11px;border-radius:5px;cursor:pointer}button:focus-visible,summary:focus-visible{outline:2px solid #8cc8ff;outline-offset:3px}summary{cursor:pointer;color:#a9cfff}.legend{font-size:12px;color:#b7c5d8}@media(max-width:600px){main{padding:12px}.grid{grid-template-columns:1fr}}`;
+ const script=`(()=>{const button=document.getElementById('auto'),status=document.getElementById('auto-state');let paused=false;try{paused=sessionStorage.getItem('edgeview-progress-paused')==='true';window.scrollTo(0,Number(sessionStorage.getItem('edgeview-progress-scroll'))||0)}catch{}function render(){button.textContent=paused?'Resume automatic refresh':'Pause automatic refresh';button.setAttribute('aria-pressed',String(paused));status.textContent=paused?'Automatic refresh paused':'Reloads saved checkpoints every30seconds; pauses while selecting text or using controls'}button.addEventListener('click',()=>{paused=!paused;try{sessionStorage.setItem('edgeview-progress-paused',String(paused))}catch{}render()});document.getElementById('refresh').addEventListener('click',()=>location.reload());render();setInterval(()=>{if(paused||document.hidden||String(getSelection()||'')||document.activeElement?.tagName==='BUTTON')return;try{sessionStorage.setItem('edgeview-progress-scroll',String(scrollY))}catch{}location.reload()},30000)})();`;
+ const digest=text=>crypto.createHash('sha256').update(text).digest('base64');
+ const summary=[['Verified',model.counts.x],['In progress',model.counts['~']],['Not started',model.counts[' ']],['Blocked',model.counts['!']],['New findings queue',model.findings]];
+ return`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${digest(css)}'; script-src 'sha256-${digest(script)}'; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>EdgeView local progress</title><style>${css}</style></head><body><main>
+ <header><h1>EdgeView customer-readiness</h1><p class="verdict">${escape(model.verdict)} — owner review required before shipping</p><p>App ${escape(model.version)} · Branch <code>${escape(model.branch)}</code><br>Saved HEAD <code>${escape(model.commit)}</code>${model.dirty?' · Uncommitted work is present':''}</p><p class="muted">Refreshed ${escape(model.refreshed)} PKT · Read-only view of docs/OUTSTANDING_WORK.md</p><p>${escape(model.current)}</p><button id="refresh" type="button">Refresh now</button> <button id="auto" type="button" aria-pressed="false">Pause automatic refresh</button><p id="auto-state" role="status"></p><p class="legend">Board-entry counts are not a percentage of customer acceptance. Parent tasks stay open until required sub-items pass. Work stops when the session stops. No logs, datasets, credentials or runtime behavior are read or changed.</p></header>
+ <div class="counts">${summary.map(([title,count])=>`<div class="count"><strong>${count}</strong>${escape(title)}</div>`).join('')}</div>
+ <div class="grid">${model.sections.map(section=>`<section class="panel"><h2>${escape(section.title)}</h2>${section.items.map(item=>task(item,section.title.match(/^P\d/)?.[0]||'Acceptance / scope above')).join('')}</section>`).join('')}</div>
+ <section class="panel"><details><summary>Full original acceptance checklist (${model.acceptance.length} items)</summary>${model.acceptance.map(item=>task(item)).join('')}</details></section>
+ </main><script>${script}</script></body></html>`;
+}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ const destination=process.argv[2];if(!destination||!path.isAbsolute(destination)||!destination.endsWith('.html'))throw Error('Provide an absolute HTML output path');
+ const source=path.join(root,'docs/OUTSTANDING_WORK.md');if(fs.statSync(source).size>1024*1024)throw Error('Ledger exceeds supported projection budget');
+ const environment=Object.fromEntries(Object.entries(process.env).filter(([key])=>/^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
+ const git=args=>execFileSync('git',args,{cwd:root,env:environment,encoding:'utf8'}).trim();
+ const model=progressModel(fs.readFileSync(source,'utf8'),{version:JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version,branch:safeStatusText(git(['branch','--show-current'])),commit:git(['rev-parse','HEAD']),dirty:Boolean(git(['status','--porcelain'])),refreshed:new Date().toLocaleString('en-GB',{timeZone:'Asia/Karachi'})});
+ fs.mkdirSync(path.dirname(destination),{recursive:true});fs.writeFileSync(destination,progressHtml(model),'utf8');
+ console.log(`Progress workspace refreshed: ${model.sections.length} queues, ${model.acceptance.length} acceptance items; no second status authority`);
+}
