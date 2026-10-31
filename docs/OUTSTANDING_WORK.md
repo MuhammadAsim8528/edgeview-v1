@@ -85,7 +85,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
   - [x] JOB01.PUBLICATION: late same-contact publication loss reproduced and fixed across interactive/background batch; full V1/typecheck/lint/build/release, focused HTTP/restart and no-serialization mutant passed. Final rendered/real-provider acceptance is separate.
   - [x] JOB01.QUEUE_FAILURE: isolated queue test confirms same-contact serialization, different-contact parallelism, exact persistence-code rejection and next-operation recovery; this is queue behavior, not entire job recovery acceptance.
-  - [ ] JOB01.CANCEL: actual stop/cancel while active and queued, honest UI and no subsequent work.
+  - [~] JOB01.CANCEL: actual stop while waiting on publication rejects early restart409 JOB_DRAINING; drained resume succeeds with no duplicate count. Multi-company unstarted work, UI feedback and other cancellation stages remain open.
   - [ ] JOB01.RETRY: supported retry/resume after provider and storage failures, exact counters/outcomes.
   - [ ] JOB01.CRASH: forced interruption/restart and graceful drain across the supported job path.
   - [ ] JOB01.CONTROLS: final rendered progress/cancel/retry controls and representative real-provider acceptance.
@@ -151,6 +151,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [x] High supported-path stopped-job ownership: actual HTTP stop/start accepted a duplicate loop while its predecessor was blocked in contact publication (200 versus expected409). Separate draining ownership and structured JOB_DRAINING refusal verified with full check/build/release and actual HTTP stop/drain/resume/single-count/restart assertions. Rendered resume-error acceptance remains separate.
 
 - [x] High supported-path research publication race: delayed earlier durable save could erase a newer completed projection. Reproduced with actual isolated HTTP/storage/immutable captures; per-contact serialized projection/save/publication correction passed full V1/typecheck/lint/build/release and focused HTTP/restart/mutation checks; exact-source developer packaging follows. Raw evidence remains preserved.
 
@@ -2848,3 +2850,16 @@ Focused GREEN: interactive/interactive and interactive/background-batch overlap 
 Additional focused queue contract PASS: same-contact wait ordering, other-contact progress while held, exact PERSISTENCE_WRITE_FAILED propagation, queued success after failure and subsequent reuse. Wired both new regressions into test:v1. No cancellation/crash/real-provider acceptance inferred.
 
 Executed final local checkpoint: npm run check exited0 (including the new overlap HTTP/restart test); final npm run typecheck/lint and queue contract separately exited0 after adding the queue contract to test:v1; npm run build and npm run test:release exited0. Unserialized test-only mutant exited1 on lost-newer-evidence assertion, not a startup error. No source-level claim of full cancellation/retry/crash closure.
+
+
+## 2026-10-31 — JOB01 stopped worker drain ownership
+
+Confirmed actual HTTP RED: first interactive save held the shared contact publication queue; background job captured evidence and waited behind it. POST stop returned200, but immediate POST start returned200 instead of409 while the old worker still existed. This can permit overlapping loops/counters and is a supported-path High issue.
+
+Correction: distinguish whether workers should take more companies (activeJobs) from ownership of a starting/running/draining loop (ownedJobs). Acquire ownership before asynchronous startup, release it on every startup refusal/error or final worker drain. Stop requests preserve ownership until current work finishes. Start returns409 JOB_DRAINING with a truthful retry message while draining. No provider process is killed and no captured evidence discarded.
+
+Focused checks: actual stop while publication held, early restart refusal, first save release, stopped job completion, safe resume after drain, one completed company without double counting, retained contact1/contact2 and restart persistence. Full check/build/release re-run pending. Stop of unstarted queue positions, force-retry, crash/shutdown and rendered controls remain separate acceptance requirements.
+
+Prior exact-source package checkpoint f679bb57bd64b75eea6d0a3456f5b924553e467a: initial build failed ENOSPC, no package acceptance claimed. Inspection later observed1.1GB free; no files were deleted. Rebuild retry and isolated package checker then exited0:150manifest files, launch/backup/privacy checks PASS, build90e22bb79e3978509ad0c8f858e4299ac7c2f8356bb6a98fb4ebd5352c132197, disposable ZIPb2234bf58e0d9c3676eb9007055138ef7ed0cf5c203d8630ffaf65455a722098 removed. Still118 development files/requires Node/npm/customerRuntimeReady=false. This checkpoint does not cover subsequent stop/drain source edits.
+
+Stop/drain final local checkpoint: npm run check (typecheck/lint/full V1 including all3 overlap/stop scenarios and queue contract), npm run build, npm run test:release exited0. Exact-source packaging follows. Read-only UI trace: handleResumeJob currently ignores non-OK responses; next verify and correct rendered draining/failure feedback rather than claiming the new409 alone completes the user workflow. No native browser/live/customer change.

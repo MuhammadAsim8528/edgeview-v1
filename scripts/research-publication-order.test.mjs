@@ -76,7 +76,7 @@ try {
       }));
     }}],
   });
-  for (const secondKind of ['interactive', 'batch']) {
+  for (const secondKind of ['interactive', 'batch', 'batch-stop']) {
     const fail = false;
     const state = path.join(root, secondKind);
     fs.mkdirSync(state);
@@ -111,29 +111,49 @@ try {
     const pending = fetch(`${base}/api/enrich/company`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:before.id,company_name:before.company_name,country:'Kenya'})});
     void pending.catch(() => {}); // Cleanup may terminate a request after a failed assertion.
     await until(() => fs.existsSync(env.FIXTURE_READY), 'route did not reach persistence barrier');
+    let batchJobId;
     const second = secondKind === 'interactive'
       ? fetch(`${base}/api/enrich/company`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:before.id,company_name:before.company_name,country:'Kenya',forceFetch:true})})
       : (async () => {
           const created = await fetch(`${base}/api/enrich/jobs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company_ids:[before.id],mode:'importer'})});
           assert.equal(created.status,200);
-          const {jobId} = await created.json();
+          const {jobId} = await created.json(); batchJobId = jobId;
           const started = await fetch(`${base}/api/enrich/job/${jobId}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({forceFetch:true})});
           assert.equal(started.status,200);
           await until(async () => {
             const response = await fetch(`${base}/api/enrich/job/${jobId}`); const body = await response.json();
             assert.notEqual(body.job.status,'FAILED','batch must not hide an exception');
-            return body.job.status === 'COMPLETED';
+            return body.job.status === (secondKind === 'batch-stop' ? 'STOPPED' : 'COMPLETED') && body.job.completed_companies === 1;
           },'batch completion timeout');
           return started;
         })();
     void second.catch(() => {});
     await until(() => fs.existsSync(env.FIXTURE_SECOND), 'second research must capture evidence while the first publication is held');
+    if (secondKind === 'batch-stop') {
+      const stopped = await fetch(`${base}/api/enrich/job/${batchJobId}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      assert.equal(stopped.status,200);
+      const restartedEarly = await fetch(`${base}/api/enrich/job/${batchJobId}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      assert.equal(restartedEarly.status,409,'stop must not release worker ownership until the in-flight publication drains');
+      assert.equal((await restartedEarly.json()).code,'JOB_DRAINING','refusal must explain the draining state');
+    }
     // Old code lets the second response finish here; serialized publication waits
     // for the first save. Release after completion or a bounded observation.
     await Promise.race([second, sleep(300)]);
     fs.writeFileSync(env.FIXTURE_RELEASE,'release');
     assert.equal((await pending).status,200);
     assert.equal((await second).status,200);
+    if (secondKind === 'batch-stop') {
+      await until(async () => {
+        const resumed = await fetch(`${base}/api/enrich/job/${batchJobId}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        assert.ok([200,409].includes(resumed.status));
+        return resumed.status === 200;
+      },'drained stopped job must become resumable');
+      await until(async () => {
+        const body = await fetch(`${base}/api/enrich/job/${batchJobId}`).then(response => response.json());
+        assert.equal(body.job.completed_companies,1,'resume must not count completed work twice');
+        return body.job.status === 'COMPLETED';
+      },'drained resume completion timeout');
+    }
     const after = (await companies()).find(company => company.id === before.id);
     assert.ok(JSON.stringify(after).includes('contact2@scopeanchor.test'),'late first publication must not erase newer completed evidence');
     assert.ok(JSON.stringify(after).includes('contact1@scopeanchor.test'),'both immutable captures remain projected');
@@ -160,7 +180,7 @@ try {
       children.delete(restarted);
     }
   }
-  console.log('PASS interactive/interactive and interactive/batch overlap preserves both completed evidence captures across late publication and restart');
+  console.log('PASS overlap preserves completed evidence/restart; stopped background worker refuses restart until publication drains');
 } finally {
   for (const child of children) child.kill();
   await Promise.all([...children].map(child => until(() => child.exitCode !== null || child.signalCode !== null,'child cleanup timeout')));

@@ -693,7 +693,9 @@ export interface ResearchJob {
 }
 
 // In-memory registry of currently active background jobs to allow graceful stopping
+// activeJobs controls whether workers take more work; ownedJobs also covers draining workers.
 const activeJobs = new Set<string>();
+const ownedJobs = new Set<string>();
 const runningTasks = new Set<Promise<void>>();
 let shuttingDown = false;
 export async function stopJobsForShutdown(): Promise<void> {
@@ -858,26 +860,31 @@ export async function stopJob(jobId: string): Promise<void> {
   await updateJob(jobId, { status: 'STOPPED' }, true);
 }
 
+export function isJobDraining(jobId: string): boolean {
+  return ownedJobs.has(jobId) && !activeJobs.has(jobId);
+}
+
 export function isJobActive(jobId: string): boolean {
   return activeJobs.has(jobId);
 }
 
 export async function runJobLoop(jobId: string, forceFetch = false): Promise<boolean> {
-  if (shuttingDown) return false;
-  if (activeJobs.has(jobId)) return false;
+  if (shuttingDown || ownedJobs.has(jobId)) return false;
+  ownedJobs.add(jobId);
   activeJobs.add(jobId);
-  const job = await getJob(jobId);
-  if (shuttingDown) { activeJobs.delete(jobId); return false; }
-  if (!job) {
-    activeJobs.delete(jobId);
-    return false;
+  const releaseOwnership = () => { activeJobs.delete(jobId); ownedJobs.delete(jobId); };
+  let job: ResearchJob | null;
+  try {
+    job = await getJob(jobId);
+    if (shuttingDown || !job || (forceFetch && Object.values(job.company_states).some(state => state.reuse_only))) {
+      releaseOwnership(); return false;
+    }
+    await updateJob(jobId, { status: 'PENDING' }, true);
+    if (shuttingDown) { releaseOwnership(); return false; }
+  } catch (error) {
+    releaseOwnership();
+    throw error;
   }
-  if (forceFetch && Object.values(job.company_states).some(state => state.reuse_only)) {
-    activeJobs.delete(jobId); return false;
-  }
-
-  await updateJob(jobId, { status: 'PENDING' }, true);
-  if (shuttingDown) { activeJobs.delete(jobId); return false; }
 
   // Five bounded workers improve throughput while persisted checkpoints keep
   // the job resumable after a server or browser restart.
@@ -1077,7 +1084,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
       console.error(`Fatal crash in V1 job loop for ${jobId}:`, err);
       await updateJob(jobId, { status: 'FAILED', error_message: String(err?.message || err), company_states: job.company_states, completed_companies: job.completed_companies, resource_usage: job.resource_usage }, true);
     } finally {
-      activeJobs.delete(jobId);
+      releaseOwnership();
     }
   })();
   runningTasks.add(task);

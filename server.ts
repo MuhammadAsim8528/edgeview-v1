@@ -1301,7 +1301,7 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
     const jobId = req.params.id;
     const { forceFetch } = req.body;
     if (forceFetch !== undefined && typeof forceFetch !== 'boolean') return res.status(400).json({ success: false, error: 'Force Fetch must be true or false.' });
-    const { getJob, runJobLoop } = await import('./server/job_manager');
+    const { getJob, runJobLoop, isJobDraining } = await import('./server/job_manager');
     const job = await getJob(jobId);
     if (!job) {
       return res.status(404).json({ success: false, error: 'Job not found' });
@@ -1313,7 +1313,10 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
     
     // Background execution
     const started = await runJobLoop(jobId, Boolean(forceFetch));
-    if (!started) return res.status(409).json({ success: false, error: 'Job is already running' });
+    if (!started) {
+      const draining = isJobDraining(jobId);
+      return res.status(409).json({ success: false, code: draining ? 'JOB_DRAINING' : 'JOB_ALREADY_RUNNING', error: draining ? 'Previous work is finishing. Try resuming shortly.' : 'Job is already running' });
+    }
     res.json({ success: true, message: 'Job started successfully' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
