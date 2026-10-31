@@ -285,7 +285,11 @@ export function useAppStore() {
       }
 
       if (data.run?.id) localStorage.setItem('edgeview_v1_run_id', data.run.id);
-      showToast(data.reused_evidence ? `Saved evidence rechecked for ${companyName}` : `V1 enrichment ${data.run?.status?.toLowerCase() || 'finished'} for ${companyName}`, data.run?.status === 'PARTIAL' ? 'info' : 'success');
+      const outcome = data.run?.status;
+      const verifiedOutcome = outcome === 'COMPLETED' || outcome === 'PARTIAL' || outcome === 'FAILED' || outcome === 'NOT_FOUND';
+      const feedbackType = outcome === 'COMPLETED' ? 'success' : outcome === 'FAILED' ? 'error' : verifiedOutcome ? 'info' : 'warning';
+      const feedback = verifiedOutcome ? outcome.toLowerCase().replace('_', ' ') : 'status unverified';
+      showToast(`V1 enrichment ${feedback} for ${companyName}${data.reused_evidence ? ' (saved evidence rechecked)' : ''}`, feedbackType);
       await fetchContacts();
       return data;
     } catch (err: any) {

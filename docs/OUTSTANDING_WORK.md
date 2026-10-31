@@ -90,7 +90,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 ### CUSTOMER EXPERIENCE
 
-- [ ] UX02 / directiveJ: verify FAILED/PARTIAL/COMPLETED toast language/colors and no false success.
+- [x] UX02 / directiveJ: actual isolated rendered browser reproduces FAILED green-toast bug before fix, then verifies red FAILED, blue PARTIAL/NOT_FOUND, green COMPLETED and amber unknown feedback after correction. Production UI/store are real; endpoint outcomes synthetic. Broader real-provider workflows remain QA01/CORE01.
 - [ ] UX03 / directiveK: reproduce/reject importer-directory stale cache after successful contact mutation; add focused regression if needed.
 - [ ] UX04 / directiveH,I: trace purported dead sent-status route and pseudo-confidence/objective code; remove only if dead/unsupported, never revive outreach or expose invented confidence.
 - [~] QA01/UX01 / directive7,8: each supported control needs expected action/code path/success/failure/executed evidence. Final live/manual QA stays last/deferred; isolated rendered regressions continue. Broader accessibility/offline/empty/error acceptance remains open.
@@ -2653,3 +2653,13 @@ Execution order: DATA02/DATA03 plus MIG01/REC01 safe recovery; CC01–CC04/CORE0
 Confirmed policy gap corrected through the existing helper, without another networking architecture. The independent candidate review found a genuine failure-path compatibility regression (401/403/429 suppression); an adversarial failing test reproduced it before correction. Dormant sibling provider calls share the bounded helper but are not enabled or claimed live-tested.
 
 Executed: npm run check; npm run build; npm run test:release; provider_request_path, provider-fetch-policy, provider_diagnostic_payload, serper_link_resolution, provider_response, model_credential_origin, ssrf_security_guard, outbound_connection_binding, engine_ai_destination and official_page_body_budget regressions. All passed in the reviewed working patch. Actual Serper search/resolve and Hunter settings diagnostic passed without modifying protected configuration. Exact-commit package checks follow separately; no clean-Windows/MSIX or final live UI acceptance is implied.
+
+### Exact provider-transport commit/package evidence
+
+Commit8dfa90806bdb0b51ac18b61e617095414c4c576c was pushed to the private integration branch. Rebuilt that clean committed source and executed node scripts/check-package-isolated.mjs: PASS149 manifest files, unchanged launch, packaged backup contract and privacy file check. Build8df4a0c8557e6f12d63f072b3824dab2640f39035361475f754112e306e17bd8; disposable ZIP SHA2569491c67995f773575def9e3ca9612e262ae10b8bf31670dfa3c9de5706376a6e. The isolated output was removed by the checker. It contains117 development files and requires installed Node/npm: customerRuntimeReady=false. This is not MSIX, clean-Windows, final visual or update acceptance.
+
+### Research feedback regression in progress
+
+Actual isolated Playwright browser reproduced FAILED research feedback using green success styling after an HTTP200 structured captured run. Synthetic endpoint interception intentionally controls outcomes while the rendered production UI/store/toast are real; this is not real-provider accuracy acceptance. Correcting outcome mapping, then checking FAILED/PARTIAL/COMPLETED/unknown controls before marking UX02 verified.
+
+Research feedback acceptance: Playwright research-feedback.spec.ts passed with5 controlled outcomes, visible wording/color and re-enabled action assertions. Inspected rendered screenshot personally. Typecheck, lint, E2E typecheck, production build and release smoke passed. These are isolated customer-feedback checks, not final live/manual QA, provider accuracy or clean-Windows acceptance. No unrelated runtime/data was touched.
