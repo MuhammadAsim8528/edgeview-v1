@@ -5,6 +5,7 @@ import { getRuntimeDataRoot, isTestProcess } from './db_paths';
 import { assertSafeHeaderValue } from './utils/header_encoder';
 import { readProviderResponse, validateProviderEnvelope } from './provider_response';
 import { CredentialStorageError, decodeCredentials, encodeCredentials } from './credential_store';
+import { safeFetchProviderRequest } from './url_safety';
 
 // Use the same validated, executable-first root as databases and health identity.
 // An unrelated working directory must not supply credentials or receive saves.
@@ -334,8 +335,8 @@ export async function testHunterKey(key: string): Promise<{ success: boolean; me
   if (!key || !key.trim()) return { success: false, message: 'Hunter API Key is empty', httpStatus: null };
   let httpStatus: number | null = null;
   try {
-    const res = await fetch(`https://api.hunter.io/v2/domain-search?domain=example.com&api_key=${encodeURIComponent(key.trim())}`, {
-      redirect: 'error', signal: AbortSignal.timeout(20_000),
+    const res = await safeFetchProviderRequest(`https://api.hunter.io/v2/domain-search?domain=example.com&api_key=${encodeURIComponent(key.trim())}`, {
+      timeoutMs: 20_000, maxBytes: 256 * 1024,
     });
     httpStatus = res.status;
     if (res.status === 200) {
@@ -355,7 +356,7 @@ export async function testHunterKey(key: string): Promise<{ success: boolean; me
       return { success: false, message, httpStatus };
     }
   } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Hunter API', httpStatus };
+    return { success: false, message: err?.message || 'Failed to connect to Hunter API', httpStatus: typeof err?.status === 'number' ? err.status : httpStatus };
   }
 }
 
@@ -366,10 +367,9 @@ export async function testSerperKey(key: string): Promise<{ success: boolean; me
 
   let httpStatus: number | null = null;
   try {
-    const res = await fetch('https://google.serper.dev/search', {
+    const res = await safeFetchProviderRequest('https://google.serper.dev/search', {
       method: 'POST',
-      redirect: 'error',
-      signal: AbortSignal.timeout(20_000),
+      timeoutMs: 20_000, maxBytes: 256 * 1024,
       headers: {
         'X-API-KEY': assertSafeHeaderValue(key.trim(), 'Serper API key'),
         'Content-Type': 'application/json',
@@ -395,7 +395,7 @@ export async function testSerperKey(key: string): Promise<{ success: boolean; me
       };
     }
   } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to connect to Serper API', httpStatus };
+    return { success: false, message: err?.message || 'Failed to connect to Serper API', httpStatus: typeof err?.status === 'number' ? err.status : httpStatus };
   }
 }
 

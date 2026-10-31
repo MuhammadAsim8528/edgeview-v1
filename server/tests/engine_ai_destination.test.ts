@@ -39,9 +39,10 @@ try {
     request.destroy = (error: Error) => { request.emit('error', error); return request; };
     request.end = () => queueMicrotask(() => {
       const incoming = new PassThrough() as any;
-      incoming.statusCode = 200; incoming.headers = { 'content-type': 'text/html' };
+      const search = options.headers.host === 'google.serper.dev';
+      incoming.statusCode = 200; incoming.headers = { 'content-type': search ? 'application/json' : 'text/html' };
       callback(incoming);
-      incoming.end('<html><title>Trust Anchor Kenya</title><body>Trust Anchor Kenya official company. Contact public@trustanchor.co.ke for corporate management.</body></html>');
+      incoming.end(search ? JSON.stringify({ organic: [{ position: 1, title: 'Trust Anchor Kenya', link: 'https://trustanchor.co.ke/', snippet: 'Trust Anchor Kenya official website and public contact' }] }) : '<html><title>Trust Anchor Kenya</title><body>Trust Anchor Kenya official company. Contact public@trustanchor.co.ke for corporate management.</body></html>');
     });
     return request;
   }) as typeof https.request;

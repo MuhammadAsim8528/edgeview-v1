@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { installAiTransportFixture } from './fixtures/ai_transport';
 
-const restoreAiTransport = installAiTransportFixture(['ai.test', 'api.groq.com']);
+const restoreAiTransport = installAiTransportFixture(['ai.test', 'api.groq.com', 'google.serper.dev', 'api.hunter.io', 'acme.example']);
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-v1-test-'));
 process.env.EDGEVIEW_CONFIG = path.join(temp, 'config.json');

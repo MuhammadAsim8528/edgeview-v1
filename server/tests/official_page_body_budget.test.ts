@@ -30,6 +30,13 @@ const tail = '<p>Trustanchor Medical Limited Kenya office</p><a href="/contact-u
   + '{"@type":"Person","name":"Foreign Fixture","jobTitle":"Director","address":{"@type":"PostalAddress","addressCountry":"PK"}},'
   + '{"@type":"Person","name":"Unknown Fixture","jobTitle":"Director"}]}</script>';
 const largeHtml = '<html><body><!--' + 'x'.repeat(Math.floor(3.67 * MiB)) + '-->' + tail + '</body></html>';
+const searchPayload = { organic: [
+  { title: 'Trustanchor Medical Limited Kenya official website', link: 'https://trustanchor.co.ke/contact-us.php', snippet: 'Trustanchor Medical Limited Kenya official contact' },
+  { title: 'Directory result', link: 'https://outside.example/big', snippet: 'Retain this search evidence despite downstream failure' },
+  { title: 'Trustanchor leadership', link: 'https://trustanchor.co.ke/leadership-oversize', snippet: 'Oversized capture must be recorded' },
+  { title: 'Trustanchor management', link: 'https://trustanchor.co.ke/management-error', snippet: 'HTTP error body must be retained' },
+  { title: 'Trustanchor contact page', link: 'https://trustanchor.co.ke/contact-connection-error', snippet: 'Persistent transient failure must stay bounded' },
+] };
 let privateDns = false;
 let transportCalls = 0;
 const attempts = new Map<string, number>();
@@ -57,7 +64,9 @@ const wire = ((options: any, callback: (incoming: any) => void) => {
     incoming.statusCode = 200;
     incoming.headers = { 'content-type': 'text/html; charset=utf-8' };
     let body = largeHtml;
-    if (route === '/redirect-external') {
+    if (host === 'google.serper.dev') {
+      body = JSON.stringify(searchPayload); incoming.headers['content-type'] = 'application/json';
+    } else if (route === '/redirect-external') {
       incoming.statusCode = 302; incoming.headers.location = 'https://outside.example/big'; body = '';
     } else if (route === '/redirect-internal') {
       incoming.statusCode = 302; incoming.headers.location = 'https://www.trustanchor.co.ke/big'; body = '';
@@ -103,16 +112,7 @@ try {
   await assert.rejects(safeFetchOutboundText('https://trustanchor.co.ke/big', scoped), /private IPv4/);
   assert.equal(transportCalls, callsBefore, 'larger body budget does not bypass private DNS guard');
   privateDns = false;
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    assert.match(String(input), /^https:\/\/google\.serper\.dev\//, 'no model or unrelated provider transport permitted');
-    return Response.json({ organic: [
-      { title: 'Trustanchor Medical Limited Kenya official website', link: 'https://trustanchor.co.ke/contact-us.php', snippet: 'Trustanchor Medical Limited Kenya official contact' },
-      { title: 'Directory result', link: 'https://outside.example/big', snippet: 'Retain this search evidence despite downstream failure' },
-      { title: 'Trustanchor leadership', link: 'https://trustanchor.co.ke/leadership-oversize', snippet: 'Oversized capture must be recorded' },
-      { title: 'Trustanchor management', link: 'https://trustanchor.co.ke/management-error', snippet: 'HTTP error body must be retained' },
-      { title: 'Trustanchor contact page', link: 'https://trustanchor.co.ke/contact-connection-error', snippet: 'Persistent transient failure must stay bounded' },
-    ] });
-  }) as typeof fetch;
+  globalThis.fetch = (async () => { throw new Error('Providers must use the pinned wire fixture, never raw fetch'); }) as typeof fetch;
   const { runV1Enrichment, getV1Run } = await import('../v1_engine');
   const callsBeforeRun = transportCalls;
   const run = await runV1Enrichment('Trustanchor Medical Limited', 'Kenya');
@@ -132,7 +132,7 @@ try {
   }
   assert.equal(scrapeRecords.filter(record => record.request.url === 'https://trustanchor.co.ke/contact-connection-error').length, 2,
     'initial search retrieval and official attempt only: two used retry slots cannot become unlimited retries');
-  assert.equal(scrapeRecords.length, transportCalls - callsBeforeRun, 'each actual attempt gets exactly one raw response/failure, including repeat URLs');
+  assert.equal(run.raw_records.filter(record=>record.kind==='scrape'||record.kind==='search').length, transportCalls - callsBeforeRun, 'each actual provider or page attempt gets exactly one raw response/failure, including repeat URLs');
   const failedOfficial = scrapeRecords.find(record => record.request.max_bytes === 4 * MiB && record.request.url === 'https://trustanchor.co.ke/leadership-oversize');
   assert.ok(failedOfficial);
   assert.ok(run.results.some(result => result.provider === 'direct-http' && result.raw_record_id.split(',').includes(failedOfficial.id)), 'failure raw payload referenced by normalized official result');

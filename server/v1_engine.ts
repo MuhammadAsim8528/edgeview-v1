@@ -316,11 +316,8 @@ export function listV1RunIdentityHeaders() {
   try { fs.writeFileSync(identityIndexPath, identityHeaderCache.map(item => JSON.stringify(item)).join('\n') + '\n', 'utf8'); } catch { /* derived cache can be rebuilt */ }
   return identityHeaderCache;
 }
-async function boundedFetch(url: string, init: RequestInit, timeoutMs = PROVIDER_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try { return await fetch(url, { ...init, signal: controller.signal }); }
-  finally { clearTimeout(timer); }
+async function boundedFetch(url: string, init: RequestInit, timeoutMs = PROVIDER_TIMEOUT_MS, maxRequestBytes = 2 * 1024 * 1024) {
+  return safeFetchProviderRequest(url, { ...init, timeoutMs, maxBytes: 8 * 1024 * 1024, maxRequestBytes });
 }
 
 function parseQueries(text: string, company: string, country: string, maxQueries = MAX_QUERIES): string[] {
@@ -446,7 +443,9 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
     return usableItems.slice(0, run.limits.max_results_per_query).map((item: any, index: number) => ({ id: id('result'), run_id: run.id, raw_record_id: raw.id, query, provider, rank: Number(item.position) || index + 1, title: cleanText(item.title), url: cleanText(item.link), snippet: cleanText(item.snippet), links: [], metadata: Object.fromEntries(Object.entries(item).filter(([key]) => !['title', 'link', 'snippet', 'position'].includes(key))), search_latency_ms: raw.latency_ms, status: 'success' as const }));
   } catch (error) {
     const failure = safeError(error);
-    if (!run.raw_records.some(r => r.kind === 'search' && (r.request as any).q === query)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+    const observedStatus=(error as {httpStatus?:number})?.httpStatus;
+    if(observedStatus!==undefined)rememberHardProviderFailure(provider,observedStatus);
+    if (!run.raw_records.some(r => r.kind === 'search' && (r.request as any).q === query)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, ...(observedStatus!==undefined?{http_status:observedStatus}:{}), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
     attachOperationFailure(run, provider, request, failure);
     run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query, latency_ms: Date.now() - started, message: 'Search request failed', error: failure.message });
     return [];
@@ -474,7 +473,7 @@ async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
         const remaining=deadline-Date.now();
         if(remaining<=0)throw Object.assign(new Error('Serper link resolution budget exhausted'),{status:408});
         const response=await boundedFetch('https://google.serper.dev/resolve',{method:'POST',redirect:'error',
-          headers:{'Content-Type':'application/json','X-API-KEY':settings.serper_api_key},body:JSON.stringify(source.response)},Math.min(40_000,remaining));
+          headers:{'Content-Type':'application/json','X-API-KEY':settings.serper_api_key},body:JSON.stringify(source.response)},Math.min(40_000,remaining),8*1024*1024);
         raw.http_status=response.status;
         const captured=await readProviderResponse(response,8*1024*1024,Math.max(1,Math.min(20_000,deadline-Date.now())));
         raw.response=captured.body;
@@ -489,7 +488,7 @@ async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
           if(target){result.metadata={...result.metadata,original_google_link:result.url,link_resolution_raw_record_id:raw.id};result.url=target;result.raw_record_id+=','+raw.id;}
         }
         if(run.results.some(result=>result.raw_record_id===source.id&&isSerperGoogleRedirect(result.url)))throw Object.assign(new Error('SERPER_LINK_UNRESOLVED: Some Google links remain unresolved; provider retryAfter is retained in raw evidence.'),{status:response.status});
-      }catch(error){raw.failure=safeError(error);}
+      }catch(error){raw.failure=safeError(error);const observed=(error as {httpStatus?:number})?.httpStatus;if(observed!==undefined)raw.http_status=observed;}
       finally{
         raw.completed_at=now();raw.latency_ms=Math.max(0,performance.now()-started);raw.sha256=sha(raw.response??raw.failure);run.raw_records.push(raw);
         run.timeline.push({at:now(),stage:'search',provider:'serper-resolve',query,status:raw.failure?'failed':'success',latency_ms:raw.latency_ms,
@@ -610,7 +609,9 @@ async function enrichHunter(run: V1Run, domain: string): Promise<V1Result[]> {
     return usableEmails.slice(0, run.limits.max_results_per_query).map((email: any, index: number) => ({ id: id('result'), run_id: run.id, raw_record_id: raw.id, query: domain, provider, rank: index + 1, title: cleanText(`${email.first_name || ''} ${email.last_name || ''}`) || `Public email for ${domain}`, url: `https://${domain}`, snippet: cleanText(email.value), links: [], metadata: { ...email, organization: data.organization, pattern: data.pattern, domain }, search_latency_ms: raw.latency_ms, status: 'success' as const }));
   } catch (error) {
     const failure = safeError(error);
-    if (!run.raw_records.some(r => r.kind === 'search' && r.provider === provider && (r.request as any).domain === domain)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+    const observedStatus=(error as {httpStatus?:number})?.httpStatus;
+    if(observedStatus!==undefined)rememberHardProviderFailure(provider,observedStatus);
+    if (!run.raw_records.some(r => r.kind === 'search' && r.provider === provider && (r.request as any).domain === domain)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, ...(observedStatus!==undefined?{http_status:observedStatus}:{}), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
     attachOperationFailure(run, provider, request, failure);
     run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query: domain, latency_ms: Date.now() - started, message: 'Domain enrichment request failed', error: failure.message });
     return [];

@@ -34,4 +34,17 @@ export default [
       '@typescript-eslint/no-wrapper-object-types': 'error',
     },
   },
+  {
+    files: ['server/v1_engine.ts', 'server/settings.ts', 'server/ai_providers.ts'],
+    rules: {
+      'no-restricted-globals': ['error', {
+        globals: [{ name: 'fetch', message: 'Credentialed providers must use safeFetchProviderRequest.' }],
+        checkGlobalObject: true,
+      }],
+      'no-restricted-syntax': ['error',
+        { selector: 'VariableDeclarator[id.type="ObjectPattern"] > ObjectPattern > Property[key.name="fetch"]', message: 'Do not alias generic fetch in provider code; use safeFetchProviderRequest.' },
+        { selector: 'VariableDeclarator[id.type="ObjectPattern"] > ObjectPattern > Property[key.value="fetch"]', message: 'Do not alias generic fetch in provider code; use safeFetchProviderRequest.' },
+      ],
+    },
+  },
 ];

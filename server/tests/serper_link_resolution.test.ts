@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {isSerperGoogleRedirect,serperLinkSubstitutions} from '../serper_links';
+import {installAiTransportFixture} from './fixtures/ai_transport';
 
 const opaque='https://www.google.com/goto?url=opaque-synthetic-token';
 assert.ok(isSerperGoogleRedirect(opaque));
@@ -18,6 +19,7 @@ const root=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-serper-resolve-'));
 process.env.EDGEVIEW_TEST_MODE='1';process.env.EDGEVIEW_CONFIG=path.join(root,'config.json');process.env.EDGEVIEW_V1_DATA_DIR=path.join(root,'runs');
 fs.writeFileSync(process.env.EDGEVIEW_CONFIG,JSON.stringify({serper_enabled:true,serper_api_key:'synthetic_resolver_key_not_real',hunter_enabled:false,nvidia_enabled:false,groq_enabled:false}));
 const nativeFetch=global.fetch;
+const restoreTransport=installAiTransportFixture(['google.serper.dev']);
 try{
  const {runV1Enrichment,getV1Run,getV1EngineDiagnostics}=await import('../v1_engine');
  const {projectHistoricalContactFields}=await import('../job_manager');
@@ -28,7 +30,7 @@ try{
   const originalJson=JSON.stringify(response);
   global.fetch=(async(input:any,init:any)=>{
    const url=String(input);
-   assert.equal(init.headers['X-API-KEY'],'synthetic_resolver_key_not_real');
+   assert.equal(new Headers(init.headers).get('x-api-key'),'synthetic_resolver_key_not_real');
    if(url==='https://google.serper.dev/search'){searches++;return Response.json(response);}
    assert.equal(url,'https://google.serper.dev/resolve','only the fixed provider endpoint receives the key');
    assert.equal(searches,4,'all searches start before link resolution waits');
@@ -59,4 +61,4 @@ try{
   assert.deepEqual(getV1Run(run.id),JSON.parse(JSON.stringify(run)),'original/resolved captures survive actual immutable storage');
  }
  console.log('PASS actual V1 Serper deferred fixed-endpoint resolution, two-worker bound, provenance, no-key capture, real-link preservation, quota/malformed/private/partial abstention and storage; synthetic provider responses');
-}finally{global.fetch=nativeFetch;assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(os.tmpdir()));fs.rmSync(root,{recursive:true,force:true});}
+}finally{restoreTransport();global.fetch=nativeFetch;assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(os.tmpdir()));fs.rmSync(root,{recursive:true,force:true});}

@@ -172,7 +172,7 @@ export async function safeFetchOutboundText(
 /** Credential-bearing provider calls never follow redirects or use plaintext HTTP. */
 export async function safeFetchProviderRequest(
   urlStr: string,
-  options: RequestInit & { timeoutMs?: number; maxBytes?: number } = {},
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRequestBytes?: number } = {},
 ): Promise<Response> {
   if (new URL(urlStr).protocol !== 'https:') throw new Error('Provider credentials require HTTPS');
   return (await captureOutboundText(urlStr, { timeoutMs: 20_000, ...options, redirect: 'error', maxRedirects: 0 }, true)).response;
@@ -180,7 +180,7 @@ export async function safeFetchProviderRequest(
 
 async function captureOutboundText(
   urlStr: string,
-  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string; allowGzip?: boolean },
+  options: RequestInit & { timeoutMs?: number; maxBytes?: number; maxRedirects?: number; maxBytesDomain?: string; allowGzip?: boolean; maxRequestBytes?: number },
   providerRequest: boolean,
 ): Promise<SafeOutboundTextResult> {
   const {
@@ -189,6 +189,7 @@ async function captureOutboundText(
     maxRedirects = 5,
     maxBytesDomain,
     allowGzip = false,
+    maxRequestBytes = 2 * 1024 * 1024,
     ...requestOptions
   } = options;
   if (allowGzip && (providerRequest || !maxBytesDomain)) throw new Error('Compressed retrieval requires official page scope');
@@ -200,7 +201,8 @@ async function captureOutboundText(
     && (method !== 'POST' || (typeof requestBody !== 'string' && !(requestBody instanceof Uint8Array)))) throw new Error('Unsupported provider request body');
   const bodyBytes = providerRequest && requestBody != null
     ? Buffer.from(requestBody as string | Uint8Array) : undefined;
-  if (bodyBytes && bodyBytes.length > 2 * 1024 * 1024) throw new Error('Provider request body limit exceeded');
+  if (!Number.isSafeInteger(maxRequestBytes) || maxRequestBytes < 1 || maxRequestBytes > 8 * 1024 * 1024) throw new Error('Invalid provider request body bound');
+  if (bodyBytes && bodyBytes.length > maxRequestBytes) throw new Error('Provider request body limit exceeded');
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120_000
     || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024
     || !Number.isSafeInteger(maxRedirects) || maxRedirects < 0 || maxRedirects > 10) throw new Error('Invalid retrieval bounds');
@@ -224,6 +226,7 @@ async function captureOutboundText(
     if (signal.aborted) rejectAbort();
     else signal.addEventListener('abort', rejectAbort, { once: true });
   });
+  let receivedHttpStatus: number | undefined;
 
   const requestPage = async (currentUrl: string, redirectsLeft: number): Promise<SafeOutboundTextResult> => {
     ensureActive();
@@ -258,6 +261,7 @@ async function captureOutboundText(
         ...(parsed.protocol === 'https:' && !net.isIP(host) ? { servername: host } : {}),
       }, (incoming) => {
         const status = incoming.statusCode || 0;
+        if (status >= 100 && status <= 599) receivedHttpStatus = status;
         if (providerRequest && status >= 300 && status < 400) {
           incoming.destroy();
           return reject(new Error('RETRIEVAL_REDIRECT_REJECTED'));
@@ -348,6 +352,14 @@ async function captureOutboundText(
   };
 
   try { return await Promise.race([requestPage(urlStr, maxRedirects), aborted]); }
+  catch (error) {
+    if (providerRequest && error instanceof Error) {
+      if (receivedHttpStatus !== undefined) Object.assign(error, { status: receivedHttpStatus, httpStatus: receivedHttpStatus });
+      if (error.message === 'RETRIEVAL_BODY_LIMIT_EXCEEDED') error.name = 'ProviderBodyLimit';
+      if (error.message === 'RETRIEVAL_TIMEOUT') error.name = receivedHttpStatus === undefined ? 'ProviderTimeout' : 'ProviderBodyTimeout';
+    }
+    throw error;
+  }
   finally {
     clearTimeout(timer);
     if (rejectAbort) signal.removeEventListener('abort', rejectAbort);

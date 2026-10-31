@@ -3,7 +3,7 @@ import { testHunterKey, testSerperKey } from '../settings';
 import { GroqProvider } from '../ai_providers';
 import { installAiTransportFixture } from './fixtures/ai_transport';
 
-const restoreAiTransport = installAiTransportFixture(['api.groq.com']);
+const restoreAiTransport = installAiTransportFixture(['api.groq.com', 'google.serper.dev', 'api.hunter.io']);
 
 for (const test of [testHunterKey, testSerperKey]) {
   for (const payload of [{}, { error: { message: 'controlled error' } }]) {
