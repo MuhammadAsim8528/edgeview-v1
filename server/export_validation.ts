@@ -5,6 +5,24 @@ export class ExportValidationError extends Error {
 }
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
+/** Summary/country scope is explicit stored file IDs, never a client row union. */
+export function resolveStoredDerivedExport(input: unknown, files: ReadonlyMap<string, { rows: Record<string, unknown>[] }>) {
+  if (!record(input) || !['summary','country'].includes(input.dataset)) throw new ExportValidationError('Unsupported stored dataset export.');
+  if (Object.keys(input).some(key => !['dataset','title','filenamePrefix','format','source_file_ids'].includes(key))) throw new ExportValidationError('Stored dataset export does not accept client rows or overrides.');
+  const ids = input.source_file_ids;
+  if (!Array.isArray(ids) || !ids.length || ids.length > 10000
+    || !ids.every(id => typeof id === 'string' && id.trim() && id.length <= 200)
+    || new Set(ids).size !== ids.length || (input.dataset === 'summary' && ids.length !== 1)) throw new ExportValidationError('Select a valid stored file scope before exporting.');
+  const sources = ids.map(id => files.get(id));
+  if (sources.some(file => !file || !Array.isArray(file.rows))) throw new ExportValidationError('Selected files are no longer available. Refresh before exporting.');
+  const records: Record<string, unknown>[] = [];
+  for (const source of sources) for (const row of source!.rows) records.push(row);
+  if (!records.length) throw new ExportValidationError('No stored rows in this file scope.');
+  const payload = { dataset: input.dataset, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format, records };
+  validateExportRequest(payload);
+  return payload;
+}
+
 /** Browser records identify a scoped selection; their facts are never authority. */
 export function resolveStoredContactExport(input: unknown, contacts: Array<{ id: string }>) {
   validateExportRequest(input);

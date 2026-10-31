@@ -40,7 +40,7 @@ import {
 import { processExportRequest, transformFullDatasetRecords, FULL_DATASET_COLUMNS, generateCsvData, generateXlsxWorkbook, contactReportColumns, flattenContactReportRows } from './server/export_manager';
 import { buildContactReport } from './server/contact_report_model';
 import { buildContactBlocksHtml } from './server/export_blocks';
-import { ExportValidationError, resolveStoredFileExport, resolveStoredContactExport } from './server/export_validation';
+import { ExportValidationError, resolveStoredFileExport, resolveStoredContactExport, resolveStoredDerivedExport } from './server/export_validation';
 import { getSafeContentDisposition, getSafeAsciiHeaderValue } from './server/utils/header_encoder';
 import { getBackendLockPath, getProjectRoot, getRuntimeDataRoot, getSqlitePath, isTestProcess } from './server/db_paths';
 import { getInstallationId } from './server/install_identity';
@@ -1873,6 +1873,8 @@ app.post('/api/export', async (req, res) => {
     if (req.body?.dataset === 'files') return res.status(400).json({ success: false, code: 'STORED_FILE_REQUIRED', error: 'File exports require a stored file reference.' });
     const payload = req.body?.dataset === 'contacts'
       ? resolveStoredContactExport(req.body, Array.from(db.contacts.values()))
+      : ['summary','country'].includes(req.body?.dataset)
+      ? resolveStoredDerivedExport(req.body, db.files)
       : req.body;
     if (!payload || !payload.dataset || !payload.format) {
       return res.status(400).json({ error: 'Invalid export payload. Required: dataset and format.' });

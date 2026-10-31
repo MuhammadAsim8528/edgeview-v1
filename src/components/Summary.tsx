@@ -14,7 +14,6 @@ import {
 import { ParsedFile } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { formatCurrency, formatFullCurrency } from '../utils/formatters';
-import { fetchAllFileRows } from '../utils/safeFetch';
 
 interface SummaryProps {
   file: ParsedFile | null;
@@ -51,22 +50,13 @@ export const Summary: React.FC<SummaryProps> = ({ file, onOpenExport }) => {
 
         {onOpenExport && (
           <button
-            onClick={async () => {
-              let exportRecords = file.rows || [];
-              if (exportRecords.length === 0) {
-                try {
-                  const { ok, data } = await fetchAllFileRows(file.id);
-                  if (ok && data) {
-                    exportRecords = data.rows;
-                  }
-                } catch (err) {
-                  console.warn('Failed to load full dataset for summary export:', err);
-                }
-              }
+            onClick={() => {
               onOpenExport({
                 dataset: 'summary',
                 title: `Dataset Summary: ${file.name}`,
-                records: exportRecords,
+                records: [],
+                sourceFileIds: [file.id],
+                recordCount: file.summary?.total_rows ?? file.rows?.length ?? 0,
                 filenamePrefix: `EdgeView_Summary_${file.name.replace(/\.[^/.]+$/, '')}`,
               });
             }}

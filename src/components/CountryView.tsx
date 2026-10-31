@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
-import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
+import { safeFetchJson } from '../utils/safeFetch';
 import {
   Globe,
   Download,
@@ -312,31 +312,14 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
     if (isExporting) return;
     if (onOpenExport) {
       const fileName = selectedFile?.name ? selectedFile.name.replace(/\.[^/.]+$/, '') : 'All_Files';
-      const exportRecords: Record<string, any>[] = [];
-      setIsExporting(true);
-      try {
-        // Metadata-only uploads must be loaded individually; never substitute
-        // another file's cached rows or publish a partially fetched report.
-        for (const source of selectedFile ? [selectedFile] : files) {
-          if (source.rows?.length) {
-            for (const row of source.rows) exportRecords.push(row);
-          } else {
-            const result = await fetchAllFileRows(source.id);
-            if (!result.ok || !result.data) {
-              window.alert(result.error || 'Could not load the complete country report. Try again.');
-              return;
-            }
-            for (const row of result.data.rows) exportRecords.push(row);
-          }
-        }
-      } finally {
-        setIsExporting(false);
-      }
-      if (exportRecords.length === 0) return;
+      const sources = selectedFile ? [selectedFile] : files;
+      if (!sources.length) return;
       onOpenExport({
         dataset: 'country',
         title: `Country Trade Analytics (${selectedFile?.name || 'Global'})`,
-        records: exportRecords,
+        records: [],
+        sourceFileIds: sources.map(source => source.id),
+        recordCount: sources.reduce((total, source) => total + (source.summary?.total_rows ?? source.rows?.length ?? 0), 0),
         filenamePrefix: `EdgeView_Country_Analytics_${fileName}`,
       });
       return;
