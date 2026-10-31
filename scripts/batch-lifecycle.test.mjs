@@ -15,7 +15,7 @@ const children = new Set();
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
 async function until(check, label) {
   for (const end = Date.now()+30000; Date.now()<end;) { if (await check()) return; await sleep(40); }
-  throw new Error(label);
+  throw new Error(typeof label === 'function' ? label() : label);
 }
 const noEgress = path.join(root,'deny-egress.cjs');
 fs.writeFileSync(noEgress, `const deny=()=>{throw new Error('BATCH_FIXTURE_EGRESS_DISABLED')}; for(const name of ['node:http','node:https']) { const m=require(name);m.request=deny;m.get=deny; } globalThis.fetch=deny;
@@ -60,9 +60,9 @@ try {
     Object.assign(env,{PORT:String(port),NODE_ENV:'test',EDGEVIEW_TEST_MODE:'1',EDGEVIEW_TEST_DB_DIR:state,EDGEVIEW_JSON_DB:path.join(state,'data.json'),EDGEVIEW_SQLITE_DB:path.join(state,'operations.db'),EDGEVIEW_CONFIG:path.join(state,'config.json'),EDGEVIEW_V1_DATA_DIR:path.join(state,'runs'),EDGEVIEW_MONITORING_ENABLED:'0',SERPER_API_KEY:'fixture_not_real',FIXTURE_SHUTDOWN:path.join(state,'shutdown'),FIXTURE_SHUTDOWN_ACK:path.join(state,'shutdown-ack'),FIXTURE_SCENARIO:scenario,FIXTURE_CALLS:path.join(state,'calls.jsonl'),FIXTURE_RELEASE:path.join(state,'release')});
     let child,output='';
     async function launch() {
-      output='';child=spawn(process.execPath,['-r',noEgress,path.join(root,'server.cjs')],{cwd:repo,env,stdio:['ignore','pipe','pipe']});children.add(child);
+      output='';let healthObservation='unobserved';child=spawn(process.execPath,['-r',noEgress,path.join(root,'server.cjs')],{cwd:repo,env,stdio:['ignore','pipe','pipe']});children.add(child);
       const collect=chunk=>{output=(output+chunk.toString()).slice(-2500)};child.stdout.on('data',collect);child.stderr.on('data',collect);
-      await until(async()=>{assert.equal(child.exitCode,null,`owned child exited: ${output}`);try { const res=await fetch(base+'/api/health');const data=await res.json();assert.equal(data.app.pid,child.pid,'refuse another listener');return res.ok;}catch(error){if(error.code==='ERR_ASSERTION')throw error;return false;}},'owned server readiness');
+      await until(async()=>{assert.equal(child.exitCode,null,`owned child exited: ${output}`);try { const res=await fetch(base+'/api/health',{signal:AbortSignal.timeout(2000)});healthObservation='HTTP '+res.status;const data=await res.json();assert.equal(data.app.pid,child.pid,'refuse another listener');return res.ok;}catch(error){if(error.code==='ERR_ASSERTION')throw error;healthObservation=String(error.cause?.code||error.name);return false;}},()=>`owned server readiness: ${scenario}; last ${healthObservation}; bounded fixture output: ${output}`);
     }
     async function terminate(signal='SIGTERM') { child.kill(signal);await until(()=>child.exitCode!==null||child.signalCode!==null,'owned child termination');children.delete(child); }
     const calls=()=>fs.existsSync(env.FIXTURE_CALLS)?fs.readFileSync(env.FIXTURE_CALLS,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)):[];

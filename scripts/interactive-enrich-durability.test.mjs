@@ -27,7 +27,7 @@ const children = new Set();
 async function until(check, message) {
   const end = Date.now() + 30_000;
   while (Date.now() < end) { if (await check()) return; await sleep(50); }
-  throw new Error(message);
+  throw new Error(typeof message === 'function' ? message() : message);
 }
 try {
   await build({
@@ -91,10 +91,10 @@ try {
     child.stdout.on('data',collect); child.stderr.on('data',collect);
     await until(async () => {
       assert.equal(child.exitCode,null,`owned server exited: ${output}`);
-      try { const response = await fetch(`${base}/api/health`); const health=await response.json();
+      try { const response = await fetch(`${base}/api/health`, {signal:AbortSignal.timeout(2000)}); const health=await response.json();
         assert.equal(health.app?.pid,child.pid,'Refuse to mutate a different server'); return response.ok;
       } catch (error) { if (error.code === 'ERR_ASSERTION') throw error; return false; }
-    }, 'owned server readiness timeout');
+    }, () => 'owned server readiness timeout; bounded fixture output: '+output);
     const form = new FormData();
     form.append('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,Scopeanchor Medical,Kenya,Synthetic Supplier,Synthetic Product,10\n'],{type:'text/csv'}),'synthetic.csv');
     assert.equal((await fetch(`${base}/api/files/upload`,{method:'POST',body:form})).status,201);
@@ -130,7 +130,7 @@ try {
       await until(async () => {
         assert.equal(restarted.exitCode,null,`restart exited: ${output}`);
         try {
-          const health = await fetch(`${base}/api/health`).then(response => response.json());
+          const health = await fetch(`${base}/api/health`, {signal:AbortSignal.timeout(2000)}).then(response => response.json());
           assert.equal(health.app?.pid,restarted.pid,'restart must belong to owned process');
           return true;
         } catch (error) { if (error.code === 'ERR_ASSERTION') throw error; return false; }

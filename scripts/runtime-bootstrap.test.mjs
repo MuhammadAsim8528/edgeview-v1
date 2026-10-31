@@ -18,6 +18,7 @@ try {
     fs.copyFileSync('packaging/windows/runtime-bootstrap.cjs', path.join(app, 'runtime-bootstrap.cjs'));
     fs.writeFileSync(path.join(app, 'dist/server.cjs'), `
       const fs = require('node:fs');
+      fs.writeFileSync(${JSON.stringify(path.join(app, 'mode'))}, String(process.env.EDGEVIEW_DEV_SERVER));
       setTimeout(() => {
         process.once('SIGTERM', () => {
           fs.writeFileSync(${JSON.stringify(path.join(app, 'shutdown'))}, 'saved');
@@ -27,6 +28,7 @@ try {
       }, 150);
     `);
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|TEMP|TMP)$/i.test(key)));
+    env.EDGEVIEW_DEV_SERVER = '1'; // An installed runtime must not inherit developer mode.
     const child = spawn(process.execPath, [path.join(app, 'runtime-bootstrap.cjs')], { env, stdio: ['pipe', 'pipe', 'pipe'] });
     children.add(child); let output = '';
     child.stdout.on('data', data => { output = (output + data).slice(-100); });
@@ -44,6 +46,7 @@ try {
     const [code] = await ended; children.delete(child);
     assert.equal(code, mode === 'save-failure' ? 1 : 0, 'backend exit code must remain truthful');
     assert.equal(fs.readFileSync(path.join(app, 'shutdown'), 'utf8'), 'saved');
+    assert.equal(fs.readFileSync(path.join(app, 'mode'), 'utf8'), '0', 'packaged bootstrap must fence developer mode before loading backend');
   }
   console.log('PASS launcher pipe shutdown, early startup close, owner loss, bounded command framing and nonzero backend failure');
 } finally {

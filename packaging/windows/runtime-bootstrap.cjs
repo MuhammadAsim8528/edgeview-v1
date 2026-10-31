@@ -3,6 +3,8 @@
 // Stage beside dist in the runtime package. The owning Windows launcher keeps
 // stdin piped, sends one fixed shutdown command, and observes the real exit code.
 // No network endpoint, dynamic executable/module name, or shell interpreter.
+// Installed runtime is immutable/static even if the host has developer variables.
+process.env.EDGEVIEW_DEV_SERVER = '0';
 const path = require('node:path');
 let requested = false;
 let delivered = false;

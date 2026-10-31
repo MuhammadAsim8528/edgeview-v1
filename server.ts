@@ -6,7 +6,6 @@ import { processBirthIdentity, recordedOwnerWasReused } from './server/process_i
 import { acquireRuntimeMaintenance } from './shared/runtime_maintenance.mjs';
 import multer from 'multer';
 import compression from 'compression';
-import { createServer as createViteServer } from 'vite';
 import { db } from './server/db';
 import { parseFile } from './server/parsers';
 import { normalizeRow } from './server/grouping';
@@ -2687,6 +2686,7 @@ async function startServer() {
   // /api/health) still starts and keeps running.
   try {
     if (useViteDevServer) {
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         root: getProjectRoot(),
         configFile: path.join(getProjectRoot(), 'vite.config.ts'),

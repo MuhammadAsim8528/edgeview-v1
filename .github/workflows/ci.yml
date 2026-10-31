@@ -154,6 +154,8 @@ jobs:
       - run: node scripts/build-identity-runtime.test.mjs
       - run: node scripts/telemetry-runtime.test.mjs
       - run: node scripts/history-production-runtime.test.mjs
+      - run: node scripts/runtime-package-inputs.test.mjs
+      - run: node scripts/runtime-dependencies.test.mjs
       - run: node scripts/runtime-bootstrap.test.mjs
       - run: node scripts/separate-data-runtime.test.mjs
       - run: node scripts/legacy-data-runtime.test.mjs
