@@ -577,13 +577,16 @@ export function projectHistoricalContactFields(run: V1Run) {
 export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown, durable = false) {
   const database = await getDb();
   const canonicalOverlay = normalizeV1ContactOverlay(overlay);
+  if (durable) {
+    await database.saveContactOverlayDurably(companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString());
+    return;
+  }
   await database.run(
     `INSERT INTO v1_contact_enrichment (company_id, run_id, overlay_json, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(company_id) DO UPDATE SET run_id = excluded.run_id, overlay_json = excluded.overlay_json, updated_at = excluded.updated_at`,
     [companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString()]
   );
-  if (durable) await database.flush();
 }
 
 export async function hydrateV1ContactEnrichment(): Promise<number> {

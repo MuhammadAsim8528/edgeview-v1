@@ -10,6 +10,7 @@ export interface DatabaseWrapper {
   all(sql: string, params?: any[]): Promise<any[]>;
   run(sql: string, params?: any[]): Promise<{ lastID?: number; changes?: number }>;
   flush(): Promise<void>;
+  saveContactOverlayDurably(companyId: string, runId: string, overlayJson: string, updatedAt: string): Promise<void>;
   prepare(sql: string): Promise<{
     run: (...params: any[]) => Promise<void>;
     finalize: () => Promise<void>;
@@ -66,6 +67,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
     let saveTimer: NodeJS.Timeout | null = null;
     let initializing = true;
     let pendingPersistenceError: Error | null = null;
+    let rollbackFailure: Error | null = null;
     const persistenceError = (err: unknown) => {
       const rawCode = String((err as any)?.code || '').toUpperCase();
       const error = new Error(rawCode === 'ENOSPC' || rawCode === 'EDQUOT'
@@ -76,6 +78,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
       return error;
     };
     const saveToDisk = () => {
+      if (rollbackFailure) throw rollbackFailure;
       // sql.js schema changes stay private in memory until every initialization
       // step succeeds. Failed migration cannot publish a partial disk image.
       if (initializing) return;
@@ -126,7 +129,34 @@ export async function getDb(): Promise<DatabaseWrapper> {
     };
 
     const wrapper: DatabaseWrapper = {
+      // This one-row operation is synchronous through its mutation, disk write
+      // and undo. No other job/checkpoint can observe or persist an intermediate
+      // rejected row. Avoid copying the entire sql.js database as a preimage.
+      async saveContactOverlayDurably(companyId, runId, overlayJson, updatedAt) {
+        if (rollbackFailure) throw rollbackFailure;
+        if (pendingPersistenceError) flushPendingSave();
+        const statement = db.prepare('SELECT run_id, overlay_json, updated_at FROM v1_contact_enrichment WHERE company_id = ?');
+        let previous: any;
+        try { statement.bind([companyId]); if (statement.step()) previous = statement.getAsObject(); }
+        finally { statement.free(); }
+        const upsert = `INSERT INTO v1_contact_enrichment (company_id, run_id, overlay_json, updated_at)
+          VALUES (?, ?, ?, ?) ON CONFLICT(company_id) DO UPDATE SET
+          run_id = excluded.run_id, overlay_json = excluded.overlay_json, updated_at = excluded.updated_at`;
+        db.run(upsert, [companyId, runId, overlayJson, updatedAt]);
+        try { flushPendingSave(); }
+        catch (failure) {
+          try {
+            if (previous) db.run(upsert, [companyId, previous.run_id, previous.overlay_json, previous.updated_at]);
+            else db.run('DELETE FROM v1_contact_enrichment WHERE company_id = ?', [companyId]);
+          } catch (undoError) {
+            rollbackFailure = Object.assign(new Error('PERSISTENCE_ROLLBACK_FAILED: Restart required; operational writes are disabled.', { cause: undoError }), { code: 'PERSISTENCE_ROLLBACK_FAILED' });
+            operationalStatus = 'degraded';
+          }
+          throw rollbackFailure || failure;
+        }
+      },
       async exec(sql: string) {
+        if (rollbackFailure) throw rollbackFailure;
         try {
           db.exec(sql);
         } catch (e) {
@@ -137,6 +167,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
       },
 
       async get(sql: string, params: any[] = []) {
+        if (rollbackFailure) throw rollbackFailure;
         const stmt = db.prepare(sql);
         if (params.length > 0) stmt.bind(params);
         let result: any = undefined;
@@ -148,6 +179,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
       },
 
       async all(sql: string, params: any[] = []) {
+        if (rollbackFailure) throw rollbackFailure;
         const stmt = db.prepare(sql);
         if (params.length > 0) stmt.bind(params);
         const results: any[] = [];
@@ -159,6 +191,7 @@ export async function getDb(): Promise<DatabaseWrapper> {
       },
 
       async run(sql: string, params: any[] = []) {
+        if (rollbackFailure) throw rollbackFailure;
         if (pendingPersistenceError) saveToDisk();
         db.run(sql, params);
         debouncedSaveToDisk();
@@ -170,9 +203,11 @@ export async function getDb(): Promise<DatabaseWrapper> {
       },
 
       async prepare(sql: string) {
+        if (rollbackFailure) throw rollbackFailure;
         const stmt = db.prepare(sql);
         return {
           async run(...params: any[]) {
+            if (rollbackFailure) throw rollbackFailure;
             const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
             stmt.run(bindParams);
             debouncedSaveToDisk();

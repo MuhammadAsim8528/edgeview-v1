@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-overlay-durable-'));
+process.env.EDGEVIEW_TEST_MODE='1';
+process.env.EDGEVIEW_TEST_DB_DIR=root;
+process.env.EDGEVIEW_SQLITE_DB=path.join(root,'operations.db');
+const {getDb,resetDbInstanceForTests}=await import('../sqlite');
+const rename=fs.renameSync;
+const digest=()=>crypto.createHash('sha256').update(fs.readFileSync(process.env.EDGEVIEW_SQLITE_DB!)).digest('hex');
+try{
+ let database=await getDb();
+ await database.exec('CREATE TABLE durable_sibling (value TEXT)');
+ await database.saveContactOverlayDurably('existing','old-run','{"email":"old@synthetic.test"}','2026-01-01');
+ const before=await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['existing']);
+ const diskBefore=digest();
+ let denied=0;
+ fs.renameSync=((from,to)=>{if(String(to)===process.env.EDGEVIEW_SQLITE_DB){denied++;throw Object.assign(Error('Controlled disk full'),{code:'ENOSPC'});}return rename(from,to);}) as typeof fs.renameSync;
+ await assert.rejects(database.saveContactOverlayDurably('existing','rejected-run','{"email":"new@synthetic.test"}','2026-02-01'),{code:'DISK_FULL'});
+ assert.equal(denied,1,'actual database replacement must be attempted');
+ assert.deepEqual(await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['existing']),before,'failed replacement restores all prior row fields');
+ assert.equal(digest(),diskBefore,'failed disk replacement retains exact previous disk image');
+ fs.renameSync=rename;
+ await database.run('INSERT INTO durable_sibling VALUES (?)',['next checkpoint']);await database.flush();
+ assert.deepEqual(await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['existing']),before);
+ fs.renameSync=((from,to)=>{if(String(to)===process.env.EDGEVIEW_SQLITE_DB)throw Object.assign(Error('Controlled permission refusal'),{code:'EACCES'});return rename(from,to);}) as typeof fs.renameSync;
+ await assert.rejects(database.saveContactOverlayDurably('new-contact','rejected-new','{}','2026-02-02'),{code:'PERSISTENCE_WRITE_FAILED'});
+ assert.equal(await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['new-contact']),undefined,'failed new row is removed before later checkpoints');
+ fs.renameSync=rename;await database.flush();
+ resetDbInstanceForTests();database=await getDb();
+ assert.deepEqual(await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['existing']),before,'prior contact survives independent SQLite reopen');
+ assert.equal(await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['new-contact']),undefined);
+ assert.equal((await database.all('SELECT * FROM durable_sibling')).length,1,'unrelated acknowledged writes remain');
+ await database.saveContactOverlayDurably('existing','accepted-run','{"email":"accepted@synthetic.test"}','2026-03-01');
+ resetDbInstanceForTests();database=await getDb();assert.equal((await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['existing'])).run_id,'accepted-run');
+ await database.exec(`CREATE TRIGGER refuse_overlay_undo BEFORE UPDATE OF run_id ON v1_contact_enrichment
+   WHEN OLD.run_id = 'poison-probe' AND NEW.run_id = 'accepted-run' BEGIN SELECT RAISE(ABORT, 'synthetic undo refusal'); END`);
+ const prepared=await database.prepare('INSERT INTO durable_sibling VALUES (?)');
+ const safeDisk=digest();
+ fs.renameSync=((from,to)=>{if(String(to)===process.env.EDGEVIEW_SQLITE_DB)throw Object.assign(Error('Controlled disk full'),{code:'ENOSPC'});return rename(from,to);}) as typeof fs.renameSync;
+ await assert.rejects(database.saveContactOverlayDurably('existing','poison-probe','{}','2026-04-01'),{code:'PERSISTENCE_ROLLBACK_FAILED'});
+ fs.renameSync=rename;
+ await assert.rejects(database.get('SELECT * FROM v1_contact_enrichment'),{code:'PERSISTENCE_ROLLBACK_FAILED'});
+ await assert.rejects(database.run('INSERT INTO durable_sibling VALUES (?)',['must not write']),{code:'PERSISTENCE_ROLLBACK_FAILED'});
+ await assert.rejects(prepared.run('must not write'),{code:'PERSISTENCE_ROLLBACK_FAILED'});
+ await assert.rejects(database.flush(),{code:'PERSISTENCE_ROLLBACK_FAILED'});
+ assert.equal(digest(),safeDisk,'failed undo must disable all export/checkpoint writes');
+ resetDbInstanceForTests();database=await getDb();assert.equal((await database.get('SELECT * FROM v1_contact_enrichment WHERE company_id = ?',['existing'])).run_id,'accepted-run','explicit restart recovers the unchanged disk authority');
+ console.log('PASS actual overlay replacement ENOSPC/EACCES undo, prior-row retention, sibling checkpoint/reopen and successful retry; synthetic storage only');
+}finally{fs.renameSync=rename;resetDbInstanceForTests();assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(os.tmpdir()));fs.rmSync(root,{recursive:true,force:true});}

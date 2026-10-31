@@ -1,6 +1,14 @@
 # EdgeView completion ledger — 2026-10-20
 
-Current active task: Continue real-company/country acceptance and remaining storage/release blockers from this checkpoint. Employer-bound leadership, saved-review rendered workflow and exact integrated developer package checks passed; hosted CI/account and computer-tool access are externally blocked. Final live/manual QA remains deferred. Live customer data remains untouched.
+Current active task: Close the reproduced failed-overlay restart leak, then integrate Serper's documented October30 Google-link resolution change. Keep checks running locally while hosted execution is unavailable and refresh the Desktop progress view. Final live/manual QA remains deferred; live customer data remains untouched.
+
+### JOB01/DATA03 rejected overlay restart regression — 2026-10-31
+
+Extended the fresh-batch test beyond immediate UI state: a reported failed overlay reappeared after a later job checkpoint and restart (RED). sql.js kept the rejected SQL row in memory after its flush failed. Added a synchronous one-row durable overlay operation at the existing SQLite boundary: capture previous row, apply, fsync/replace, and restore prior row (or remove newly inserted row) before returning failure. No whole-database preimage allocation, asynchronous transaction interleaving, schema change or second authority. If undo itself fails, exports/reads/mutations are disabled until explicit restart from unchanged disk; prepared mutations are also guarded.
+
+Actual database-rename ENOSPC/EACCES tests PASS: exact old disk hash, full prior row, absent rejected new row, sibling later checkpoint, independent reopen, successful retry. Trigger-injected undo failure proves fail-closed behavior and unchanged disk/restart authority. Real compiled batch worker/HTTP failed restart now PASS with actual ENOSPC replacement interception, not merely an SDK/helper rejection; source evidence remains discoverable. Test excludes only dataset contact construction timestamp across restart, comparing every other field. No-durable mutant still killed at pending publication boundary. Typecheck/lint/full V1 and production build/release smoke PASS; exact committed/package checkpoint still pending. No general restore/power-loss guarantee inferred.
+
+Owner reports no budget for hosted CI and expects usage reset November1. Continue local checks/evidence; do not incur charges or infer the observed billing error will reset automatically. New user-reported Serper change verified against official serper.dev/google-links HTML and its linked documentation bundle fetched200: unresolved results4–10 use Google goto links; POST the search response to fixed google.serper.dev/resolve, documented0credits/separate rate limit, approximately30seconds, retryAfter for remaining links. Existing engine currently lacks that step. Keep as a retrieval release blocker with bounded waiting, original/resolved evidence and no following credential-bearing arbitrary redirects. Implementation follows the current storage unit, not abandoned.
 
 ### Exact integrated checkpoint and external gates — 2026-10-31
 
