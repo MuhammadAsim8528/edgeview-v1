@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { runtimePackageInputs, verifyRuntimeLock } from './runtime-package-inputs.mjs';
+import { runtimePackageInputs, verifyRuntimeLock, runtimeSourceNotices, verifyRuntimeManifest } from './runtime-package-inputs.mjs';
 const input = await runtimePackageInputs(process.cwd());
 for (const name of ['express','sql.js','pdfkit','exceljs','@sentry/node','posthog-node']) assert.ok(input.manifest.dependencies[name]);
 for (const name of ['vite','react','react-dom','lucide-react','@tailwindcss/vite','esbuild']) assert.ok(!input.manifest.dependencies[name]);
@@ -33,3 +33,30 @@ try {
   fs.rmSync(scratch,{recursive:true,force:true});
 }
 console.log('PASS real graph refuses unconditional Vite/new undeclared runtime module; dynamic development import remains explicit exception');
+
+const notices = runtimeSourceNotices(process.cwd(), input);
+assert.ok(notices.document.includes('react@'+input.canonicalLock.packages['node_modules/react'].version), 'compiled frontend React notices must survive Node dependency pruning');
+assert.ok(notices.capture.components.some(item=>item.name==='react' && item.version===input.canonicalLock.packages['node_modules/react'].version && item.capture==='TEXT CAPTURED'),'actual React license text must be captured, not only an unresolved package name');
+assert.ok(notices.document.includes('Scope: canonical source-build dependencies'));
+assert.ok(notices.document.includes('Status: NOT VERIFIED'), 'mechanical capture must not imply legal clearance');
+assert.ok(!notices.document.includes(process.cwd()), 'source host path must not enter customer notices');
+assert.throws(()=>runtimeSourceNotices(process.cwd(),{...input,canonicalLock:{}}), /RUNTIME_SOURCE_LOCK_CHANGED/);
+console.log(JSON.stringify({status:'PASS',noticesBytes:Buffer.byteLength(notices.document),sourceLockSha256:notices.sourceLockSha256,captureStatus:notices.capture.status,scope:'Compiled-frontend notice retention; no legal clearance'}));
+
+const noticeRoot=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-frontend-notice-'));
+try {
+ const lock={name:'synthetic',version:'1.0.0',lockfileVersion:3,packages:{'':{},'node_modules/frontend-widget':{version:'1.0.0',license:'MIT'}}};
+ fs.writeFileSync(path.join(noticeRoot,'package-lock.json'),JSON.stringify(lock));
+ fs.mkdirSync(path.join(noticeRoot,'node_modules/frontend-widget'),{recursive:true});
+ fs.writeFileSync(path.join(noticeRoot,'node_modules/frontend-widget/package.json'),JSON.stringify({name:'frontend-widget',version:'1.0.0'}));
+ fs.writeFileSync(path.join(noticeRoot,'node_modules/frontend-widget/LICENSE'),'UNIQUE_SYNTHETIC_FRONTEND_NOTICE_TEXT');
+ const bundle=runtimeSourceNotices(noticeRoot,{canonicalLock:lock,manifest:{name:'synthetic',version:'1.0.0',dependencies:{}}});
+ assert.ok(bundle.document.includes('UNIQUE_SYNTHETIC_FRONTEND_NOTICE_TEXT'),'frontend notice body survives even when not an installed runtime root');
+} finally {assert.equal(path.dirname(fs.realpathSync(noticeRoot)),fs.realpathSync(os.tmpdir()));fs.rmSync(noticeRoot,{recursive:true,force:true});}
+console.log('PASS unique frontend notice text remains independently of runtime dependency roots');
+
+const manifestRoundTrip=JSON.parse(JSON.stringify(input.manifest));
+assert.equal(verifyRuntimeManifest(input,manifestRoundTrip),true);
+assert.throws(()=>verifyRuntimeManifest(input,{...manifestRoundTrip,scripts:{postinstall:'unreviewed'}}),/RUNTIME_MANIFEST_DRIFT/);
+assert.throws(()=>verifyRuntimeManifest(input,{...manifestRoundTrip,overrides:{}}),/RUNTIME_MANIFEST_DRIFT/);
+console.log('PASS runtime manifest admits JSON round-trip and refuses added lifecycle/override drift');

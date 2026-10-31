@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { builtinModules } from 'node:module';
+import { isDeepStrictEqual } from 'node:util';
 import { build } from 'esbuild';
+import crypto from 'node:crypto';
+import { collectLicenseTexts } from './collect-license-texts.mjs';
+import { renderThirdPartyNotices } from './generate-third-party-notices.mjs';
 
 const builtins = new Set(builtinModules.map(name => name.replace(/^node:/, '')));
 const packageName = specifier => specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
@@ -54,4 +58,23 @@ export function verifyRuntimeLock(inputs, generated) {
     count++;
   }
   return { components: count, directPackages: Object.keys(actual).length, canonicalVersionsOnly: true };
+}
+
+// Runtime npm pruning must not erase notices for code already bundled into the UI.
+// Capture from the canonical build tree and explicitly label the broader scope.
+export function runtimeSourceNotices(root, inputs) {
+  const bytes = fs.readFileSync(path.join(root, 'package-lock.json'));
+  if (JSON.stringify(JSON.parse(bytes)) !== JSON.stringify(inputs.canonicalLock)) throw new Error('RUNTIME_SOURCE_LOCK_CHANGED');
+  const sourceLockSha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+  const collection = collectLicenseTexts(inputs.canonicalLock, root, { includeText: true });
+  const document = 'Scope: canonical source-build dependencies, including bundled frontend code and some build-only tools.\nThe separate runtime package lock describes installed Node dependencies.\n\n'
+    + renderThirdPartyNotices(collection, { lockSha256: sourceLockSha256, application: `${inputs.manifest.name}@${inputs.manifest.version}` });
+  return { document, sourceLockSha256, noticesSha256: crypto.createHash('sha256').update(document).digest('hex'),
+    capture: { status: collection.status, counts: collection.counts, scope: 'Canonical source build; mechanical capture, not legal clearance',
+      components: collection.components.map(item => ({ name: item.name, version: item.version, capture: item.capture, files: item.files.map(file => ({ name: file.name, sha256: file.sha256 })) })) } };
+}
+
+export function verifyRuntimeManifest(inputs, actual) {
+  if (!isDeepStrictEqual(actual, JSON.parse(JSON.stringify(inputs.manifest)))) throw new Error('RUNTIME_MANIFEST_DRIFT');
+  return true;
 }

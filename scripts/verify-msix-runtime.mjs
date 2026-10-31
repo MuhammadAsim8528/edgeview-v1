@@ -6,6 +6,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { sourceDigest, artifactDigest } from '../shared/build_identity.mjs';
 import { unusedTestPort } from './test-server-port.mjs';
+import { runtimePackageInputs, verifyRuntimeLock, verifyRuntimeManifest } from './runtime-package-inputs.mjs';
+import JSZip from 'jszip';
 
 // Factory acceptance, not an installer/updater or a test of the owner's live app.
 const root = path.resolve(process.argv[2] || '');
@@ -68,11 +70,20 @@ assert.equal(fs.existsSync(path.join(app, 'node_modules/mammoth/test')), false);
 for (const name of ['config.json', 'config.prev.json', '.env', 'edgeview.db', 'edgeview_db.json', 'data', 'logs', 'uploads', 'backups']) {
   assert.equal(fs.existsSync(path.join(app, name)), false, 'package must not carry customer state');
 }
+const inputs = await runtimePackageInputs(process.cwd());
+verifyRuntimeManifest(inputs, JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8')));
+assert.ok(report.runtimeInputs, 'runtime dependency/notice evidence is required');
+verifyRuntimeLock(inputs, JSON.parse(fs.readFileSync(path.join(app, 'package-lock.json'), 'utf8')));
+assert.equal(hash(path.join(app, 'package-lock.json')), report.runtimeInputs.runtimeLockSha256);
+assert.equal(hash(path.join(process.cwd(), 'package-lock.json')), report.runtimeInputs.sourceLockSha256);
+assert.equal(hash(path.join(app, 'THIRD_PARTY_NOTICES.txt')), report.runtimeInputs.noticesSha256);
+assert.ok(report.runtimeInputs.noticeCapture.components.some(item => item.name === 'react' && item.version === inputs.canonicalLock.packages['node_modules/react'].version && item.capture === 'TEXT CAPTURED'));
+for (const name of ['vite', 'react', 'react-dom', 'lucide-react', '@vitejs/plugin-react', '@tailwindcss/vite']) assert.equal(fs.existsSync(path.join(app, 'node_modules', name)), false, 'build package must not return to runtime payload');
 const state = fs.mkdtempSync(path.join(root, 'runtime-acceptance-'));
 fs.writeFileSync(path.join(state, 'config.json'), JSON.stringify({ serper_enabled: false, hunter_enabled: false, nvidia_enabled: false, groq_enabled: false }));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
 Object.assign(env, { PATH: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'), NODE_ENV: 'production', NODE_PATH: '', NODE_OPTIONS: '',
-  EDGEVIEW_DATA_DIR: state, EDGEVIEW_MONITORING_ENABLED: '0', PORT: String(await unusedTestPort()) });
+  EDGEVIEW_DATA_DIR: state, EDGEVIEW_DEV_SERVER: '1', EDGEVIEW_MONITORING_ENABLED: '0', PORT: String(await unusedTestPort()) });
 const base = `http://127.0.0.1:${env.PORT}`;
 let child;
 async function start() {
@@ -108,7 +119,19 @@ try {
   assert.equal((await companies()).length, 0); assert.match(first.app.installation_id, /^[a-f0-9-]{36}$/i);
   const form = new FormData();
   form.set('file', new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,Synthetic Package Buyer,Kenya,Synthetic Supplier,Product,10\n2026-01-02,Synthetic Package Buyer,Pakistan,Synthetic Supplier,Product,20']), 'synthetic-package.csv');
-  assert.equal((await fetch(`${base}/api/files/upload`, { method: 'POST', body: form })).status, 201);
+  const uploadResponse = await fetch(`${base}/api/files/upload`, { method: 'POST', body: form });
+  assert.equal(uploadResponse.status, 201);
+  const upload = await uploadResponse.json(); const fileId = upload.data?.id || upload.id; assert.ok(fileId);
+  const shellResponse = await fetch(base); assert.equal(shellResponse.status, 200);
+  const shell = await shellResponse.text(); assert.ok(shell.includes('id="root"') && !shell.includes('/@vite/client') && !shell.includes('react-refresh'));
+  for (const format of ['csv','xlsx','docx','pdf','all']) {
+    const response = await fetch(`${base}/api/export/file/${encodeURIComponent(fileId)}`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset:'files',format,title:'Package Fixture',view:{country:'Kenya'}})});
+    assert.equal(response.status,200,'packaged export '+format);assert.equal(response.headers.get('x-export-failed-formats'),null);
+    const bytes=Buffer.from(await response.arrayBuffer());
+    if(format==='csv'){assert.ok(bytes.toString().includes('Kenya')&&!bytes.toString().includes('Pakistan'));}
+    else if(format==='pdf')assert.equal(bytes.subarray(0,5).toString(),'%PDF-');
+    else {const zip=await JSZip.loadAsync(bytes);if(format==='xlsx'||format==='docx')assert.ok((await zip.file(format==='xlsx'?'xl/sharedStrings.xml':'word/document.xml').async('string')).includes('Synthetic Package Buyer'));else for(const extension of ['csv','xlsx','docx','pdf'])assert.ok(Object.keys(zip.files).some(name=>name.endsWith('.'+extension)));}
+  }
   const matching = (await companies()).filter(contact => contact.company_name === 'Synthetic Package Buyer');
   assert.equal(matching.length, 2); assert.notEqual(matching[0].id, matching[1].id);
   const buyer = matching.find(contact => contact.country === 'Kenya'); assert.ok(buyer);
@@ -125,7 +148,7 @@ try {
   assert.ok((await companies()).some(contact => contact.id === buyer.id)); await stop();
   for (const name of ['config.json', 'edgeview.db', 'edgeview_db.json', 'data', 'logs', 'uploads']) assert.equal(fs.existsSync(path.join(app, name)), false);
   const result = { status: 'EXTRACTED_RUNTIME_SCOPED_PASS', commit: report.commit, build: report.build.buildId, packageSha256: report.package.sha256,
-    bundledNodeUsed: true, globalNodeOnPath: false, NODE_PATH: '', firstLaunchEmpty: true, syntheticCountryIdentityUploadExport: true,
+    bundledNodeUsed: true, runtimeDependencyRoots: Object.keys(inputs.manifest.dependencies).length, buildPackagesOmitted: true, frontendNoticesRetained: true, fiveFormats: true, staticModeDespiteHostDevFlag: true, globalNodeOnPath: false, NODE_PATH: '', firstLaunchEmpty: true, syntheticCountryIdentityUploadExport: true,
     missingProvider503: true, durableOwnerPipeClose: true, restartIdentityData: true, diagnosticPrivateMarkersAbsent: true, appRootWrites: false,
     nativeLauncher: 'NOT EXECUTED', installedActivation: 'NOT VERIFIED', cleanWindows: 'NOT VERIFIED', updatesRollback: 'NOT VERIFIED',
     realCompanyResearch: 'NOT VERIFIED BY THIS PROBE', monitoring: 'DISABLED IN PROTOTYPE', finalVerdict: 'NOT READY' };

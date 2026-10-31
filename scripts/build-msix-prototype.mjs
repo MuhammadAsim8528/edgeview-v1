@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { sourceDigest, artifactDigest, readBuildIdentity } from '../shared/build_identity.mjs';
+import { runtimePackageInputs, verifyRuntimeLock, runtimeSourceNotices, verifyRuntimeManifest } from './runtime-package-inputs.mjs';
 
 // Internal factory only. Never installs, signs, trusts a certificate or publishes.
 const factoryEnvironment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
@@ -81,7 +82,11 @@ export async function buildMsixPrototype(root) {
   try {
     // Explicit source allowlist. No source config/database/identity/log/evidence
     // directory is copied; npm lifecycle scripts and customer registry config are disabled.
-    for (const file of ['package.json', 'package-lock.json']) copyRegular(path.join(root, file), path.join(app, file));
+    const inputs = await runtimePackageInputs(root);
+    const notices = runtimeSourceNotices(root, inputs);
+    fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify(inputs.manifest, null, 2));
+    fs.writeFileSync(path.join(app, 'package-lock.json'), JSON.stringify(inputs.seedLock, null, 2));
+    fs.writeFileSync(path.join(app, 'THIRD_PARTY_NOTICES.txt'), notices.document);
     const distNames = new Set(['index.html', 'server.cjs', 'server.cjs.map', 'build-info.json', 'edgeview-mark.png', 'assets']);
     for (const name of fs.readdirSync(path.join(root, 'dist'))) {
       if (!distNames.has(name)) throw new Error('MSIX_UNREVIEWED_BUILD_OUTPUT');
@@ -98,7 +103,15 @@ export async function buildMsixPrototype(root) {
     copyRegular(path.join(root, 'public/edgeview-mark.png'), path.join(app, 'Assets/PrototypeLogo.png'));
     const npm = path.join(path.dirname(node), 'node_modules/npm/bin/npm-cli.js');
     if (!fs.existsSync(npm)) throw new Error('MSIX_FACTORY_NPM_UNAVAILABLE');
-    execute(node, [npm, ...prototypeNpmArgs(output)], app, 'dependencies');
+    const npmArgs = prototypeNpmArgs(output);
+    execute(node, [npm, 'install', '--package-lock-only', ...npmArgs.slice(1)], app, 'runtime-lock');
+    verifyRuntimeManifest(inputs, JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8')));
+    const runtimeLock = JSON.parse(fs.readFileSync(path.join(app, 'package-lock.json'), 'utf8'));
+    const runtimeLockEvidence = verifyRuntimeLock(inputs, runtimeLock);
+    execute(node, [npm, ...npmArgs], app, 'dependencies');
+    verifyRuntimeManifest(inputs, JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8')));
+    const runtimeLockSha256 = digest(path.join(app, 'package-lock.json'));
+    verifyRuntimeLock(inputs, JSON.parse(fs.readFileSync(path.join(app, 'package-lock.json'), 'utf8')));
     const compiler = path.join(windows, 'Microsoft.NET/Framework64/v4.0.30319/csc.exe');
     execute(compiler, ['/nologo', '/target:winexe', '/platform:x64', '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll',
       '/reference:System.Web.Extensions.dll', `/out:${path.join(app, 'EdgeView.exe')}`, path.join(root, 'packaging/windows/EdgeViewLauncher.cs')], root, 'launcher');
@@ -125,7 +138,7 @@ export async function buildMsixPrototype(root) {
     const name = `EdgeView-${identity.version}-${commit.slice(0, 7)}-UNSIGNED.msix`, archive = path.join(output, name);
     execute(makeappx, ['pack', '/f', mapping, '/p', archive, '/no', '/ml', '536870912'], root, 'makeappx');
     const report = { status: 'UNSIGNED_INTERNAL_NOT_RELEASE_READY', customerRuntimeReady: false, commit, build: identity,
-      manifestVersion: '0.0.0.2', runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
+      manifestVersion: '0.0.0.2', runtimeInputs: { ...runtimeLockEvidence, runtimeLockSha256, excludedBuildRoots: inputs.excludedBuildRoots, sourceLockSha256: notices.sourceLockSha256, noticesSha256: notices.noticesSha256, noticeCapture: notices.capture }, runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
       package: { name, sha256: digest(archive), files: files.length }, files,
       blockers: ['Publisher/trusted signing absent', 'Native launcher not executed by this factory', 'Installed/clean-Windows/update/rollback acceptance absent',
         'Current Node release/security assessment required', 'Runtime dependency/test/source-map minimization and full OSS/security clearance pending',
