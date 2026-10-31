@@ -1001,6 +1001,35 @@ export function listV1RunSummaries(limit = 200): V1RunSummary[] {
   return summaryCache.slice(0, Math.max(1, Math.min(100_000, limit)));
 }
 
+/** Cursor browsing is a local view of existing immutable identity headers.
+ * Never hydrate provider/page blobs or change cache-reuse policy to list history.
+ * A timestamp + ID boundary avoids offset drift when a new run arrives. */
+export function listV1RunPage(limit = 50, cursor = '') {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200 || typeof cursor !== 'string' || cursor.length > 2048) throw new Error('HISTORY_PAGE_INVALID');
+  let boundary: { started_at: string; id: string } | undefined;
+  if (cursor) {
+    try {
+      if (!/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error();
+      const bytes = Buffer.from(cursor, 'base64url');
+      if (bytes.toString('base64url') !== cursor) throw new Error();
+      const parsed = JSON.parse(bytes.toString('utf8'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length !== 2
+        || typeof parsed.started_at !== 'string' || parsed.started_at.length > 64 || !Number.isFinite(Date.parse(parsed.started_at))
+        || typeof parsed.id !== 'string' || !/^run-[a-z0-9-]{1,128}$/i.test(parsed.id)) throw new Error();
+      boundary = parsed;
+    } catch { throw new Error('HISTORY_PAGE_INVALID'); }
+  }
+  const compare = (a: { started_at: string; id: string }, b: { started_at: string; id: string }) =>
+    b.started_at.localeCompare(a.started_at) || b.id.localeCompare(a.id);
+  const ordered = [...listV1RunIdentityHeaders()].sort(compare);
+  const eligible = boundary ? ordered.filter(item => compare(item, boundary!) > 0) : ordered;
+  const runs = eligible.slice(0, limit);
+  const last = runs[runs.length - 1];
+  const next_cursor = eligible.length > limit && last
+    ? Buffer.from(JSON.stringify({ started_at: last.started_at, id: last.id })).toString('base64url') : null;
+  return { runs, next_cursor, limit };
+}
+
 export function getV1EngineDiagnostics() {
   return {
     active_runs: activeRuns.size,

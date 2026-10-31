@@ -20,6 +20,12 @@ export function validResearchSummaries(value: unknown): boolean {
   return Array.isArray(value) && value.every(item => record(item) && strings(item, ['id','company_name','country','status','started_at']));
 }
 
+export function validResearchPage(value: unknown): boolean {
+  return record(value) && validResearchSummaries(value.runs)
+    && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 200 && value.runs.length <= value.limit
+    && (value.next_cursor === null || (typeof value.next_cursor === 'string' && /^[A-Za-z0-9_-]{1,2048}$/.test(value.next_cursor)));
+}
+
 /** A bounded recent index is not authoritative proof that older runs vanished. */
 export function chooseResearchRunId(current: string, saved: string, recent: Array<{ id: string }>): string {
   return current || saved || recent[0]?.id || '';

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Database, ExternalLink, FileCode2, RefreshCw, Search } from 'lucide-react';
 import { safeFetchJson } from '../utils/safeFetch';
 import { createLatestResearchRequest } from '../utils/latestResearchRequest';
-import { chooseResearchRunId, validResearchRun, validResearchSummaries } from '../utils/researchRunValidation';
+import { chooseResearchRunId, validResearchRun, validResearchPage } from '../utils/researchRunValidation';
 
 interface Timeline { at: string; stage: string; status: string; message: string; query?: string; provider?: string; latency_ms?: number; error?: string }
 interface Result { id: string; raw_record_id: string; query: string; provider: string; rank: number; title: string; url: string; snippet: string; text?: string; markdown?: string; html?: string; links: string[]; metadata: Record<string, unknown>; search_latency_ms: number; scrape_latency_ms?: number; status: string; error?: string }
@@ -26,18 +26,26 @@ export const ResearchWorkspace: React.FC = () => {
   const [listRequest] = useState(createLatestResearchRequest);
   const [runRequest] = useState(createLatestResearchRequest);
   const [expanded, setExpanded] = useState('');
+  const [pageCursors, setPageCursors] = useState(['']);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const pageCursor = pageCursors[pageIndex];
   const load = useCallback(async () => {
     setLoading(true);
     setListError('');
-    await listRequest.run(signal => safeFetchJson<{ runs: RunSummary[] }>('/api/v1/runs?limit=1000', { signal }), ({ ok, data, error }) => {
-      if (ok && data && validResearchSummaries(data.runs)) {
+    setNextCursor(null);
+    const query = new URLSearchParams({ limit: '50' });
+    if (pageCursor) query.set('cursor', pageCursor);
+    await listRequest.run(signal => safeFetchJson<{ runs: RunSummary[]; next_cursor: string | null; limit: number }>(`/api/v1/runs?${query}`, { signal }), ({ ok, data, error }) => {
+      if (ok && data && validResearchPage(data)) {
         setRuns(data.runs);
+        setNextCursor(data.next_cursor);
         const requested = savedRunId();
         setSelectedId(current => chooseResearchRunId(current, requested, data.runs));
       } else setListError(error || 'Research history could not be loaded. Please try again.');
       setLoading(false);
     });
-  }, [listRequest]);
+  }, [listRequest, pageCursor]);
   useEffect(() => { void load(); return () => listRequest.cancel(); }, [load, listRequest]);
   useEffect(() => {
     const id = selectedId || runs[0]?.id;
@@ -59,8 +67,11 @@ export const ResearchWorkspace: React.FC = () => {
   }, [selectedId]);
   const run = loadedRun?.id === selectedId ? loadedRun : null;
   const controls = <div className="flex flex-wrap items-center gap-2">
-    {(runs.length > 0 || selectedId) && <select aria-label="Research run" className="min-w-0 flex-1 rounded border border-[#3f3f46] bg-[#222] px-3 py-2 text-xs text-white" value={selectedId} onChange={e => setSelectedId(e.target.value)}>{selectedId && !runs.some(item => item.id === selectedId) && <option value={selectedId}>Saved research selection</option>}{runs.map(item => <option key={item.id} value={item.id}>{item.company_name} · {item.country} · {item.status} · {new Date(item.started_at).toLocaleString()}</option>)}</select>}
-    <button type="button" aria-label="Refresh research" disabled={loading} onClick={() => void load()} className="rounded border border-[#444] p-2 text-[#aaa] hover:text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" /></button>
+    {(runs.length > 0 || selectedId) && <select aria-label="Research run" disabled={loading} className="min-w-0 flex-1 rounded border border-[#3f3f46] bg-[#222] px-3 py-2 text-xs text-white" value={selectedId} onChange={e => setSelectedId(e.target.value)}>{selectedId && !runs.some(item => item.id === selectedId) && <option value={selectedId}>Saved research selection</option>}{runs.map(item => <option key={item.id} value={item.id}>{item.company_name} · {item.country} · {item.status} · {new Date(item.started_at).toLocaleString()}</option>)}</select>}
+    <button type="button" disabled={loading || pageIndex === 0} onClick={() => setPageIndex(index => Math.max(0, index - 1))} className="rounded border border-[#444] px-3 py-2 text-xs text-[#aaa] hover:text-white disabled:opacity-50">Newer saved runs</button>
+    <button type="button" disabled={loading || !nextCursor} onClick={() => { if (nextCursor) { setPageCursors(current => [...current.slice(0, pageIndex + 1), nextCursor]); setPageIndex(index => index + 1); } }} className="rounded border border-[#444] px-3 py-2 text-xs text-[#aaa] hover:text-white disabled:opacity-50">Older saved runs</button>
+    <button type="button" aria-label="Refresh research" title="Reload saved history; does not call research providers" disabled={loading} onClick={() => void load()} className="rounded border border-[#444] p-2 text-[#aaa] hover:text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" /></button>
+    <p className="w-full text-xs text-[#9ca3af]">Saved evidence only · page {pageIndex + 1}. Opening or reloading history does not refresh company research.</p>
   </div>;
   const notice = listError || runError ? <div role="alert" className="rounded border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{listError || runError} <button type="button" onClick={() => void load()} className="ml-2 underline">Retry research</button></div> : null;
   if (!run) return <div className="space-y-4" aria-busy={loading || loadingRun}>{controls}{notice}<Empty text={loading || loadingRun ? 'Loading captured V1 research…' : listError || runError ? 'Research is temporarily unavailable. Your saved evidence has not been removed.' : 'No V1 run yet. Use Fetch Details on a company with a country.'} /></div>;

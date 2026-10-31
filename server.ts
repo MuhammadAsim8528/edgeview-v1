@@ -45,7 +45,7 @@ import { getBackendLockPath, getProjectRoot, getRuntimeDataRoot, getSqlitePath, 
 import { getInstallationId } from './server/install_identity';
 import { selectContactEntity } from './server/contact_projection';
 import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './server/company_identity';
-import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
+import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummaries, listV1RunPage, listV1ActivityEvents, runV1Enrichment, resetV1ProviderFailureState } from './server/v1_engine';
 import { withContactPublication, persistV1ContactOverlay, projectHistoricalContactFields, reusableContactRun, reusableEvidenceContacts, reusableEvidenceSelection, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
@@ -945,7 +945,15 @@ app.post('/api/enrich/company', async (req, res) => {
 });
 
 app.get('/api/v1/runs', (_req, res) => {
-  res.json({ success: true, runs: listV1RunSummaries(Number(_req.query.limit) || 200) });
+  try {
+    if ((_req.query.limit !== undefined && (typeof _req.query.limit !== 'string' || !/^[1-9]\d{0,2}$/.test(_req.query.limit)))
+      || (_req.query.cursor !== undefined && typeof _req.query.cursor !== 'string')) throw new Error('HISTORY_PAGE_INVALID');
+    res.json({ success: true, ...listV1RunPage(_req.query.limit === undefined ? 50 : Number(_req.query.limit), _req.query.cursor as string | undefined) });
+  } catch (error) {
+    const invalid = error instanceof Error && error.message === 'HISTORY_PAGE_INVALID';
+    res.status(invalid ? 400 : 503).json({ success: false, code: invalid ? 'HISTORY_PAGE_INVALID' : 'HISTORY_UNAVAILABLE',
+      message: invalid ? 'Choose a valid saved-history page.' : 'Saved research could not be listed. Please retry.', recoverable: true });
+  }
 });
 
 app.get('/api/v1/runs/:id', (req, res) => {

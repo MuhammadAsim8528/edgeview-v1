@@ -6,15 +6,29 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { unusedTestPort } from '../../scripts/test-server-port.mjs';
 
-type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any> };
-export const test = base.extend<{ runtime: Runtime }>({
-  runtime: [async ({}, use) => {
+type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any>; outboundAttempts: () => number };
+export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number }>({
+  savedHistoryCount: [0, { option: true }],
+  runtime: [async ({ savedHistoryCount }, use) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-browser-e2e-'));
     const port = await unusedTestPort();
     const baseURL = `http://127.0.0.1:${port}`;
     const json = path.join(root, 'rows.json');
+    const outboundAudit = path.join(root, 'outbound-attempts.txt');
     fs.writeFileSync(json, '[]'); // Existing empty authority suppresses demo reseeding.
     fs.writeFileSync(path.join(root, 'config.json'), '{}');
+    if (!Number.isInteger(savedHistoryCount) || savedHistoryCount < 0 || savedHistoryCount > 1100) throw new Error('Synthetic history count out of bounds');
+    if (savedHistoryCount) {
+      fs.mkdirSync(path.join(root, 'runs'));
+      for (let i = 0; i < savedHistoryCount; i++) {
+        const id = `run-history-${String(i).padStart(4, '0')}`;
+        fs.writeFileSync(path.join(root, 'runs', `${id}.json`), JSON.stringify({
+          id, company_name: `Synthetic History Buyer ${i}`, country: i % 2 ? 'Sudan' : 'South Sudan',
+          status: 'COMPLETED', started_at: '2026-10-01T00:00:00.000Z', completed_at: '2026-10-01T00:00:01.000Z',
+          queries: [], results: [], raw_records: [], timeline: [], limits: { max_queries: 4, max_results_per_query: 8, max_scrapes: 8, timeout_ms: 120000 },
+        }));
+      }
+    }
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
     let child: ChildProcess | undefined;
     let stderr = '';
@@ -30,7 +44,7 @@ export const test = base.extend<{ runtime: Runtime }>({
       child = spawn(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), path.resolve('dist/server.cjs')], {
         cwd: process.cwd(), stdio: ['ignore', 'ignore', 'pipe'], env: { ...inherited, NODE_ENV: 'test', PORT: String(port),
           EDGEVIEW_TEST_MODE: '1', EDGEVIEW_TEST_DB_DIR: root, EDGEVIEW_JSON_DB: json,
-          EDGEVIEW_SQLITE_DB: path.join(root, 'operational.db'), EDGEVIEW_CONFIG: path.join(root, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(root, 'runs') },
+          EDGEVIEW_SQLITE_DB: path.join(root, 'operational.db'), EDGEVIEW_CONFIG: path.join(root, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(root, 'runs'), EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit },
       });
       child.stderr?.on('data', bytes => { stderr = (stderr + String(bytes)).slice(-4000); });
       for (const deadline = Date.now() + 45_000; Date.now() < deadline;) {
@@ -45,7 +59,7 @@ export const test = base.extend<{ runtime: Runtime }>({
         child.kill(); await exited;
       }
     };
-    try { await start(); await use({ baseURL, identity, restart: async () => { await stop(); await start(); } }); }
+    try { await start(); await use({ baseURL, identity, outboundAttempts: () => fs.existsSync(outboundAudit) ? fs.readFileSync(outboundAudit, 'utf8').trim().split('\n').filter(Boolean).length : 0, restart: async () => { await stop(); await start(); } }); }
     finally { await stop(); fs.rmSync(root, { recursive: true, force: true }); }
   }, { timeout: 120_000 }],
   baseURL: async ({ runtime }, use) => { await use(runtime.baseURL); },
