@@ -6,9 +6,12 @@ Current active task: Finish runtime-only dependency/payload packaging from the v
 
 ## Full owner acceptance checklist
 
-This is the full33-item acceptance view, not a replacement for the goal/evidence records below. A verified sub-fix does not close a broad item. [ ] not started/awaiting prerequisites, [~] partial/in progress, [x] fully verified for this acceptance item, [!] external blocker. The short board groups these requirements; new directive items are separately tracked there until reconciled. Detailed commits/tests/limitations remain in dated checkpoints and the capability matrix.
+This is the full owner acceptance view, not a replacement for the goal/evidence records below. A verified sub-fix does not close a broad item. [ ] not started/awaiting prerequisites, [~] partial/in progress, [x] fully verified for this acceptance item, [!] external blocker. The short board groups these requirements; new directive items are separately tracked there until reconciled. Detailed commits/tests/limitations remain in dated checkpoints and the capability matrix.
 
 ### Research and data accuracy
+
+- [ ] CC05: Finish conservative evidence-backed entity aliases, backend admission, raw-name provenance, country isolation, uniqueness/concurrency and restart-safe migration; reuse current identity mechanisms.
+- [~] HIST01: Complete local research-history navigation and explicit valid reuse/live refresh, bounded pagination and freshness/version/provider/objective semantics on existing immutable records.
 
 - [~] CC01: Complete company-country isolation across extraction, cache, history, UI and exports.
 - [~] CC02: Finish parent, subsidiary, distributor and field-level source attribution.
@@ -81,6 +84,18 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [ ] PG01.PROMOTION: select and test promotion through the approved Microsoft distribution route without rebuilding accepted bytes. No replacement custom updater/publisher added.
 
 ### P1 HIGH-RISK
+
+- [ ] CC05 / new owner add-on: conservative evidence-backed canonical aliases; formatting similarity alone never authorizes a legal-entity merge.
+  - [ ] CC05.ARCH: inspect active identity/contact/index/evidence/storage/migration paths; propose smallest consolidated backend design, files/schema changes and invariants before feature edits.
+  - [ ] CC05.ADMISSION: EXACT_SAFE/PROBABLE_ALIAS/AMBIGUOUS/DISTINCT decisions backed by evidence; same-country boundary, parent/distributor distinctions, no fuzzy-only/suffix-only merge.
+  - [ ] CC05.DURABILITY: preserve raw source names/provenance and immutable evidence; controlled aliases survive restart, race-safe uniqueness and idempotent/recoverable migration/backfill.
+  - [ ] CC05.REGRESSION: all13 requested variant/country/collision/domain/typo/generic/ambiguity/restart/provenance cases, plus existing country and import/export regressions.
+- [~] HIST01 / new owner add-on: existing immutable run store/read-only workspace and exact-country retained-run reuse are baseline, not completed History/reuse semantics.
+  - [ ] HIST01.ARCH: inspect run/evidence/index/overlays/jobs/reports/cache; reference existing records instead of duplicating giant JSON payloads or adding a competing persistence authority.
+  - [ ] HIST01.VIEW: company/country/time/operation/state/provider/result summary and cached/reused/live provenance; bounded pagination/retention with old history still discoverable.
+  - [ ] HIST01.POLICY: explicit freshness, schema/result/pipeline compatibility, provider/objective/type/quality/partial/failed semantics; no indefinite silent fresh-cache claim.
+  - [ ] HIST01.ACTIONS: distinct Open evidence/history, Use existing valid result, Refresh live; history opening has zero provider calls, explicit force-refresh creates a new research operation.
+  - [ ] HIST01.SAFETY: durable-before-publish, concurrency, restart/recovery, existing security/privacy and country boundaries; no raw history/identity facts in telemetry.
 
 - [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
   - [x] JOB01.PUBLICATION: late same-contact publication loss reproduced and fixed across interactive/background batch; full V1/typecheck/lint/build/release, focused HTTP/restart and no-serialization mutant passed. Final rendered/real-provider acceptance is separate.
@@ -2981,3 +2996,20 @@ Committed/pushed9c2e4318bdad06bb81dffb5d1ce37ff49423781f rebuilt; isolated devel
 Next runtime-file audit must trace actual supported controls to needed resources before activating a minimal payload. Read-only observation: standalone scripts/doctor.mjs imports shared build/runtime helpers, checks source freshness and has a fixed3901 health URL; no runDoctor reference was found in the inspected backend modules. Do not copy/wrap that CLI as an alleged working customer Doctor control without implementing/verifying the actual boundary and respecting owned runtime ports. This is an existing DIAG01/DIST01 acceptance dependency, not a newly claimed product defect. Preserve source-locked frontend notices when changing the install manifest.
 
 Current tree was checked for unexpected writer changes; only this unit's declared files changed. No historical tree, live3901, customer data, provider configuration, Windows security setting or public release modified. Automatic-review-blocked failed-scratch cleanup remains unapplied; no deletion workaround. Broad readiness remains NOT READY.
+
+
+## 2026-10-31 — additional entity-alias / local-history assignment reconciled
+
+The supplied add-on extends CC01/CC02/DATA01/JOB01/QA01 through CC05 and HIST01. It does not replace the remaining release gates. Finish the current narrowly authorized packaging unit, then perform the required architecture/design inspection before identity/history feature edits. No Python application/sqlite3 implementation, duplicate identity engine or giant-JSON history table is authorized. Existing no-main-merge/no-live3901/no-customer-data/no-publication boundaries remain.
+
+Initial read-only facts: server/company_identity.ts normalizes Unicode/case/formatting punctuation while preserving every word, suffix and spelling; canonicalEntityIdentityKey adds normalized country when available. server/db.ts currently derives contact/source IDs from an entity-key hash. These are existing grouping/cache mechanisms, not evidence of a legal-entity alias registry. Do not weaken them by stripping suffixes or treating unknown country/global name as unique. No AUTOCT_INCREMENT or normalized_name occurrence found in the inspected active server/scripts search.
+
+server/job_manager.ts reusableContactRun checks referenced retained run, COMPLETED/PARTIAL status and exact company+country. The inspected predicate does not gate age/objective/provider policy. Existing country-policy validation and immutable loader/schema behavior still need whole-path inspection before defining new reuse semantics. src/components/ResearchWorkspace.tsx already opens saved run lists/payloads via local API; its list uses limit1000. Do not rebuild a second History store or confuse refreshing this saved list with live research. Existing per-contact publication ownership and stopped-job drain fixes must be retained.
+
+CC05 acceptance fixtures explicitly required: Global Pharma versus Global Pharma Ltd same country; case/punctuation; Pvt/Limited/Ltd variants; same name in different countries; Sudan versus South Sudan; similar distinct businesses; same domain/slightly different name; typo with corroboration; typo without corroboration; shared generic sector tokens; ambiguous stays separate; verified alias persists after restart; original raw names/provenance unchanged. Fuzzy algorithms are evaluation only until needed; similarity alone must never admit a merge. Backend owns decisions; no globally unique stripped-name key or name-only new entity ID.
+
+HIST01 acceptance explicitly requires useful company/country/time/operation/state/provider/cache-mode/summary, reopen evidence, valid existing reuse and explicit live refresh. Old history remains visible when stale. Reuse must account for freshness, requested objective/profile/result type, canonical identity, schema/pipeline version, provider context, quality and partial/failed states. Reconcile the earlier quota-saving default by making stale/invalid reuse honest and live spending explicit, not silently making every history visit call providers or deleting old evidence. Reopen-history zero-provider and force-refresh-new-operation must be observed, including restart/concurrency.
+
+Prior AI suggestion review scope: the attached document supplies a defect checklist, not the complete original Python example. Do not claim a line audit of unseen code. Reject AUTOCT_INCREMENT as invalid proposed syntax (not a found EdgeView migration bug), Python sqlite3 as a stack mismatch, global normalized-name/country-blind matching, name-only IDs and aggressive suffix stripping as unsafe identity assumptions. Preserve the current conservative baseline. Investigate rather than assume implemented: true evidence-backed alias model; any actual need for Levenshtein/Jaro/token candidates; stale-cache/TTL semantics; schema/result and provider/objective-aware keys; concurrent uniqueness/integrity; idempotent migration/backfill; history pagination/retention; reference-only storage and adversarial tests. No listed sample defect is automatically attributed to current EdgeView.
+
+Feature implementation state: planned/architecture inspection partial, not verified complete. Files reached read-only: company_identity.ts, db.ts, v1_identity.ts, job_manager.ts, ResearchWorkspace.tsx; next inspect sqlite schema/init/migrations, immutable run/index contracts, API/frontend event flow and existing identity/cache/history regressions. No identity schema change or backfill chosen or applied yet. Acceptance is correctness over deduplication, with country/isolation/raw-provenance/security/durability/recovery preserved.

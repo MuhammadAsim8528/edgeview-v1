@@ -4,7 +4,12 @@ import {progressModel,progressHtml,safeStatusText} from './render-progress-works
 
 const ledger=fs.readFileSync('docs/OUTSTANDING_WORK.md','utf8');
 const model=progressModel(ledger,{version:'1.0.0-rc.2',branch:'integration/test',commit:'a'.repeat(40),dirty:true,refreshed:'31/10/2026, 12:00:00'});
-assert.equal(model.sections.length,9);assert.equal(model.acceptance.length,33,'the full original acceptance checklist must remain visible');
+assert.equal(model.sections.length,9);
+const acceptanceSource=ledger.match(/## Full owner acceptance checklist\r?\n([\s\S]*?)(?=\n## )/)[1];
+const expectedCount=(acceptanceSource.match(/^- \[[ x~!]\] /gm)||[]).length;
+assert.ok(expectedCount>=33,'earlier acceptance scope must remain represented');
+assert.equal(model.acceptance.length,expectedCount,'derive the complete extended checklist from the ledger');
+for(const id of ['CC05','HIST01'])assert.ok(model.acceptance.some(item=>item.text.startsWith(id+':')),'new requirement must be visible: '+id);
 assert.equal(model.verdict,'NOT READY');
 const total=model.sections.reduce((count,section)=>count+section.items.length,0);
 assert.equal(Object.values(model.counts).reduce((sum,count)=>sum+count,0),total);
@@ -15,6 +20,9 @@ const html=progressHtml(model);
 assert.ok(!html.includes('Latest completed work and checks'),'do not copy unrestricted historical notes/raw logs');
 assert.ok(html.includes("connect-src 'none'"));assert.ok(!html.includes('http://127.0.0.1:3901'));
 assert.throws(()=>progressModel(ledger.replace('### P0 BLOCKERS','### MISSING BLOCKERS'),{}),/all nine/,'never silently display a partial queue');
-const malicious=progressModel(ledger.replace('SEC01 / directiveA:','<img src=x onerror=alert(1)> SEC01 / directiveA:'),model);
+const injected=ledger.replace(/SEC01 \/ directiveA/,'<img src=x onerror=alert(1)> SEC01 / directiveA');
+assert.notEqual(injected,ledger,'injection fixture must actually reach an existing board item');
+const malicious=progressModel(injected,model);
 assert.ok(!progressHtml(malicious).includes('<img src=x'),'ledger content is inert text');
-console.log(`PASS read-only dashboard projection:9queues/33acceptance items/${total}board entries, status counts, private-pattern omission, HTML escaping and missing-section refusal`);
+assert.ok(progressHtml(malicious).includes('&lt;img'),'injected markup is shown as escaped text');
+console.log(`PASS read-only dashboard projection:9queues/${model.acceptance.length}acceptance items/${total}board entries, status counts, private-pattern omission, HTML escaping and missing-section refusal`);
