@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Verify the exact saved export-hardening package, then continue authoritative file/derived export paths and the remaining known customer-readiness queue. Owner-away boundaries and account-dependent gates remain unchanged.
+Current active task: Continue stored-file/derived export authority and assess the fresh dependency audit against supported paths; preserve the verified contact/HTML export and publication-safety fixes. Owner-away boundaries, full backlog and external release gates remain unchanged.
 
 ## Full owner acceptance checklist
 
@@ -90,7 +90,10 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [x] EXP01.CONTACT_FORMATS: existing actual CSV/XLSX/DOCX/PDF/ZIP renderer contract passes; final production build and scoped browser/API checks pass. This is not final downloaded-document visual acceptance.
   - [x] EXP01.HTML_SELECTION: actual endpoint previously widened malformed string/null/object IDs to all contacts; now rejects malformed/stale/mixed/duplicate IDs400 INVALID_EXPORT_REQUEST. Existing explicit omitted-ID all export and empty-array none semantics preserved; hostile markup, multilingual data, field scope and failure-redaction checks pass.
   - [ ] EXP01.OTHER_PATHS: finish authoritative scoped filtered-file/derived exports and quick full-file callers; preserve legitimate explicit all-record workflows without silent widening.
-- [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. No credential/customer material in source or distribution.
+- [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. Fresh ed69ff8 production registry audit reports10 moderate/0 high/0 critical findings; supported-path reachability and compatible remediation remain open. Do not reuse older zero-count results as current acceptance.
+  - [x] SEC02.HISTORY_PATTERN: current bounded all-ref scan PASS306 commits/603 historical paths,0 prohibited paths/0 known credential-pattern file matches. Not an entropy scan, ignored-file audit or proof exposed credentials are safe.
+  - [~] SEC02.DEPENDENCIES: fresh npm audit --omit=dev --json completed with10 moderate package entries involving glob/minimatch chains in Sentry/ExcelJS; assess supported-path reachability and compatible fixes. No npm audit fix --force or package downgrade applied.
+  - [ ] SEC02.FINAL_SUPPLY_CHAIN: current complete dependency/license/SBOM/staged-secret evidence and hosted exact-source checks after final source freeze.
 
 ### P2 MEDIUM-RISK
 
@@ -2708,3 +2711,11 @@ Actual endpoint regression RED: company_ids string yielded200/all contacts. Adde
 Executed export_blocks_endpoint.test.ts against its owned isolated actual server: PASS strict selection plus existing hostile markup, mixed-case/dangerous links, control characters, multilingual fields, complete local facts, country separation, headers and sanitized unexpected failure. Typecheck/lint, V1 suite, production build and release smoke PASS. Actual downloaded-document visual behavior remains NOT VERIFIED.
 
 Exact previousad578ae build/package check passed149 files, launch/packaged backup/privacy checks. Build954fabadd9daed6917944df68abd6d9436b60bb49823b3afcd05050431b40382; disposable developer ZIP d5446f4a01c7a5e7bcd84d3a5348c35c011a75db409e29c81244eaf5838e15de removed. Still not customer-runtime/MSIX/clean-Windows acceptance. Next trace: FileViewer full export already uses stored sourceFileId; App header quick export and store shortcut still fetch all rows into browser and submit generic rows, and filtered file/derived exports need scoped authority. Do not replace working report semantics blindly.
+
+## Saved checkpoint and fresh supply-chain observations — 2026-10-31
+
+Current saved implementationed69ff898720998afff737e4e8f307c77a1757d7 was pushed privately, rebuilt, and checked with node scripts/check-package-isolated.mjs: PASS149 manifest files, unchanged launch, packaged backup and privacy file check; build5c1c6398ca344a43faf45ac0883f67bb4a4a12e5676336232a21f02ae5b39e13, disposable ZIP SHA256c1bd25ee50b3fe3b7eabf74c64f5552d26d7c2cd796fd1d487d863e54362f143. Checker removed its output. Still117 development files/installed Node/npm required; customerRuntimeReady=false. No customer installer, live runtime or original checkout was changed.
+
+Fresh node scripts/audit-git-secrets.mjs: PASS306 commits/603 historical paths/0 prohibited paths/0 known credential-pattern file matches. Exact tool limits: known text patterns only, not entropy/ignored files/pre-baseline history. This cannot reverse previous credential exposure.
+
+Fresh npm audit --omit=dev --json returned nonzero with a valid advisory report:10 moderate,0 high,0 critical. Reported package entries are transitive chains involving glob/minimatch, including @sentry/node11.9.0 -> @sentry/bundler-plugins11.9.0 -> glob13.0.6/minimatch10.2.6 and exceljs4.4.0 -> archiver/unzipper -> glob7.2.3/minimatch3.1.5 plus readdir-glob/minimatch5.1.9. Registry lists GHSA-3g3m-2fjr-6pw4 (glob abort cancellation) and GHSA-g3hv-75wg-m249 (minimatch globparts amplification). These are observed package-advisory results, not yet demonstrated EdgeView runtime exploits. Reachability/compatible remediation must be assessed; suggested major downgrade/force fixes were not applied. Raw reports remain local ignored test cache, no credentials printed. Older audit artifacts do not supersede this current result.
