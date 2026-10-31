@@ -84,7 +84,11 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 - [~] JOB01 / directiveN: saved-only reuse and failed-overlay restart boundary verified; same-company interactive/batch ordering, cancel/stop/retry and crash/restart acceptance still require direct evidence.
 - [ ] API01 / directiveL: verify supported endpoint input/conflict/provider/storage/internal status taxonomy; retain redaction and honest recovery UI.
-- [~] EXP01 / directiveM: verify server-authoritative export selection by IDs/filters/options; stale/mixed IDs must not widen to every record and browser-supplied rows must not become trusted business authority.
+- [~] EXP01 / directiveM: contact-download authority fixed through current stored contacts; wider file/derived/HTML endpoints still require their own acceptance.
+  - [x] EXP01.CONTACT_FACTS: actual HTTP regression reproduced forged browser company/email in download; contact requests now resolve scoped IDs to current stored records and ignore client facts, including selected object values.
+  - [x] EXP01.CONTACT_SELECTION: actual HTTP rejects empty, missing, mixed stale, duplicate and out-of-scope IDs with400 INVALID_EXPORT_REQUEST; valid selected object IDs yield only the stored selected contact. Existing rendered selection/export workflow passes.
+  - [x] EXP01.CONTACT_FORMATS: existing actual CSV/XLSX/DOCX/PDF/ZIP renderer contract passes; final production build and scoped browser/API checks pass. This is not final downloaded-document visual acceptance.
+  - [ ] EXP01.OTHER_PATHS: finish authoritative scoped filtered-file/derived exports and strict HTML company_ids validation; preserve legitimate explicit all-record workflows without silent widening.
 - [~] SEC02: final secret/history/package/dependency/SBOM checks; previously exposed provider keys still require owner rotation. No credential/customer material in source or distribution.
 
 ### P2 MEDIUM-RISK
@@ -2685,3 +2689,9 @@ Previous clean0178902 exact-source rebuild/isolated package passed149 files, lau
 ## Release publication safety — 2026-10-31
 
 Confirmed current CI automatically ran a write-permission gh release create job for every v-prefixed tag after4verification jobs. Its artifact is explicitly the Node/npm-dependent developer ZIP, not a verified customer package; no evidence/owner gate existed. Removed only that publisher from ci.yml, preserving every verification/artifact-upload job and triggers. Locally parsed all3 workflows with PyYAML and asserted read-only contents permissions/no release-create step and the exact unchanged verification job set. YAML and whitespace checks passed; hosted execution still blocked by account billing, no tag/release created. Future authorized publication must be implemented against accepted customer artifact lineage and actual owner approval; this safety removal is not completed Store/update/release acceptance.
+
+## Contact export authority — 2026-10-31
+
+Reproduced against actual isolated compiled Express endpoint: a real stored contact ID with browser-forged company name/country/email produced a forged download. Added resolveStoredContactExport at the existing route boundary, retaining current selection UI and document generation. Supplied records carry IDs only for scope; facts come exclusively from the contact map. Selected object values cannot override authority. Missing/empty/duplicate/stale/mixed/out-of-scope IDs reject400 with structured INVALID_EXPORT_REQUEST. No global-record fallback is used.
+
+Executed: typecheck/lint, E2E typecheck, production build, V1 suite and release smoke PASS; actual contact-export-authority HTTP test plus rendered contact-export workflow PASS; existing export_selection_validation and contact_directory_export renderer contract PASS. Added empty-selection guard then rebuilt/reran both affected browser/API tests successfully. Synthetic owned data/config, no provider requests, real customer data or live runtime touched. Other export datasets and HTML ID validation remain explicit EXP01 follow-up, not claimed fixed.

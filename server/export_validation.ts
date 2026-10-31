@@ -3,6 +3,33 @@ export class ExportValidationError extends Error {
 }
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
+/** Browser records identify a scoped selection; their facts are never authority. */
+export function resolveStoredContactExport(input: unknown, contacts: Array<{ id: string }>) {
+  validateExportRequest(input);
+  const payload = input as Record<string, any>;
+  if (payload.dataset !== 'contacts') throw new ExportValidationError('Stored-contact export requires the contacts dataset.');
+  if (!payload.records.length) throw new ExportValidationError('Select stored contacts before exporting.');
+  const authoritative = new Map(contacts.map(contact => [contact.id, contact]));
+  const seen = new Set<string>();
+  const records = payload.records.map((candidate: Record<string, unknown>) => {
+    const id = candidate.id;
+    if (typeof id !== 'string' || !id.trim() || id.length > 200 || seen.has(id) || !authoritative.has(id)) {
+      throw new ExportValidationError('Contact selection is invalid or no longer available. Refresh before exporting.');
+    }
+    seen.add(id);
+    return authoritative.get(id)!;
+  });
+  let selectedRows = payload.selectedRows;
+  if (selectedRows !== undefined) {
+    if (!Array.isArray(selectedRows)) throw new ExportValidationError('Export selection must be an array.');
+    selectedRows = selectedRows.map(item => typeof item === 'string' ? item : record(item) ? item.id : undefined);
+    if (selectedRows.some(id => typeof id !== 'string' || !seen.has(id)) || new Set(selectedRows).size !== selectedRows.length) {
+      throw new ExportValidationError('Contact selection is invalid or no longer available. Refresh before exporting.');
+    }
+  }
+  return { ...payload, records, selectedRows };
+}
+
 /** Full-file export takes its rows exclusively from the authoritative store. */
 export function resolveStoredFileExport(input: unknown, rows: any[]) {
   if (!record(input)) throw new ExportValidationError('Export payload must be an object.');
