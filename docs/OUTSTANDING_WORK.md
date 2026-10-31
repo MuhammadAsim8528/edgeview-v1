@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Complete exact-commit packaging evidence for the hardened provider transport, then correct confirmed failed-result feedback and directory refresh. Final security, company truthsets and customer-release acceptance remain open.
+Current active task: Preserve the verified provider transport and customer-feedback/directory fixes; finish exact-source verification and continue the remaining known customer-readiness queue. Owner is away; no account, signing, spending, publication or live-runtime changes.
 
 ## Full owner acceptance checklist
 
@@ -91,7 +91,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 ### CUSTOMER EXPERIENCE
 
 - [x] UX02 / directiveJ: actual isolated rendered browser reproduces FAILED green-toast bug before fix, then verifies red FAILED, blue PARTIAL/NOT_FOUND, green COMPLETED and amber unknown feedback after correction. Production UI/store are real; endpoint outcomes synthetic. Broader real-provider workflows remain QA01/CORE01.
-- [ ] UX03 / directiveK: reproduce/reject importer-directory stale cache after successful contact mutation; add focused regression if needed.
+- [x] UX03 / directiveK: reproduced stale directory after successful contact refresh in isolated rendered browser; corrected derived-view invalidation, obsolete-request cancellation and15s bound. Browser verifies current office replaces old,503 ends with retry UI, retry recovers, and adjacent contact-export selection remains correct. Wider customer-data accuracy remains QA01/CC01.
 - [ ] UX04 / directiveH,I: trace purported dead sent-status route and pseudo-confidence/objective code; remove only if dead/unsupported, never revive outreach or expose invented confidence.
 - [~] QA01/UX01 / directive7,8: each supported control needs expected action/code path/success/failure/executed evidence. Final live/manual QA stays last/deferred; isolated rendered regressions continue. Broader accessibility/offline/empty/error acceptance remains open.
 
@@ -2663,3 +2663,11 @@ Commit8dfa90806bdb0b51ac18b61e617095414c4c576c was pushed to the private integra
 Actual isolated Playwright browser reproduced FAILED research feedback using green success styling after an HTTP200 structured captured run. Synthetic endpoint interception intentionally controls outcomes while the rendered production UI/store/toast are real; this is not real-provider accuracy acceptance. Correcting outcome mapping, then checking FAILED/PARTIAL/COMPLETED/unknown controls before marking UX02 verified.
 
 Research feedback acceptance: Playwright research-feedback.spec.ts passed with5 controlled outcomes, visible wording/color and re-enabled action assertions. Inspected rendered screenshot personally. Typecheck, lint, E2E typecheck, production build and release smoke passed. These are isolated customer-feedback checks, not final live/manual QA, provider accuracy or clean-Windows acceptance. No unrelated runtime/data was touched.
+
+## Directory refresh checkpoint — 2026-10-31
+
+Before: browser revisiting the importer directory after controlled enrichment retained the old office snapshot. The focused browser regression failed on the missing new office, after test setup selectors were corrected. After: contact changes/view re-entry request the current derived projection; cleanup aborts obsolete requests, requests are bounded at15s, failed loads retain the existing visible Retry path. No persistence authority changed.
+
+Executed successfully: typecheck; lint; full V1 suite; E2E typecheck; production build; release smoke; Playwright research-feedback, directory-refresh and contact-export. Controlled directory503 visibly exits loading and Retry succeeds. Synthetic endpoint outcomes test production rendered UI, not real enrichment truth or final live/manual QA. Forced out-of-order response and actual15s stall cases are not separately exercised.
+
+Owner-away continuation: recurring thread follow-up created to continue approved local engineering every30minutes when available. It preserves this ledger, narrow commits, external blocker honesty and the stop-before-publication boundary; no owner-dependent account/credential/signing action is delegated.

@@ -90,6 +90,7 @@ export const Contacts: React.FC<ContactsProps> = ({
   const [viewMode, setViewMode] = useState<'table' | 'directory'>(() => localStorage.getItem('edgeview_contacts_view') === 'directory' ? 'directory' : 'table');
   const [directoryData, setDirectoryData] = useState<IntlDirectory | null>(null);
   const [directoryLoading, setDirectoryLoading] = useState<boolean>(false);
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [summaryData, setSummaryData] = useState({ total_companies: 0, researched_companies: 0, contacts_found: 0, unresolved_after_research: 0, not_researched: 0, excluded_exporters: 0, research_scope: 0, source_records: 0 });
   const loadSummary = async () => {
     try {
@@ -211,28 +212,31 @@ export const Contacts: React.FC<ContactsProps> = ({
     setIsBatchModalOpen(true);
   };
 
-  const loadDirectory = async () => {
-    if (directoryData) return;
-    setDirectoryLoading(true);
-    try {
-      const { ok, data } = await safeFetchJson<IntlDirectory>('/api/international-importer-directory');
-      if (ok && data) {
-        setDirectoryData(data);
-      }
-    } catch (err) {
-      console.error('Failed to load international importer directory:', err);
-    } finally {
-      setDirectoryLoading(false);
-    }
-  };
+  const loadDirectory = () => setDirectoryRevision(revision => revision + 1);
 
   useEffect(() => {
-    if (viewMode === 'directory') void loadDirectory();
-  }, []);
+    // A contact refresh invalidates this derived view. Never let an older request
+    // republish its snapshot after a mutation, view change or unmount.
+    setDirectoryData(null);
+    if (viewMode !== 'directory') return;
+    const controller = new AbortController();
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    setDirectoryLoading(true);
+    void (async () => {
+      try {
+        const { ok, data } = await safeFetchJson<IntlDirectory>('/api/international-importer-directory', { signal: controller.signal });
+        if (active && ok && data) setDirectoryData(data);
+      } finally {
+        clearTimeout(timeout);
+        if (active) setDirectoryLoading(false);
+      }
+    })();
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
+  }, [contacts, viewMode, directoryRevision]);
 
   const handleViewModeToggle = (mode: 'table' | 'directory') => {
     setViewMode(mode);
-    if (mode === 'directory') loadDirectory();
   };
 
   return (
