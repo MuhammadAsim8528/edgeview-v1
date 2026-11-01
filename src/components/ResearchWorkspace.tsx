@@ -7,8 +7,31 @@ import { chooseResearchRunId, validResearchRun, validResearchPage } from '../uti
 interface Timeline { at: string; stage: string; status: string; message: string; query?: string; provider?: string; latency_ms?: number; error?: string }
 interface Result { id: string; raw_record_id: string; query: string; provider: string; rank: number; title: string; url: string; snippet: string; text?: string; markdown?: string; html?: string; links: string[]; metadata: Record<string, unknown>; search_latency_ms: number; scrape_latency_ms?: number; status: string; error?: string }
 interface RawRecord { id: string; kind: string; provider: string; request: Record<string, unknown>; response?: unknown; failure?: { message: string; status?: number }; latency_ms: number; sha256: string }
-interface Run { id: string; company_name: string; country: string; status: string; started_at: string; queries: string[]; results: Result[]; raw_records: RawRecord[]; timeline: Timeline[] }
+interface Run { id: string; company_name: string; country: string; status: string; started_at: string; completed_at?: string; research_context?: unknown; queries: string[]; results: Result[]; raw_records: RawRecord[]; timeline: Timeline[] }
 interface RunSummary { id: string; company_name: string; country: string; status: string; started_at: string; query_count: number; result_count: number; raw_record_count: number; failure_count: number }
+
+/** A view of the selected immutable capture, never current provider settings or
+ * a claim that reopening history performed a fresh research operation. */
+export const ResearchCaptureDetails: React.FC<{ run: Pick<Run, 'started_at' | 'completed_at' | 'research_context'> & { raw_records: Array<{ provider: string }> } }> = ({ run }) => {
+  const context = run.research_context && typeof run.research_context === 'object'
+    ? run.research_context as Record<string, unknown> : null;
+  const knownContext = context?.format === 1 && context.objective === 'company-contact-research'
+    && (context.profile === 'interactive' || context.profile === 'bulk');
+  const labels: Record<string, string> = { serper: 'Serper', 'serper-resolve': 'Serper', hunter: 'Hunter', groq: 'Groq', nvidia: 'NVIDIA',
+    'direct-http': 'Official/public HTTP', tavily: 'Tavily', exa: 'Exa', linkup: 'Linkup', firecrawl: 'Firecrawl', apify: 'Apify' };
+  const providers = [...new Set(run.raw_records.map(record => {
+    const key = record.provider.replace(/-extraction$/, '');
+    return Object.hasOwn(labels, key) ? labels[key] : 'Other recorded provider';
+  }))].sort();
+  const timestamp = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value))
+    ? <time dateTime={value}>{new Date(value).toLocaleString()}</time> : 'Not recorded';
+  return <section aria-label="Saved capture details" className="mt-3 space-y-1 text-xs text-[#9ca3af]">
+    <p>Operation: {knownContext ? 'Company contact research' : 'Not recorded'} · Mode: {knownContext ? context.profile === 'bulk' ? 'Bulk' : 'Interactive' : 'Not recorded'}</p>
+    <p>Started: {timestamp(run.started_at)} · Completed: {timestamp(run.completed_at)}</p>
+    <p>Providers recorded: {providers.length ? providers.join(', ') : 'No provider attempts recorded'}</p>
+    <p>Reopened from local history; not checked live. Recorded attempts may include failures. Use a company’s research controls to request saved-result reuse or new live research.</p>
+  </section>;
+};
 
 function savedRunId(): string {
   try { return localStorage.getItem('edgeview_v1_run_id') || sessionStorage.getItem('edgeview_v1_run_id') || ''; }
@@ -81,6 +104,7 @@ export const ResearchWorkspace: React.FC = () => {
     {(loading || loadingRun) && <p role="status" className="text-sm text-[#9ca3af]">Refreshing saved research…</p>}
     <header className="rounded-xl border border-[#333] bg-[#171717] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-[11px] uppercase tracking-[0.22em] text-emerald-400">EdgeView V1 · Lossless Retrieval</div><h2 className="mt-1 text-xl font-semibold text-white">{run.company_name}</h2><p className="text-sm text-[#9ca3af]">{run.country} · {run.id}</p></div><Badge status={run.status} /></div>
+      <ResearchCaptureDetails run={run} />
       <div className="mt-4 grid gap-2 sm:grid-cols-4"><Metric label="Queries" value={run.queries.length} /><Metric label="Results" value={run.results.length} /><Metric label="Raw records" value={run.raw_records.length} /><Metric label="Failures retained" value={failures} /></div>
     </header>
     <Panel icon={<Search className="h-4 w-4" />} title="Identity-anchored queries">{run.queries.map((query, i) => <div key={query} className="rounded border border-[#333] bg-[#202020] p-3 text-xs text-[#e4e4e7]"><span className="mr-2 font-mono text-emerald-400">{i + 1}</span>{query}</div>)}</Panel>

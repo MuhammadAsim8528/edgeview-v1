@@ -2,7 +2,7 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: finish EXP01 export acceptance and the controlled desktop development-runtime update, then continue HIST01/CC05 and the remaining supported-path queue. Permanent source is now the original Pharma-AI checkout on development/edgeview-v1; the prior integration checkout is reference-only. Native/install/update/clean-Windows, real-company and owner-review gates remain open.
+Current active task: HIST01 selected-capture metadata and regression acceptance while the controlled desktop update awaits a confirmed normal stop. Continue EXP01 acceptance, HIST01/CC05 and the remaining supported-path queue afterward. Permanent source is the original Pharma-AI checkout on development/edgeview-v1; the prior integration checkout is reference-only. Native/install/update/clean-Windows, real-company and owner-review gates remain open.
 
 ### November1 source ownership and desktop handoff checkpoint
 
@@ -115,6 +115,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [~] HIST01 / new owner add-on: existing immutable run store/read-only workspace and exact-country retained-run reuse are baseline, not completed History/reuse semantics.
   - [ ] HIST01.ARCH: inspect run/evidence/index/overlays/jobs/reports/cache; reference existing records instead of duplicating giant JSON payloads or adding a competing persistence authority.
   - [ ] HIST01.VIEW: company/country/time/operation/state/provider/result summary and cached/reused/live provenance; bounded pagination/retention with old history still discoverable.
+  - [~] HIST01.CAPTURE_DETAILS: selected immutable-run operation/profile/start/end/recorded-provider summary; legacy fields stay unknown, attempts are not called successful connections, reopening is explicitly not live research. Static presentation checks passed; compiled browser/restart verification pending. No new persistence or provider calls.
   - [x] HIST01.PAGING: cursor pages on existing immutable headers; actual HTTP plus browser opens beyond1000 records, equal-time ordering/concurrent arrivals/restart/countries/failure retry; zero backend outbound attempts. Remaining VIEW semantics are open.
   - [~] HIST01.POLICY: seven-day recorded-context eligibility and explicit historical/live choices passed local single/SSE/job gates; settings snapshot consistency, complete History actions/alias integration and final acceptance remain open.
   - [x] HIST01.ELIGIBILITY: completed/current-context/time/entity-country gate, no live fallthrough, explicit saved/live controls, durable job intent/offline refusal and visible resumed live permission passed focused/full V1 and browser regressions. Real providers are not proved by synthetic operation seams.

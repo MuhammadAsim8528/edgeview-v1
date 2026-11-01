@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { unusedTestPort } from '../../scripts/test-server-port.mjs';
 
 type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any>; outboundAttempts: () => number; historyReadFailure: (enabled: boolean) => void };
@@ -27,7 +28,12 @@ export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number; h
         fs.writeFileSync(path.join(root, 'runs', `${id}.json`), JSON.stringify({
           id, company_name: `Synthetic History Buyer ${i}`, country: i % 2 ? 'Sudan' : 'South Sudan',
           status: 'COMPLETED', started_at: '2026-10-01T00:00:00.000Z', completed_at: '2026-10-01T00:00:01.000Z',
-          queries: [], results: [], raw_records: [], timeline: [], limits: { max_queries: 4, max_results_per_query: 8, max_scrapes: 8, timeout_ms: 120000 },
+          ...(i === 1004 ? { research_context: { format: 1, pipeline_version: 1, result_schema: 30, objective: 'company-contact-research', profile: 'bulk', provider_fingerprint: '0'.repeat(64) } } : {}),
+          queries: [], results: [], raw_records: i === 1004 ? ['serper', 'hunter', 'serper'].map((provider, index) => ({
+            id: `${id}-raw-${index}`, run_id: id, kind: 'search', provider, request: {}, response: {},
+            requested_at: '2026-10-01T00:00:00.000Z', completed_at: '2026-10-01T00:00:01.000Z', latency_ms: 1,
+            sha256: createHash('sha256').update('{}').digest('hex'),
+          })) : [], timeline: [], limits: { max_queries: 4, max_results_per_query: 8, max_scrapes: 8, timeout_ms: 120000 },
         }));
       }
     }
