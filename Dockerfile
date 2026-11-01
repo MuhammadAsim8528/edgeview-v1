@@ -11,6 +11,7 @@ COPY --chown=node:node src ./src
 COPY --chown=node:node public ./public
 COPY --chown=node:node assets ./assets
 COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node packaging/windows/runtime-bootstrap.cjs ./packaging/windows/runtime-bootstrap.cjs
 RUN chown node:node /app
 USER node
 RUN npm run check && npm run build && npm run test:release

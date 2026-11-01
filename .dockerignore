@@ -18,6 +18,11 @@
 !assets/**
 !scripts/
 !scripts/**
+!packaging/
+packaging/**
+!packaging/windows/
+packaging/windows/**
+!packaging/windows/runtime-bootstrap.cjs
 !Dockerfile
 **/*.log
 **/*.db
