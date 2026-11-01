@@ -28,9 +28,19 @@ test('synthetic upload, paging, full CSV, country keyboard drill-down and restar
   await expect(page.getByText('Page 2 of 3 (60 rows)', { exact: true })).toBeVisible();
   await expect(page.locator('tbody tr').first()).toContainText('Synthetic Buyer 25');
   await page.getByRole('button', { name: 'Export Full', exact: true }).click();
-  const download = page.waitForEvent('download');
+  // Hosted trace41294441959 returned HTTP200 after18.7s; the default15s
+  // action wait expired first. Bound the full artifact wait explicitly while
+  // preserving status, compact request and complete downloaded-content checks.
+  const exportStarted = Date.now();
+  const download = page.waitForEvent('download', { timeout: 45000 });
+  const exportResponse = page.waitForResponse(response => new URL(response.url()).pathname.startsWith('/api/export/file/') && response.request().method() === 'POST', { timeout: 45000 });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
+  const response = await exportResponse;
+  expect(response.status()).toBe(200);
+  expect(response.request().postDataJSON()).not.toHaveProperty('records');
+  expect(response.request().postDataBuffer()!.length).toBeLessThan(1024);
   const file = await download;
+  await testInfo.attach('export-timing.json', { body: JSON.stringify({ status: response.status(), elapsedMs: Date.now() - exportStarted, requestBytes: response.request().postDataBuffer()!.length, expectedRows: 60 }), contentType: 'application/json' });
   const stream = await file.createReadStream();
   const chunks: Buffer[] = [];
   for await (const bytes of stream!) chunks.push(Buffer.from(bytes));
