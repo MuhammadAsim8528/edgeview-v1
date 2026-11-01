@@ -21,6 +21,23 @@ export function buildExportRequest(payload: GlobalExportPayload, format: ExportF
     if (!Array.isArray(payload.sourceFileIds) || !payload.sourceFileIds.length) throw new Error('Choose stored files before exporting.');
     return { url: '/api/export', body: { ...common, source_file_ids: payload.sourceFileIds, ...(payload.dataset === 'stats' ? { filters: payload.filters } : {}) } };
   }
+  if (payload.dataset === 'contacts') {
+    const idOf = (value: unknown): string => {
+      const id = typeof value === 'string' ? value : value && typeof value === 'object' ? (value as { id?: unknown }).id : undefined;
+      if (typeof id !== 'string' || !id.trim() || id.length > 200) throw new Error('Refresh contacts before exporting an invalid selection.');
+      return id;
+    };
+    if (!Array.isArray(payload.records) || !payload.records.length) throw new Error('Select stored contacts before exporting.');
+    const scopeIds = payload.records.map(idOf), scope = new Set(scopeIds);
+    if (scope.size !== scopeIds.length) throw new Error('Refresh contacts before exporting a duplicate selection.');
+    if (payload.selectedRows !== undefined && !Array.isArray(payload.selectedRows)) throw new Error('Invalid contact export selection.');
+    const ids = payload.selectedRows?.length ? payload.selectedRows.map(idOf) : scopeIds;
+    if (new Set(ids).size !== ids.length || ids.some(id => !scope.has(id))) throw new Error('Refresh contacts before exporting an unavailable selection.');
+    // This existing server contract resolves these IDs to stored contacts.
+    // Never serialize enrichment/trade/evidence objects back to the server.
+    return { url: '/api/export', body: { ...common, records: ids.map(id => ({ id })),
+      report_type: reportType ?? payload.defaultReportType ?? 'importer' } };
+  }
   return { url: '/api/export', body: { ...common, records: payload.records, columns: payload.columns,
     selectedRows: payload.selectedRows, filters: payload.filters, report_type: payload.dataset === 'contacts' ? reportType ?? payload.defaultReportType ?? 'importer' : undefined } };
 }
