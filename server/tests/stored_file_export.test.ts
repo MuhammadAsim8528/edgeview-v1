@@ -25,7 +25,8 @@ assert.throws(() => buildExportRequest({ ...sourcePayload, filters: { country: '
 const generic = buildExportRequest({ dataset: 'contacts', title: 'Synthetic contacts', records: [{ id: 'one' }], selectedRows: ['one'] }, 'csv', 'exporter');
 assert.equal(generic.url, '/api/export');
 assert.equal((generic.body as any).report_type, 'exporter');
-assert.deepEqual((generic.body as any).selectedRows, ['one']);
+assert.deepEqual((generic.body as any).records, [{ id: 'one' }]);
+assert.equal(Object.hasOwn(generic.body, 'selectedRows'), false, 'selected references are sent once without client record bodies');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-stored-export-'));
 const port = await unusedTestPort();
