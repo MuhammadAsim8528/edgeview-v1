@@ -179,6 +179,21 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 ### NEW HIGH/MEDIUM FINDINGS
 
+- [ ] High EXP01.REPORTED_LARGE_EXPORT: owner reports request entity too large for single/all-format exports and Proceed Full Export failure across pages. Queued immediately after the current CI/reuse checkpoint; do not assume the current integration source or live build is fixed. Do not raise body limits as the primary repair. Existing scoped export authority fixes remain evidence, not acceptance of this new report.
+  - [ ] EXP01.REPRO_LARGE: reproduce with isolated synthetic supported-size data; record exact source/build, caller, method/endpoint, body bytes, response and pre-route-parser versus renderer failure. No real customer data or unrelated live restart.
+  - [ ] EXP01.SURFACE_AUDIT: trace file viewer/full/selected/filtered, Contacts, importer/exporter directory, country/summary/stats/reports, company intelligence, single/multi-company controls to actual handlers.
+  - [ ] EXP01.COMPACT_REQUEST: verify authoritative stored IDs/scope/filter/report configuration and explicit all-matching intent; remove any remaining full-array/enrichment-object round trip and browser collect-all-pages requirement. Large selections must stay bounded and small.
+  - [ ] EXP01.LARGE_CSV: small and previously failing large CSV, exact expected counts/Unicode/enriched values/country scope, no omissions/duplicates/stale client facts.
+  - [ ] EXP01.LARGE_PDF: small and supported large PDF, truthful boundary if unsupported, correct document download and scope.
+  - [ ] EXP01.LARGE_DOCX: small and supported large DOCX, preserved Unicode/scope/content and successful artifact.
+  - [ ] EXP01.LARGE_XLSX: available XLSX behavior and supported-size boundary verified alongside the other advertised formats.
+  - [ ] EXP01.LARGE_ALL_FORMATS: all-formats behavior, request count/bytes, artifact completeness and no cross-format corruption/interference.
+  - [ ] EXP01.PROCEED_FULL: actual confirmation/proceed-full control invokes full server-owned export, responsive generating state and successful download; no silent no-op or partial success.
+  - [ ] EXP01.LARGE_SELECTION_FILTERS: enough selected IDs, invalid/missing/tampered identities, selected/filter/full semantics and server-recognized result counts; arbitrary client business objects cannot inject exported facts.
+  - [ ] EXP01.LARGE_FAILURE_RETRY: sanitized useful failure, truthful success only after artifact, bounded cancellation/retry and every supported entry point.
+  - [ ] EXP01.LARGE_RESTART_RESOURCES: retained dataset/enrichment across restart; measured memory/latency at documented supported maximum, streaming/chunking assessment and no extra million-record browser copy. Reuse existing export-memory regression infrastructure.
+  - [ ] EXP01.LARGE_ACCEPTANCE: every required sub-item has actual evidence before closing this High issue; report old/new request shapes, size reduction, all audited/affected surfaces, exact tests and remaining limits. Then resume the prior High/Medium queue.
+
 - [x] Medium runtime-only startup prerequisite: old compiled backend required Vite eagerly and failed MODULE_NOT_FOUND against the12-root runtime install. Vite now loads only in the existing developer branch; packaged bootstrap fences developer mode. Actual reduced-runtime startup/static shell/all5formats/restart passed. Factory integration/native installation remain open.
 
 - [~] Medium customer-package factory: first current MakeAppx attempt refused missing mapped PNG files. Observational retry retained both PNGs at every copy/npm/compiler/SDK phase and produced a verified current internal MSIX; exact extraction/runtime checks passed. Original disappearance is unexplained WARN, not a source fix or Windows security diagnosis. Final runtime-only/customer acceptance remains open.
