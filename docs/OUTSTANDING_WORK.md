@@ -2,7 +2,13 @@
 
 Current readiness verdict: NOT READY
 
-Current active task: Finish HIST01 recent/saved/live policy checkpoint, verify restored hosted CI on the new exact commit, then continue CC05 conservative aliases and remaining supported-path queue. Runtime-only MSIX still needs disk headroom; native/install/update/clean-Windows, real-company and owner-review gates remain open.
+Current active task: finish EXP01 export acceptance and the controlled desktop development-runtime update, then continue HIST01/CC05 and the remaining supported-path queue. Permanent source is now the original Pharma-AI checkout on development/edgeview-v1; the prior integration checkout is reference-only. Native/install/update/clean-Windows, real-company and owner-review gates remain open.
+
+### November1 source ownership and desktop handoff checkpoint
+
+Owner explicitly confirmed this session is the sole writer and requested updates in the original desktop project. Both checkouts were clean before handoff. Initial comparison at52e0154 found original mainb6db239 with37main-only/205integration-only commits; existing reviewed dispositions below were reused, not a blind merge. Stronger current Node floors, safe SBOM reads, package scanning, storage and country fixes were preserved; rejected restore and unsafe old live-port harness were not restored. New target tracked paths were checked for existing untracked/ignored collisions:0. Original checkout now uses development/edgeview-v1 at3ac6c39; main remains recoverable and integration remains a reference checkout. No customer/configuration/dependency/dist file was copied or replaced by this tracked-source switch. Live health still proves the October26 b6db239 build; source handoff is NOT runtime deployment. Dependency preflight found Sentry/PostHog roots missing from the original node_modules; prepare verified dependencies before any restart. No live enrichment job was active at the read-only preflight. Disk headroom varied from0 to1.25GiB and fell below0.5GiB again without our deleting user files; do not start a full dependency install/package build on uncertain capacity or substitute stale dependency success.
+
+52e0154 fixes a confirmed incomplete-export success bug: the shared response validator ignored X-Export-Failed-Formats. Pure and rendered regressions first failed, then passed after the validator refused incomplete archives before reading/downloading them, using a fixed safe error. Actual UI retry generated a complete real4format ZIP, with zero unexpected provider calls. Typecheck/lint/E2E typecheck and production build passed. 3ac6c39 removes FileViewer's old collect-all-pages/client CSV fallback and makes the server-owned export callback required. Paging test/typecheck/lint/build passed; rendered filtered/full/retry tests passed37.3s, including zero extra paginated data reads during export. Initial browser retest failed ENOSPC before acceptance; a later disk-space check recovered headroom without our deleting user files, and the completed rerun is the accepted evidence. These are scoped fixes, not complete EXP01 or release acceptance.
 
 ## Full owner acceptance checklist
 
@@ -41,7 +47,7 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 
 ### Release and installation
 
-- [ ] REL01: Safely reconcile accepted work into the intended permanent project after review; historical/original checkout stays untouched during current integration work.
+- [~] REL01: Reviewed source3ac6c39 is now in the permanent original checkout on development/edgeview-v1, with old main preserved. Finish controlled dependency/build/runtime handoff and compatible customer-state acceptance; tracked-source reconciliation alone is not deployment.
 - [~] REL01: Freeze accepted version, commit, build, schema and channel identities.
 - [~] CI01: Hosted execution restored and an evidence job passed; complete passing CI for the new exact source remains pending. Preserve historical failures.
 - [~] DIST01: Finish a self-contained customer package without installed Node/npm or developer files.
@@ -355,7 +361,7 @@ Owner requests faster completion. Preserve the existing finite release scope and
 
 ## Authoritative implementation ledger — reconciled 2026-10-25
 
-### Current checkpoint — 2026-10-29 (supersedes dated coordination notes)
+### Historical checkpoint — 2026-10-29 (superseded by November1 handoff above)
 
 Owner resumed on October28. Continue implementation; do not interpret the older
 stop note below as an active stop. This session owns source/tests/docs in

@@ -41,8 +41,11 @@ The packaged build is not claimed to work offline: provider enrichment requires 
 This is a development candidate, not an accepted self-contained customer release.
 Start with the [documentation index](docs/README.md) and
 [authoritative acceptance ledger](docs/OUTSTANDING_WORK.md).
-The original development project remains preserved; reviewed implementation is
-currently in `edgeview-integration` on `integration/edgeview-v1-20261024`, pending
-safe reconciliation to the requested original location. Git remains authoritative.
+The permanent Pharma-AI development checkout now uses `development/edgeview-v1`.
+Reviewed integration source was brought across at `3ac6c39`; the older `main`
+history remains recoverable. `edgeview-integration` is retained as a reference
+checkout, not a second active writer. Git remains authoritative. Updating source
+does not replace a running backend: verify dependency/build identity and perform
+a controlled restart before expecting browser-visible changes.
 Microsoft account setup/publication and final visual QA are deferred by the owner
 until the preceding implementation and package work. No final installer is claimed.

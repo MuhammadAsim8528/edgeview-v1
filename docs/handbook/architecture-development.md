@@ -19,10 +19,12 @@ server/job_manager.ts owns projection/jobs; server/contact_country_scope.ts owns
 field scope. shared/v1_contact_contract.ts is the contact contract. The active UI
 store and components are under src. AGENTS.md contains the current source map.
 
-The original Pharma-AI development directory remains preserved. Reviewed work is
-currently on integration/edgeview-v1-20261024 in edgeview-integration; reconciliation
-back to the requested original location remains a gate. Do not overwrite either
-tree or assume divergent commits are automatically accepted.
+The permanent Pharma-AI development checkout now uses development/edgeview-v1,
+based on reviewed integration source3ac6c39. The former integration checkout is
+retained for reference; active source changes belong in the permanent checkout.
+Older main history remains available. Source reconciliation does not deploy a
+running backend or update its dependencies. A controlled build/runtime handoff
+and customer-data compatibility acceptance remain separate gates.
 
 Developer checks include npm run typecheck, npm run lint, npm run test:v1,
 npm run build and npm run test:release. Package and browser tests are additional
