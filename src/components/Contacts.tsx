@@ -177,15 +177,16 @@ export const Contacts: React.FC<ContactsProps> = ({
     );
   };
 
-  const handleFetchDetails = async (companyName: string, id: string, forceFetch: boolean = false) => {
+  const handleFetchDetails = async (companyName: string, id: string, forceFetch: boolean = false, savedOnly: boolean = false) => {
     if (!onFetchDetailsAutomated) return;
+    if (savedOnly && !canRecheckSaved(contacts.find(contact => contact.id === id))) return;
     if (!researchAvailable && (forceFetch || !canRecheckSaved(contacts.find(contact => contact.id === id)))) {
       console.warn(`Company research unavailable: ${researchReason}`);
       return;
     }
     setFetchingDetailsId(id);
     try {
-      await onFetchDetailsAutomated(companyName, id, forceFetch, !forceFetch && !researchAvailable);
+      await onFetchDetailsAutomated(companyName, id, forceFetch, savedOnly || (!forceFetch && !researchAvailable));
       await loadSummary();
     } catch (err) {
       console.error('Error fetching details:', err);
@@ -690,6 +691,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             )}
                             <span>Force Fetch</span>
                           </button>
+                          {canRecheckSaved(contact) && <button type="button" disabled={fetchingDetailsId === contact.id} onClick={() => handleFetchDetails(contact.company_name, contact.id, false, true)} className="w-full rounded border border-[#444] px-2.5 py-1 text-[10px] text-sky-300 disabled:opacity-40" title="Recheck historical sources for this company and country without provider calls">Recheck Saved</button>}
                         </div>
                       </td>
                     </tr>

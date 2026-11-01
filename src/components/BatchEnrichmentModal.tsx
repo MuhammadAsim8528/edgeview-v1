@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CompanyContact } from '../types';
 import { normalizeBatchJobSnapshot, observedBatchUsage, type BatchUsage, type ResearchJob, type CompanyResearchState } from '../utils/batchSnapshot';
 import { formatObservedCount } from '../utils/telemetryFormat';
+import { V1_REUSE_MAX_AGE_DAYS } from '../../shared/v1_contact_contract';
 import { 
   Bot, Sparkles, Building2, CheckSquare, Square, X, RefreshCw, 
   Play, Pause, Sliders, AlertTriangle, Activity, CheckCircle2, 
@@ -19,13 +20,16 @@ interface BatchEnrichmentModalProps {
 export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   isOpen,
   onClose,
-  contacts,
+  contacts: suppliedContacts,
   refreshData,
   evidenceOnly = false,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'importers' | 'exporters'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reportMode, setReportMode] = useState<'importer' | 'exporter'>('importer');
+  const [researchMode, setResearchMode] = useState<'recent' | 'saved' | 'live'>('recent');
+  const savedMode = evidenceOnly || researchMode === 'saved';
+  const contacts = savedMode ? suppliedContacts.filter(contact => contact.can_revalidate_evidence === true) : suppliedContacts;
   
   // Job Tracking
   const [controlError, setControlError] = useState<string | null>(null);
@@ -114,6 +118,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   useEffect(() => {
     const controller = new AbortController();
     if (isOpen) {
+      setResearchMode('recent');
       setControlError(null);
       setControlAction(null);
       fetchGovernorInfo(controller.signal);
@@ -287,7 +292,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       const resCreate = await fetch('/api/enrich/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_ids: ids, mode: reportMode, reuseOnly: evidenceOnly }),
+        body: JSON.stringify({ company_ids: ids, mode: reportMode, reuseOnly: savedMode, forceFetch: !savedMode && researchMode === 'live' }),
       });
       const createData = await resCreate.json();
       if (!resCreate.ok || !createData.success) throw new Error(createData.message || createData.error || 'Failed to create job');
@@ -393,6 +398,15 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     }
   };
 
+  const states = Object.values(jobData?.company_states || {});
+  const queued = states.filter(state => state.status === 'pending' || state.status === 'processing');
+  const relevantStates = queued.length ? queued : states;
+  const modeNotice = !relevantStates.length ? 'Research mode has not been loaded yet.'
+    : relevantStates.some(state => state.force_live === true) ? 'Live refresh was requested. Resuming may use provider quota.'
+    : relevantStates.every(state => state.reuse_only === true) ? 'Saved-evidence review only. Queued items cannot call providers.'
+    : relevantStates.every(state => state.reuse_policy_version === 1) ? `Recent-result mode: compatible completed results up to ${V1_REUSE_MAX_AGE_DAYS} days old; new companies may use providers.`
+    : 'Legacy job: saved results are historical rechecks; new companies may use providers.';
+
   if (!isOpen) return null;
 
   return (
@@ -406,8 +420,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
               <Bot className="w-5 h-5 text-sky-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white tracking-wide">{evidenceOnly ? 'Review Saved Evidence' : 'EdgeView V1 Batch Enrichment'}</h3>
-              <p className="text-[11px] text-[#9ca3af]">{evidenceOnly ? 'Recheck retained sources for the same company and country. No provider calls.' : 'Exact identity queries, deterministic retrieval, immutable evidence, resumable progress'}</p>
+              <h3 className="text-sm font-bold text-white tracking-wide">{savedMode ? 'Review Saved Evidence' : 'EdgeView V1 Batch Enrichment'}</h3>
+              <p className="text-[11px] text-[#9ca3af]">{savedMode ? 'Recheck retained sources for the same company and country. No provider calls.' : 'Exact identity queries, deterministic retrieval, immutable evidence, resumable progress'}</p>
+              {jobData && <p role="status" className="mt-1 text-xs text-amber-200">{modeNotice}</p>}
             </div>
           </div>
           <button 
@@ -581,6 +596,15 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
             ) : (
               // INITIAL QUEUE CONFIGURATION & STARTUP
               <div className="flex flex-col h-full space-y-4">
+                {!evidenceOnly && <div className="text-xs text-[#ccc]">
+                  <label>Research mode
+                  <select aria-label="Research mode" value={researchMode} onChange={event => { setResearchMode(event.target.value as 'recent' | 'saved' | 'live'); setSelectedIds(new Set()); }} className="ml-2 rounded border border-[#444] bg-[#181818] p-2">
+                    <option value="recent">{`Reuse compatible completed results up to ${V1_REUSE_MAX_AGE_DAYS} days old`}</option>
+                    <option value="saved">Recheck saved evidence — no provider calls</option>
+                    <option value="live">Refresh live — uses provider quota</option>
+                  </select></label>
+                  <p className="mt-1 text-[11px] text-[#999]">Recent mode researches new companies. Older, partial or incompatible saved results require an explicit choice.</p>
+                </div>}
                 
                 {/* Mode Selectors */}
                 <div className="grid grid-cols-2 gap-4">
@@ -620,7 +644,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                       <Sparkles className="w-4 h-4 text-sky-400" />
                       <span className="text-xs font-bold text-white uppercase tracking-wider">Configure Research Scope Presets</span>
                     </div>
-                    {selectedIds.size > 0 && !evidenceOnly && (
+                    {selectedIds.size > 0 && !savedMode && (
                       <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/30">
                         Est: ~{(selectedIds.size * 12 / 60).toFixed(1)}m duration
                       </span>

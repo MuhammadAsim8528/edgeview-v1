@@ -1,5 +1,5 @@
 import { getDb } from './sqlite';
-import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, type V1Run } from './v1_engine';
+import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, assessV1FreshReuse, createV1ResearchContext, type V1ResearchContext, type V1Run } from './v1_engine';
 import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
 import { hasInstitutionalRole } from './corporate_validation';
 import { hasExplicitCountryCallingCode, isCountryCompatiblePhone } from './phone_country';
@@ -515,14 +515,15 @@ export function reusableContactRun(contact: { company_name?: string; country?: s
  * never hydrates every selected company's multi-megabyte payload. Actual reuse
  * rechecks the loaded run before publishing anything. */
 type RetainedContact = { company_name?: string; country?: string; edgeview_v1_run_id?: string };
-export function reusableEvidenceContacts<T extends RetainedContact>(contacts: Array<T | null | undefined>): Set<T> {
+export function reusableEvidenceContacts<T extends RetainedContact>(contacts: Array<T | null | undefined>, context?: V1ResearchContext): Set<T> {
   const eligible = contacts.filter(contact => contact?.edgeview_v1_run_id && contact.company_name?.trim() && contact.country?.trim()) as T[];
   const wanted = new Set(eligible.map(contact => contact.edgeview_v1_run_id));
   const retained = new Map(listV1RunIdentityHeaders().filter(header => wanted.has(header.id)).map(header => [header.id, header]));
   return new Set(eligible.filter(contact => {
     const header = retained.get(contact.edgeview_v1_run_id!);
     return header && ['COMPLETED', 'PARTIAL'].includes(header.status)
-      && canonicalEntityIdentityKey(header.company_name, header.country) === canonicalEntityIdentityKey(contact.company_name, contact.country);
+      && canonicalEntityIdentityKey(header.company_name, header.country) === canonicalEntityIdentityKey(contact.company_name, contact.country)
+      && (!context || assessV1FreshReuse(header, contact, context).eligible);
   }));
 }
 export function reusableEvidenceSelection(contacts: Array<RetainedContact | null | undefined>): boolean {
@@ -660,6 +661,8 @@ export interface CompanyResearchState {
   stage: string;
   error?: string;
   reuse_only?: boolean;
+  reuse_policy_version?: 1;
+  force_live?: boolean;
   durationMs?: number;
   resourceUsage: Record<ResearchProvider, number>;
   metrics?: {
@@ -717,8 +720,9 @@ export function isInternalId(name: string): boolean {
   return false;
 }
 
-export async function createJob(companyIds: string[], mode: 'importer' | 'exporter', reuseOnly = false): Promise<string> {
+export async function createJob(companyIds: string[], mode: 'importer' | 'exporter', reuseOnly = false, forceLive = false): Promise<string> {
   if (shuttingDown) throw new Error('EdgeView is shutting down');
+  if (reuseOnly && forceLive) throw new Error('Conflicting research modes');
   const db = await getDb();
   const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   
@@ -741,6 +745,8 @@ export async function createJob(companyIds: string[], mode: 'importer' | 'export
       stage: stageVal,
       error: errorVal,
       reuse_only: reuseOnly,
+      reuse_policy_version: 1,
+      force_live: forceLive,
       resourceUsage: emptyProviderUsage(),
     };
   }
@@ -879,7 +885,8 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
     if (shuttingDown || !job || (forceFetch && Object.values(job.company_states).some(state => state.reuse_only))) {
       releaseOwnership(); return false;
     }
-    await updateJob(jobId, { status: 'PENDING' }, true);
+    if (forceFetch) for (const state of Object.values(job.company_states)) state.force_live = true;
+    await updateJob(jobId, { status: 'PENDING', company_states: job.company_states }, true);
     if (shuttingDown) { releaseOwnership(); return false; }
   } catch (error) {
     releaseOwnership();
@@ -951,10 +958,16 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           // country-aware contact already points at a successful V1 run, reuse
           // the persisted projection instead of paying providers for the same
           // company again. Force Fetch is the explicit refresh override.
-          if (!forceFetch && contact?.edgeview_v1_run_id) {
+          let reuseNeedsChoice = false;
+          const liveRequested = forceFetch || companyState.force_live === true;
+          if (!liveRequested && contact?.edgeview_v1_run_id) {
             const reuseStarted = performance.now();
             const cachedRun = reusableContactRun(contact);
-            if (cachedRun) {
+            // Legacy jobs retain their already-authorized historical semantics.
+            // New jobs cannot silently treat old/partial/incompatible runs as current.
+            const historicalReview = companyState.reuse_only || companyState.reuse_policy_version !== 1;
+            reuseNeedsChoice = !historicalReview && (!cachedRun || !assessV1FreshReuse(cachedRun, contact, createV1ResearchContext('bulk')).eligible);
+            if (cachedRun && !reuseNeedsChoice) {
               const revalidated = contact.research_validation_status !== 'current';
               if (revalidated) {
                 await withContactPublication(companyId, async () => {
@@ -968,7 +981,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
               }
               companyState.status = 'completed';
               companyState.stage = revalidated ? 'Revalidated retained V1 evidence under current company-country rules; no provider calls'
-                : `Reused existing V1 ${cachedRun.status} enrichment; Force Fetch to refresh`;
+                : `Rechecked saved V1 ${cachedRun.status} evidence; not checked live`;
               companyState.error = undefined;
               companyState.outcome = String(contact.quality_status || '').toUpperCase() === 'COMPLETE' ? 'COMPLETE' : 'PARTIAL';
               companyState.resourceUsage = emptyProviderUsage();
@@ -995,6 +1008,7 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
           const startedAt = Date.now();
           let transportOutcome = false;
           try {
+            if (reuseNeedsChoice) throw new Error('SAVED_EVIDENCE_NEEDS_CHOICE: Recheck saved evidence or explicitly request live refresh.');
             if (companyState.reuse_only) throw new Error('RETAINED_EVIDENCE_UNAVAILABLE: Saved-evidence review cannot start provider requests.');
             if (!companyName || isInternalId(companyName)) throw new Error('INVALID_INPUT / UNRESOLVED_COMPANY');
             if (!country) throw new Error('Exact country is required for identity-anchored V1 enrichment');

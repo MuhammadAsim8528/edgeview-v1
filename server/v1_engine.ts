@@ -2,8 +2,9 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { getAppSettings, type AppSettings } from './settings';
-import { V1_CONTACT_OVERLAY_VERSION } from '../shared/v1_contact_contract';
+import { V1_CONTACT_OVERLAY_VERSION, V1_REUSE_MAX_AGE_DAYS } from '../shared/v1_contact_contract';
 import { isDeepStrictEqual } from 'node:util';
+import { canonicalEntityIdentityKey, canonicalCountryIdentityKey } from './company_identity';
 import { getRuntimeDataRoot } from './db_paths';
 import { isSafeExternalUrl, safeFetchOutboundText, safeFetchProviderRequest } from './url_safety';
 import { resolveOfficialDomain, type DomainResolution, sameDomainOrSubdomain } from './v1_identity';
@@ -92,14 +93,32 @@ export function v1ResearchCompatibility(run: { research_context?: V1ResearchCont
 }
 
 /** Describes historical evidence; context equality is never live verification. */
-export function describeV1EvidenceReuse(run: { completed_at?: string; research_context?: V1ResearchContext }, expected: V1ResearchContext) {
-  const time = run.completed_at;
-  let captured_at: string | null = null;
+function canonicalResearchTime(time: unknown): string | null {
   if (typeof time === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(time) && Number.isFinite(Date.parse(time))) {
     const normalized = new Date(time).toISOString();
-    if (normalized.slice(0, 19) === time.slice(0, 19)) captured_at = normalized;
+    if (normalized.slice(0, 19) === time.slice(0, 19)) return normalized;
   }
-  return { captured_at, compatibility: v1ResearchCompatibility(run, expected), freshness: 'not_live_verified' as const };
+  return null;
+}
+
+export function describeV1EvidenceReuse(run: { completed_at?: string; research_context?: V1ResearchContext }, expected: V1ResearchContext) {
+  return { captured_at: canonicalResearchTime(run.completed_at), compatibility: v1ResearchCompatibility(run, expected), freshness: 'not_live_verified' as const };
+}
+
+export { V1_REUSE_MAX_AGE_DAYS } from '../shared/v1_contact_contract';
+/** Operational reuse window, not a guarantee that external facts remain true.
+ * Historical revalidation/opening is deliberately independent of this gate. */
+export function assessV1FreshReuse(run: Pick<V1Run, 'company_name' | 'country' | 'status' | 'started_at' | 'completed_at' | 'research_context'>,
+  target: { company_name?: string; country?: string }, expected: V1ResearchContext, now = Date.now()) {
+  const reject = (code: string) => ({ eligible: false, code, max_age_days: V1_REUSE_MAX_AGE_DAYS });
+  if (!target.company_name?.trim() || !canonicalCountryIdentityKey(target.country) || !canonicalCountryIdentityKey(run.country)
+    || canonicalEntityIdentityKey(run.company_name, run.country) !== canonicalEntityIdentityKey(target.company_name, target.country)) return reject('REUSE_IDENTITY_MISMATCH');
+  if (run.status !== 'COMPLETED') return reject('REUSE_INCOMPLETE_RESULT');
+  if (v1ResearchCompatibility(run, expected) !== 'matches_current_context') return reject('REUSE_CONTEXT_UNVERIFIED');
+  const completed = canonicalResearchTime(run.completed_at), started = canonicalResearchTime(run.started_at);
+  if (!Number.isFinite(now) || !completed || !started || Date.parse(completed) < Date.parse(started) || Date.parse(completed) > now) return reject('REUSE_TIME_UNVERIFIED');
+  if (now - Date.parse(completed) > V1_REUSE_MAX_AGE_DAYS * 86400000) return reject('REUSE_EXPIRED');
+  return { eligible: true, code: 'REUSE_RECENT_COMPATIBLE', max_age_days: V1_REUSE_MAX_AGE_DAYS };
 }
 
 export interface V1Run {

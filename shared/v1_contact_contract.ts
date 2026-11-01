@@ -1,4 +1,6 @@
 export const V1_CONTACT_OVERLAY_VERSION = 30;
+// Operational reuse limit only; never a claim that external facts stay true.
+export const V1_REUSE_MAX_AGE_DAYS = 7;
 
 export interface V1CompanyAddress {
   address: string;
