@@ -3,7 +3,14 @@ import { test, expect } from './fixtures';
 test('pause failures and unconfirmed stop checkpoints stay visible and recover through polling', async ({ page, context, runtime }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
   await runtime.identity();
-  await page.route('**/api/runtime/state', async route => { const response=await route.fetch();const data=await response.json();data.capabilities.company_enrichment.available=true;await route.fulfill({response,json:data}); });
+  // This scenario owns job-control failures, not availability polling. Read
+  // the owned backend once, then keep its synthetic capability stable while
+  // the intentionally held stop request exercises the timeout/retry path.
+  const stateResponse = await page.request.get(`${runtime.baseURL}/api/runtime/state`);
+  expect(stateResponse.ok()).toBe(true);
+  const state = await stateResponse.json();
+  state.capabilities.company_enrichment.available = true;
+  await page.route('**/api/runtime/state', route => route.fulfill({ json: state }));
   let status='DISCOVERING', checkpointUnavailable=false, progressReads=0;
   const job=()=>({id:'synthetic-pause-job',status,importer_exporter_mode:'importer',total_companies:1,completed_companies:0,current_company:'Synthetic Buyer',current_stage:'Researching',company_ids:['synthetic'],company_states:{synthetic:{id:'synthetic',name:'Synthetic Buyer',status:'processing',stage:'Researching'}},resource_usage:{}});
   await page.route('**/api/enrich/job/active',route=>route.fulfill({json:{success:true,job:job()}}));
