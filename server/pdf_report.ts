@@ -117,9 +117,22 @@ export async function generatePdfReport(
           } else {
             if (current) lines.push(current);
             let remainder = word;
-            while (measure(remainder) > width && remainder.length > 1) {
-              let cut = remainder.length;
-              while (cut > 1 && measure(remainder.slice(0, cut)) > width) cut--;
+            while (remainder.length > 1) {
+              // Find a fitting prefix rather than measuring every successively
+              // shorter copy of a long product code/URL (quadratic per line).
+              let low = 1;
+              let high = 1;
+              while (high < remainder.length && measure(remainder.slice(0, high)) <= width) {
+                low = high;
+                high = Math.min(remainder.length, high * 2);
+              }
+              if (high === remainder.length && measure(remainder) <= width) break;
+              while (low < high) {
+                const middle = Math.ceil((low + high) / 2);
+                if (measure(remainder.slice(0, middle)) <= width) low = middle;
+                else high = middle - 1;
+              }
+              const cut = low;
               lines.push(remainder.slice(0, cut));
               remainder = remainder.slice(cut);
             }
@@ -204,7 +217,7 @@ export async function generatePdfReport(
             const count = r.shipmentCount || 0;
             col2.push(...toLines(`• ${partner} (${country}) [${count} shp]`, COLS.tradeHistory.w, 'Helvetica', 7.5, '#334155'));
             if (r.itemDescription && stripMd(r.itemDescription)) {
-              col2.push(...toLines(`   ${stripMd(r.itemDescription)}`, COLS.tradeHistory.w, 'Helvetica-Oblique', 6.5, '#64748B'));
+              for (const line of toLines(`   ${stripMd(r.itemDescription)}`, COLS.tradeHistory.w, 'Helvetica-Oblique', 6.5, '#64748B')) col2.push(line);
             }
           });
         } else {
