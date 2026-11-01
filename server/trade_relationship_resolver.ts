@@ -236,6 +236,14 @@ export class TradeRelationshipResolver {
       importedFrom: new Map<string, Map<string, ResolvedTradeRelationship>>(),
       suppliedTo: new Map<string, Map<string, ResolvedTradeRelationship>>(),
     };
+    // Accumulate exact product descriptions without repeatedly scanning and
+    // copying an ever-growing relationship string. Join once after both stores.
+    const descriptions = new Map<ResolvedTradeRelationship, Set<string>>();
+    const addDescription = (relationship: ResolvedTradeRelationship, item: string | undefined) => {
+      let items = descriptions.get(relationship);
+      if (!items) { items = new Set(); descriptions.set(relationship, items); }
+      if (item) items.add(item);
+    };
 
     // 1. Process in-memory files
     const loadedTradeFileNames = new Set<string>();
@@ -275,9 +283,7 @@ export class TradeRelationshipResolver {
             };
             existing.totalVal = (existing.totalVal || 0) + rawCost;
             existing.shipmentCount++;
-            if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-              existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-            }
+            addDescription(existing, rawItem);
             compMap.set(partnerKey, existing);
           }
 
@@ -294,9 +300,7 @@ export class TradeRelationshipResolver {
             };
             existing.totalVal = (existing.totalVal || 0) + rawCost;
             existing.shipmentCount++;
-            if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-              existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-            }
+            addDescription(existing, rawItem);
             compMap.set(partnerKey, existing);
           }
         }
@@ -337,9 +341,7 @@ export class TradeRelationshipResolver {
           };
           existing.totalVal = (existing.totalVal || 0) + rawCost;
           existing.shipmentCount++;
-          if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-            existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-          }
+          addDescription(existing, rawItem);
           compMap.set(partnerKey, existing);
         }
 
@@ -356,14 +358,13 @@ export class TradeRelationshipResolver {
           };
           existing.totalVal = (existing.totalVal || 0) + rawCost;
           existing.shipmentCount++;
-          if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-            existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-          }
+          addDescription(existing, rawItem);
           compMap.set(partnerKey, existing);
         }
       }
     } catch (_) {}
 
+    for (const [relationship, items] of descriptions) relationship.itemDescription = [...items].join(', ') || undefined;
     return index;
   }
 

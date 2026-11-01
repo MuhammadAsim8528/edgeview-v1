@@ -164,6 +164,7 @@ jobs:
       - run: node scripts/batch-enrich-durability.test.mjs
       - run: node --import tsx server/tests/contact_overlay_durability.test.ts
       - run: node --import tsx server/tests/export_memory_regression.test.ts
+      - run: node --import tsx server/tests/trade_index_dense_products.test.ts
       - run: node scripts/json-authority-runtime.test.mjs
       - run: node scripts/release-isolation.test.mjs
       - run: npm run test:release
