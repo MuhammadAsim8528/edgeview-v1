@@ -6,15 +6,17 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { unusedTestPort } from '../../scripts/test-server-port.mjs';
 
-type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any>; outboundAttempts: () => number };
-export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number }>({
+type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any>; outboundAttempts: () => number; historyReadFailure: (enabled: boolean) => void };
+export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number; historyFaultInjection: boolean }>({
   savedHistoryCount: [0, { option: true }],
-  runtime: [async ({ savedHistoryCount }, use) => {
+  historyFaultInjection: [false, { option: true }],
+  runtime: [async ({ savedHistoryCount, historyFaultInjection }, use) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-browser-e2e-'));
     const port = await unusedTestPort();
     const baseURL = `http://127.0.0.1:${port}`;
     const json = path.join(root, 'rows.json');
     const outboundAudit = path.join(root, 'outbound-attempts.txt');
+    const historyFault = path.join(root, 'history-read-failure.flag');
     fs.writeFileSync(json, '[]'); // Existing empty authority suppresses demo reseeding.
     fs.writeFileSync(path.join(root, 'config.json'), '{}');
     if (!Number.isInteger(savedHistoryCount) || savedHistoryCount < 0 || savedHistoryCount > 1100) throw new Error('Synthetic history count out of bounds');
@@ -44,7 +46,7 @@ export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number }>
       child = spawn(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), path.resolve('dist/server.cjs')], {
         cwd: process.cwd(), stdio: ['ignore', 'ignore', 'pipe'], env: { ...inherited, NODE_ENV: 'test', PORT: String(port),
           EDGEVIEW_TEST_MODE: '1', EDGEVIEW_TEST_DB_DIR: root, EDGEVIEW_JSON_DB: json,
-          EDGEVIEW_SQLITE_DB: path.join(root, 'operational.db'), EDGEVIEW_CONFIG: path.join(root, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(root, 'runs'), EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit },
+          EDGEVIEW_SQLITE_DB: path.join(root, 'operational.db'), EDGEVIEW_CONFIG: path.join(root, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(root, 'runs'), EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit, ...(historyFaultInjection ? { EDGEVIEW_E2E_HISTORY_FAULT_FILE: historyFault } : {}) },
       });
       child.stderr?.on('data', bytes => { stderr = (stderr + String(bytes)).slice(-4000); });
       for (const deadline = Date.now() + 45_000; Date.now() < deadline;) {
@@ -59,7 +61,7 @@ export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number }>
         child.kill(); await exited;
       }
     };
-    try { await start(); await use({ baseURL, identity, outboundAttempts: () => fs.existsSync(outboundAudit) ? fs.readFileSync(outboundAudit, 'utf8').trim().split('\n').filter(Boolean).length : 0, restart: async () => { await stop(); await start(); } }); }
+    try { await start(); await use({ baseURL, identity, historyReadFailure: enabled => { if (!historyFaultInjection) throw new Error('History fault injection was not enabled for this isolated test'); if (enabled) fs.writeFileSync(historyFault, 'synthetic'); else fs.rmSync(historyFault, { force: true }); }, outboundAttempts: () => fs.existsSync(outboundAudit) ? fs.readFileSync(outboundAudit, 'utf8').trim().split('\n').filter(Boolean).length : 0, restart: async () => { await stop(); await start(); } }); }
     finally { await stop(); fs.rmSync(root, { recursive: true, force: true }); }
   }, { timeout: 120_000 }],
   baseURL: async ({ runtime }, use) => { await use(runtime.baseURL); },

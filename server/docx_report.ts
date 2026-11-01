@@ -41,13 +41,10 @@ export interface ReportCompanyContact {
 }
 
 export function cleanMarkdown(text: string | null | undefined): string {
-  if (!text) return '';
-  let s = String(text).trim();
-  // 1. Clean markdown links: [label](url) -> label (or raw URL if it's identical or email)
-  s = s.replace(/\[([^\]]+)\]\((?:mailto:)?(?:https?:\/\/[^\)]+|[^\)]+)\)/gi, '$1');
-  // 2. Clean bold, italics, underline, and backticks markers
-  s = s.replace(/[\*_`~]/g, '');
-  return s.trim();
+  // Compatibility name: report inputs are structured business facts, not
+  // Markdown prose. Removing markers changes product codes, names and URLs.
+  // Office/PDF/CSV renderers retain their own escaping and formula protection.
+  return text == null ? '' : String(text).trim();
 }
 
 const thinBorder = {
