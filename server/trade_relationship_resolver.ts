@@ -362,7 +362,11 @@ export class TradeRelationshipResolver {
           compMap.set(partnerKey, existing);
         }
       }
-    } catch (_) {}
+    } catch {
+      // Archived shipments can exist only in SQLite. Returning the memory-only
+      // index would silently omit them while presenting a successful export.
+      throw Object.assign(new Error('Stored trade history could not be read. Please retry when database access is restored.'), { code: 'TRADE_HISTORY_UNAVAILABLE' });
+    }
 
     for (const [relationship, items] of descriptions) relationship.itemDescription = [...items].join(', ') || undefined;
     return index;

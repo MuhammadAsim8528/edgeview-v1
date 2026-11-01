@@ -30,6 +30,15 @@ async function main() {
     assert.equal(result[0].totalVal, rows.length + 2);
     assert.equal(TradeRelationshipResolver.resolveFromIndex('Synthetic Buyer Δ', index, 'importer', 'Pakistan').importedFrom.length, 0);
     assert.ok(elapsed < 10000, 'dense index must not regress to repeated multi-megabyte string scans');
+    const readHistory = sql.all;
+    try {
+      sql.all = async () => { throw new Error('SYNTHETIC_PRIVATE_HISTORY_FAILURE'); };
+      await assert.rejects(TradeRelationshipResolver.buildTradeIndex(), error => error instanceof Error
+        && (error as NodeJS.ErrnoException).code === 'TRADE_HISTORY_UNAVAILABLE'
+        && !error.message.includes('SYNTHETIC_PRIVATE_HISTORY_FAILURE'), 'unavailable archived history must not silently publish a partial trade index');
+    } finally { sql.all = readHistory; }
+    const recovered = await TradeRelationshipResolver.buildTradeIndex();
+    assert.equal(TradeRelationshipResolver.resolveFromIndex('Synthetic Buyer Δ', recovered, 'importer', 'Kenya').importedFrom[0].shipmentCount, rows.length + 1, 'retry must recover the complete stored history after the database read is repaired');
     console.log(`PASS dense 3200-product index, exact deduplication, substring preservation, history and country scope (${Math.round(elapsed)}ms)`);
   } finally {
     db.files.clear();
