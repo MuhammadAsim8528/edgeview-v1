@@ -155,11 +155,13 @@ function structuredAddressesFromOfficialPages(pages: Array<any>): string[] {
     // Common ordinary CMS layout: an office label followed by its paragraph.
     // A global domain or navigation country cannot supply missing local scope.
     const officeHtml = stripHtmlComments(html).replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ');
-    for (const match of officeHtml.matchAll(/<(strong|b|h[1-6])\b[^>]*>([\s\S]{1,120}?)<\/\1>\s*(?:<br\s*\/?>\s*)?<p\b[^>]*>([\s\S]{1,800}?)<\/p>/gi)) {
+    // Some CMS headings close their layout wrappers before the address paragraph.
+    // Only cross bounded closing wrappers, never new content or an opening block.
+    for (const match of officeHtml.matchAll(/<(strong|b|h[1-6])\b[^>]*>([\s\S]{1,300}?)<\/\1>\s*(?:<\/div>\s*){0,3}(?:<br\s*\/?>\s*)?<p\b[^>]*>([\s\S]{1,800}?)<\/p>/gi)) {
       const label = htmlText(match[2]), address = htmlText(match[3]);
-      if (!/^(?:(?:(?:head|regional|branch|registered|corporate|sales)\s+)?office|headquarters|warehouse(?:\s+complex)?|(?:(?:postal|office|registered)\s+)?address)\s*:?$/i.test(label)) continue;
+      if (!/^(?:(?:(?:head|regional|branch|registered|corporate|sales|regulatory(?:\s+and\s+tender)?)\s+)?office|headquarters|warehouse(?:\s+complex)?|(?:(?:postal|office|registered)\s+)?address)\s*:?$/i.test(label)) continue;
       const countries = detectExplicitCountryNames(address);
-      const street = /\b(?:street|st\.?|road|rd\.?|avenue|ave\.?|lane|building|floor|plot|postal|p\.?o\.?\s*box)\b/i.test(address);
+      const street = /\b(?:street|st\.?|road|rd\.?|avenue|ave\.?|lane|gardens|building|floor|plot|postal|p\.?o\.?\s*box)\b/i.test(address);
       if (countries.length === 1 && street && !/@|https?:|\b(?:telephone|fax)\b/i.test(address)) add(address);
     }
   }

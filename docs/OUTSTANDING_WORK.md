@@ -2,6 +2,12 @@
 
 Current readiness verdict: NOT READY
 
+### November1 Slim official-page address recall — regression and correction under acceptance
+
+Fresh hardened direct retrieval of https://slimpharma.com/ returned200/236,494bytes. Existing deterministic projection admitted its published phone/mailbox but no addresses. Actual source has office headings with linked text followed by two closing layout wrappers before ordinary address paragraphs. Synthetic ordinary_office_address regression failed before correction; current narrow parser crosses at most3closing div wrappers only, recognizes Regulatory and Tender Office, and accepts Gardens as a street term. It does not cross opening blocks, new headings, navigation or unrelated text, and country/other-entity admission remains separate. Expanded fixture PASS: local head/corporate/regulatory addresses, foreign country, distributor, countryless paragraph, over-bound wrappers, comments and intervening navigation. Offline reprojection of the same captured bytes now returns all3published local office addresses plus the unchanged phone/mailbox. No provider call, customer-state write, live restart or new persistence authority. Full npm run check (typecheck/lint/V1) PASS using isolated locked dependencies; final expanded focused regression PASS separately. Build and downstream current-build acceptance pending; this does not close Slim or whole-country truthset acceptance.
+
+Fresh Global Pharmaceuticals official contact endpoint returned500; no failed response was admitted as evidence. Official public-source research is available, but source identities/domain/address differences must be reconciled rather than combined by similar name. Do not replace an observed remote failure with a success claim or broaden retrieval limits.
+
 ### November1 Getz Kenya live truthset checkpoint — scoped acceptance passed
 
 One quota-capped isolated current-engine run used the existing configuration read-only: NVIDIA query generation200,4Serper searches200,8official captures and2NVIDIA extraction responses200. Hunter was disabled and was not enabled/called; Groq fallback was not needed. Original config digest was unchanged. Current resolver selected getzpharma.com. Admitted fields matched the independently retrieved official contact page's Kenya phone/address; no Pakistan phone/address was promoted and no email/person/social/other unreviewed field remained promoted. Operator budget marker prevents another automatic paid pass for this case. No original contact, dataset, database, evidence or running3901build was updated.
@@ -252,6 +258,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [~] Medium QA01.SLIM_OFFICE_WRAPPERS: actual official-page capture reproduced missing deterministic addresses. Narrow bounded-layout correction and adversarial focused regression PASS; full checks/build/downstream acceptance pending. Existing country and entity evidence boundaries retained; no contact values hard-coded.
 
 - [x] Medium HIST01.CONFIGURATION_CHANGE: bcc135c RED→GREEN five-stage/key/drain/concurrent, full check/restart/HTTP policy/build/smoke/6browser and hosted15cf767/41333770151PASS. Not a claimed credential leak or entity-contamination exploit.
 - [x] Medium HIST01.OBSOLETE_ACCOUNT_RESPONSE: bcc135c RED→GREEN old-key refusal/reset,4provider refusal/2AI network/cooldown/full check/build/browser and hosted15cf767/41333770151PASS. No credential exfiltration claimed.
