@@ -61,6 +61,12 @@ export async function processAndValidateExportResponse(
     throw new Error(errMsg);
   }
 
+  // A valid ZIP can still be incomplete. The server explicitly reports failed
+  // formats; do not download it and then claim all requested formats succeeded.
+  if (response.headers.get('X-Export-Failed-Formats')?.trim()) {
+    throw new Error('Export incomplete: one or more requested formats could not be generated. Retry, or export an individual format.');
+  }
+
   // 2. Reject HTML Content-Type for non-HTML export requests
   if (contentType.includes('text/html')) {
     throw new Error('Export failed. The server returned an HTML page instead of the requested export document.');
