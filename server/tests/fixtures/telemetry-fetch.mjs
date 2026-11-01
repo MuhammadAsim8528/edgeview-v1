@@ -1,5 +1,9 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import fs from 'node:fs';
+import dns from 'node:dns/promises';
+import https from 'node:https';
+import http from 'node:http';
+import { installAiTransportFixture } from './ai_transport.ts';
 const originalRead = fs.readFileSync;
 if (process.env.EDGEVIEW_TEST_RUN_READ_MARKER) {
   fs.readFileSync = function (file, ...args) {
@@ -30,3 +34,11 @@ globalThis.fetch = async (input, init) => {
   }
   throw new Error('Unexpected external request in isolated telemetry fixture.');
 };
+
+// Provider diagnostics now use the hardened pinned HTTPS boundary, not fetch.
+// Keep DNS and socket traffic synthetic as well as the response payloads.
+const denyWire = () => { throw new Error('Unexpected wire request in isolated telemetry fixture.'); };
+dns.lookup = denyWire;
+https.request = denyWire;
+http.request = denyWire;
+installAiTransportFixture(['google.serper.dev', 'api.hunter.io']);

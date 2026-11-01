@@ -22,7 +22,7 @@ fs.writeFileSync(path.join(runDir, 'provider-metrics.json'), JSON.stringify({ fo
 } }));
 const port = await unusedTestPort();
 const base = `http://127.0.0.1:${port}`;
-const child = spawn(process.execPath, ['--import', pathToFileURL(path.resolve('server/tests/fixtures/telemetry-fetch.mjs')).href, 'dist/server.cjs'], {
+const child = spawn(process.execPath, ['--import', 'tsx', '--import', pathToFileURL(path.resolve('server/tests/fixtures/telemetry-fetch.mjs')).href, 'dist/server.cjs'], {
   env: { ...process.env, PORT: String(port), NODE_ENV: 'test', EDGEVIEW_TEST_MODE: '1', EDGEVIEW_TEST_DB_DIR: root, EDGEVIEW_CONFIG: config, EDGEVIEW_V1_DATA_DIR: runDir, EDGEVIEW_TEST_RUN_READ_MARKER: runReadMarker },
   stdio: ['ignore','pipe','pipe'],
 });
