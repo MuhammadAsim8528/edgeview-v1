@@ -63,27 +63,31 @@ try {
       }` }));
   } }] });
   await start();
-  const form = new FormData(); form.set('file', new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n' + ['Recent', 'Old', 'Partial', 'Legacy', 'Bulk'].map(name => `2026-10-01,Synthetic ${name} Buyer,Kenya,Synthetic Supplier,Product,1`).join('\n')]), 'policy.csv');
+  const names = ['Recent', 'Old', 'Partial', 'Legacy', 'Bulk', 'OldPipeline'];
+  const form = new FormData(); form.set('file', new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n' + names.map(name => `2026-10-01,Synthetic ${name} Buyer,Kenya,Synthetic Supplier,Product,1`).join('\n')]), 'policy.csv');
   assert.equal((await fetch(base + '/api/files/upload', { method: 'POST', body: form })).status, 201);
   const contacts = await (await fetch(base + '/api/companies')).json();
-  const ids = Object.fromEntries(['Recent', 'Old', 'Partial', 'Legacy', 'Bulk'].map(name => [name, contacts.find(contact => contact.company_name === `Synthetic ${name} Buyer`).id]));
+  const ids = Object.fromEntries(names.map(name => [name, contacts.find(contact => contact.company_name === `Synthetic ${name} Buyer`).id]));
   await stop();
   const seed = path.join(root, 'seed.cjs');
   await build({ stdin: { contents: `import {persistV1Run,createV1ResearchContext} from ${JSON.stringify(engine)}; import {persistV1ContactOverlay,projectHistoricalContactFields} from ${JSON.stringify(manager)};
     async function main(){for(const [name,id] of Object.entries(${JSON.stringify(ids)})) {
       const age=name==='Old'?8*86400000:60000;
       const run={id:'run-policy-'+name.toLowerCase(),company_name:'Synthetic '+name+' Buyer',country:'Kenya',status:name==='Partial'?'PARTIAL':'COMPLETED',started_at:new Date(Date.now()-age-1000).toISOString(),completed_at:new Date(Date.now()-age).toISOString(),...(name==='Legacy'?{}:{research_context:createV1ResearchContext(name==='Bulk'?'bulk':'interactive')}),queries:[],results:[],raw_records:[],timeline:[],limits:{}};
+      if(name==='OldPipeline')(run as any).research_context.pipeline_version=1;
       persistV1Run(run as any);await persistV1ContactOverlay(id as string,run.id,projectHistoricalContactFields(run as any),true);
     }}main().catch(error=>{console.error(error);process.exitCode=1;});`, resolveDir: repo, loader: 'ts' }, outfile: seed, bundle: true, platform: 'node', format: 'cjs', packages: 'external', logLevel: 'silent' });
   const seeded = spawnSync(process.execPath, ['-r', denied, seed], { cwd: app, env, encoding: 'utf8', windowsHide: true, timeout: 30000 }); assert.equal(seeded.status, 0, seeded.stderr);
   const originalOld = fs.readFileSync(path.join(state, 'runs/run-policy-old.json'));
+  const originalPipeline = fs.readFileSync(path.join(state, 'runs/run-policy-oldpipeline.json'));
   await start();
   const payload = name => ({ id: ids[name], company_name: `Synthetic ${name} Buyer` });
   const recent = await request('/api/enrich/company', payload('Recent')); assert.equal(recent.status, 200); assert.equal((await recent.json()).reused_evidence, true);
-  for (const name of ['Old', 'Partial', 'Legacy', 'Bulk']) { const response = await request('/api/enrich/company', payload(name)); assert.equal(response.status, 409, name); assert.equal((await response.json()).code, 'SAVED_EVIDENCE_NEEDS_CHOICE'); }
-  for (const endpoint of ['/api/enrich/batch', '/api/enrich/jobs']) { const response = await request(endpoint, { company_ids: [ids.Old] }); assert.equal(response.status, 409); assert.equal((await response.json()).code, 'SAVED_EVIDENCE_NEEDS_CHOICE'); }
+  for (const name of ['Old', 'Partial', 'Legacy', 'Bulk', 'OldPipeline']) { const response = await request('/api/enrich/company', payload(name)); assert.equal(response.status, 409, name); assert.equal((await response.json()).code, 'SAVED_EVIDENCE_NEEDS_CHOICE'); }
+  for (const endpoint of ['/api/enrich/batch', '/api/enrich/jobs']) for (const name of ['Old', 'OldPipeline']) { const response = await request(endpoint, { company_ids: [ids[name]] }); assert.equal(response.status, 409); assert.equal((await response.json()).code, 'SAVED_EVIDENCE_NEEDS_CHOICE'); }
   assert.equal(operationCount(), 0, 'refused cache modes must never fall through to live operation');
   const saved = await request('/api/enrich/company', { ...payload('Old'), reuseOnly: true }); assert.equal(saved.status, 200); assert.equal((await saved.json()).run.id, 'run-policy-old');
+  const historicalPipeline = await request('/api/enrich/company', { ...payload('OldPipeline'), reuseOnly: true }); assert.equal(historicalPipeline.status, 200); assert.equal((await historicalPipeline.json()).run.id, 'run-policy-oldpipeline', 'explicit historical revalidation stays available without quota');
   const streamSaved = await request('/api/enrich/batch', { company_ids: [ids.Partial], reuseOnly: true }); assert.equal(streamSaved.status, 200); assert.ok((await streamSaved.text()).includes('"reused_evidence":true'));
   assert.equal(operationCount(), 0);
   const refreshed = await request('/api/enrich/company', { ...payload('Old'), forceFetch: true }); assert.equal(refreshed.status, 200); assert.notEqual((await refreshed.json()).run.id, 'run-policy-old'); assert.equal(operationCount(), 1);
@@ -103,6 +107,7 @@ try {
   assert.equal((await request(`/api/enrich/job/${pendingId}/start`, { forceFetch: false })).status, 409, 'changed profile after creation must not bypass start preflight');
   assert.equal((await request('/api/enrich/jobs', { company_ids: [ids.Old], reuseOnly: true, forceFetch: true })).status, 400);
   assert.deepEqual(fs.readFileSync(path.join(state, 'runs/run-policy-old.json')), originalOld, 'live refresh must not rewrite old evidence');
+  assert.deepEqual(fs.readFileSync(path.join(state, 'runs/run-policy-oldpipeline.json')), originalPipeline, 'old pipeline context cannot be rewritten to claim new guarantees');
   assert.equal((await fetch(base + '/api/v1/runs/run-policy-old')).status, 200);
   assert.equal(fs.existsSync(audit), false, 'all actual network transports remain denied and unused');
   console.log('PASS actual single/SSE/job reuse gates: recent versus stale/partial/legacy/profile mismatch, no fallthrough, explicit historical/live, durable live intent, offline refusal, saved-only protection, changed-context start refusal and immutable old history. Live-operation body synthetic; providers/clean Windows NOT VERIFIED.');

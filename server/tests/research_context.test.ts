@@ -20,6 +20,8 @@ try {
   const describe = (engine as any).describeV1EvidenceReuse;
   assert.equal(typeof create, 'function', 'immutable research needs explicit version/profile/provider context');
   const context = create('interactive', settings);
+  assert.equal(context.pipeline_version, 2, 'only settings-consistent captures qualify for new automatic reuse');
+  assert.equal(compatibility({ research_context: { ...context, pipeline_version: 1 } }, context), 'different_context', 'old immutable captures remain readable but cannot claim the new consistency contract');
   assert.equal(context.profile, 'interactive');
   assert.match(context.provider_fingerprint, /^[a-f0-9]{64}$/);
   assert.equal(compatibility({ research_context: context }, context), 'matches_current_context');

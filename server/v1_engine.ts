@@ -65,7 +65,7 @@ export interface V1Result {
 
 export interface V1ResearchContext {
   format: 1;
-  pipeline_version: 1;
+  pipeline_version: 2;
   result_schema: number;
   objective: 'company-contact-research';
   profile: 'interactive' | 'bulk';
@@ -83,8 +83,22 @@ export function createV1ResearchContext(profile: 'interactive' | 'bulk', setting
     groq: { enabled: settings.groq_enabled === true, configured: Boolean(settings.groq_api_key?.trim()), model: settings.groq_model },
     primary: settings.primary_ai_provider,
   };
-  return { format: 1, pipeline_version: 1, result_schema: V1_CONTACT_OVERLAY_VERSION, objective: 'company-contact-research', profile,
+  return { format: 1, pipeline_version: 2, result_schema: V1_CONTACT_OVERLAY_VERSION, objective: 'company-contact-research', profile,
     provider_fingerprint: crypto.createHash('sha256').update(JSON.stringify(selection)).digest('hex') };
+}
+
+// Compare credentials only in memory; never fingerprint/store their values in
+// research context. Non-research preferences must not interrupt research.
+const researchSettingKeys = ['serper_enabled', 'serper_api_key', 'hunter_enabled', 'hunter_api_key',
+  'nvidia_enabled', 'nvidia_api_key', 'nvidia_model', 'nvidia_base_url',
+  'groq_enabled', 'groq_api_key', 'groq_model', 'primary_ai_provider'] as const satisfies readonly (keyof AppSettings)[];
+function assertResearchSettingsCurrent(expected: AppSettings): void {
+  const current = getAppSettings();
+  if (researchSettingKeys.some(key => current[key] !== expected[key])) throw new Error('RESEARCH_CONFIGURATION_CHANGED');
+}
+function researchSettingsStillCurrent(expected: AppSettings): boolean {
+  try { assertResearchSettingsCurrent(expected); return true; }
+  catch { return false; } // Unknown/new configuration cannot inherit old account suppression.
 }
 
 export function v1ResearchCompatibility(run: { research_context?: V1ResearchContext }, expected: V1ResearchContext): 'unverified' | 'matches_current_context' | 'different_context' {
@@ -264,7 +278,8 @@ function providerAvailable(run: V1Run, provider: string, query: string): boolean
   if (cooldown) providerCooldowns.delete(key);
   return true;
 }
-function rememberHardProviderFailure(provider: string, status: number) {
+function rememberHardProviderFailure(provider: string, status: number, settings: AppSettings) {
+  if (!researchSettingsStillCurrent(settings)) return;
   const key = providerCircuitKey(provider);
   if ([401, 402, 403, 432].includes(status)) hardUnavailableProviders.set(key, `HTTP ${status}`);
   if (status === 429) {
@@ -429,8 +444,8 @@ function orderAiProviders<T extends { name: string }>(providers: T[], primary: '
   return [...providers].sort((a, b) => Number(b.name.startsWith(preferred)) - Number(a.name.startsWith(preferred)));
 }
 
-async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Promise<string[]> {
-  const settings = getAppSettings();
+async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', settings: AppSettings): Promise<string[]> {
+  assertResearchSettingsCurrent(settings);
   const request = {
     company_name: run.company_name,
     country: run.country,
@@ -448,6 +463,7 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
   }
   let lastError: unknown = new Error('Query generation failed');
   for (const provider of providers) {
+    assertResearchSettingsCurrent(settings);
     if (!providerAvailable(run, provider.name, `${run.company_name} ${run.country}`)) continue;
     const started = Date.now(); const requestedAt = now();
     try {
@@ -462,7 +478,7 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
       const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
       run.raw_records.push(raw);
       raw.http_status = response.status;
-      if (!response.ok) rememberHardProviderFailure(provider.name, response.status);
+      if (!response.ok) rememberHardProviderFailure(provider.name, response.status, settings);
       if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
       if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
       validateProviderEnvelope(body, 'ai');
@@ -474,7 +490,7 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
     } catch (error) {
       lastError = error; const failure = safeError(error);
       attachOperationFailure(run, provider.name, request, failure);
-      if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message)) {
+      if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message) && researchSettingsStillCurrent(settings)) {
         providerCooldowns.set(providerCircuitKey(provider.name), { until: Date.now() + 120_000, reason: failure.message });
       }
       if (!run.raw_records.some(r => r.kind === 'ai' && r.provider === provider.name)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
@@ -486,8 +502,8 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk'): Pro
   return queries;
 }
 
-async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
-  const settings = getAppSettings();
+async function searchSerper(run: V1Run, query: string, settings: AppSettings): Promise<V1Result[]> {
+  assertResearchSettingsCurrent(settings);
   const provider = 'serper';
   if (!providerAvailable(run, provider, query)) return [];
   const request = { q: query, num: run.limits.max_results_per_query };
@@ -499,7 +515,7 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
     raw.http_status = response.status;
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
     if (!response.ok) throw new Error(`Serper returned HTTP ${response.status}`);
     validateProviderEnvelope(body, 'serper');
@@ -514,7 +530,7 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
   } catch (error) {
     const failure = safeError(error);
     const observedStatus=(error as {httpStatus?:number})?.httpStatus;
-    if(observedStatus!==undefined)rememberHardProviderFailure(provider,observedStatus);
+    if(observedStatus!==undefined)rememberHardProviderFailure(provider,observedStatus,settings);
     if (!run.raw_records.some(r => r.kind === 'search' && (r.request as any).q === query)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, ...(observedStatus!==undefined?{http_status:observedStatus}:{}), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
     attachOperationFailure(run, provider, request, failure);
     run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query, latency_ms: Date.now() - started, message: 'Search request failed', error: failure.message });
@@ -522,13 +538,14 @@ async function searchSerper(run: V1Run, query: string): Promise<V1Result[]> {
   }
 }
 
-async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
+async function resolveSerperSearchLinks(run: V1Run, settings: AppSettings): Promise<void> {
+  assertResearchSettingsCurrent(settings);
   const pending=run.raw_records.filter(record=>record.provider==='serper'&&record.kind==='search'
     && record.http_status!==undefined&&record.http_status>=200&&record.http_status<300
     && Array.isArray((record.response as any)?.organic)
     && run.results.some(result=>result.raw_record_id===record.id&&isSerperGoogleRedirect(result.url)));
   if(!pending.length)return;
-  const settings=getAppSettings(), deadline=Date.now()+45_000;
+  const deadline=Date.now()+45_000;
   let cursor=0;
   // Search all query responses first, then resolve with two bounded workers.
   // Google links age together instead of paying a fresh ~30s wait per query.
@@ -540,6 +557,7 @@ async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
         requested_at:now(),completed_at:now(),latency_ms:0,sha256:''};
       const started=performance.now();
       try{
+        assertResearchSettingsCurrent(settings);
         const remaining=deadline-Date.now();
         if(remaining<=0)throw Object.assign(new Error('Serper link resolution budget exhausted'),{status:408});
         const response=await boundedFetch('https://google.serper.dev/resolve',{method:'POST',redirect:'error',
@@ -558,7 +576,11 @@ async function resolveSerperSearchLinks(run: V1Run): Promise<void> {
           if(target){result.metadata={...result.metadata,original_google_link:result.url,link_resolution_raw_record_id:raw.id};result.url=target;result.raw_record_id+=','+raw.id;}
         }
         if(run.results.some(result=>result.raw_record_id===source.id&&isSerperGoogleRedirect(result.url)))throw Object.assign(new Error('SERPER_LINK_UNRESOLVED: Some Google links remain unresolved; provider retryAfter is retained in raw evidence.'),{status:response.status});
-      }catch(error){raw.failure=safeError(error);const observed=(error as {httpStatus?:number})?.httpStatus;if(observed!==undefined)raw.http_status=observed;}
+      }catch(error){raw.failure=safeError(error);const observed=(error as {httpStatus?:number})?.httpStatus;if(observed!==undefined)raw.http_status=observed;
+        // Drain both already-issued workers before execute persists the run.
+        // Rejecting Promise.all early would let a sibling mutate saved state.
+        if(raw.failure.message==='RESEARCH_CONFIGURATION_CHANGED')return;
+      }
       finally{
         raw.completed_at=now();raw.latency_ms=Math.max(0,performance.now()-started);raw.sha256=sha(raw.response??raw.failure);run.raw_records.push(raw);
         run.timeline.push({at:now(),stage:'search',provider:'serper-resolve',query,status:raw.failure?'failed':'success',latency_ms:raw.latency_ms,
@@ -589,7 +611,7 @@ async function searchTavily(run: V1Run, query: string): Promise<V1Result[]> {
     const body = await response.json().catch(() => ({}));
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request: persistedRequest, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     if (!response.ok) throw new Error(`Tavily returned HTTP ${response.status}`);
     const items = Array.isArray((body as any).results) ? (body as any).results : [];
     run.timeline.push({ at: now(), stage: 'search', status: 'success', provider, query, latency_ms: raw.latency_ms, message: `Captured ${items.length} search results with requested raw content` });
@@ -613,7 +635,7 @@ async function searchExa(run: V1Run, query: string): Promise<V1Result[]> {
     const body = await response.json().catch(() => ({}));
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     if (!response.ok) throw new Error(`Exa returned HTTP ${response.status}`);
     const items = Array.isArray((body as any).results) ? (body as any).results : [];
     run.timeline.push({ at: now(), stage: 'search', status: 'success', provider, query, latency_ms: raw.latency_ms, message: `Captured ${items.length} search results` });
@@ -637,7 +659,7 @@ async function searchLinkup(run: V1Run, query: string): Promise<V1Result[]> {
     const body = await response.json().catch(() => ({}));
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     if (!response.ok) throw new Error(`Linkup returned HTTP ${response.status}`);
     const items = Array.isArray((body as any).results) ? (body as any).results : [];
     run.timeline.push({ at: now(), stage: 'search', status: 'success', provider, query, latency_ms: raw.latency_ms, message: `Captured ${items.length} search results` });
@@ -650,8 +672,8 @@ async function searchLinkup(run: V1Run, query: string): Promise<V1Result[]> {
   }
 }
 
-async function enrichHunter(run: V1Run, domain: string): Promise<V1Result[]> {
-  const settings = getAppSettings(); const provider = 'hunter';
+async function enrichHunter(run: V1Run, domain: string, settings: AppSettings): Promise<V1Result[]> {
+  assertResearchSettingsCurrent(settings); const provider = 'hunter';
   if (!settings.hunter_enabled || !settings.hunter_api_key || !domain) return [];
   if (!providerAvailable(run, provider, domain)) return [];
   const request = { domain, company: run.company_name, country: run.country };
@@ -664,7 +686,7 @@ async function enrichHunter(run: V1Run, domain: string): Promise<V1Result[]> {
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
     raw.http_status = response.status;
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
     if (!response.ok) throw new Error(`Hunter returned HTTP ${response.status}`);
     validateProviderEnvelope(body, 'hunter');
@@ -680,7 +702,7 @@ async function enrichHunter(run: V1Run, domain: string): Promise<V1Result[]> {
   } catch (error) {
     const failure = safeError(error);
     const observedStatus=(error as {httpStatus?:number})?.httpStatus;
-    if(observedStatus!==undefined)rememberHardProviderFailure(provider,observedStatus);
+    if(observedStatus!==undefined)rememberHardProviderFailure(provider,observedStatus,settings);
     if (!run.raw_records.some(r => r.kind === 'search' && r.provider === provider && (r.request as any).domain === domain)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'search', provider, request, failure, ...(observedStatus!==undefined?{http_status:observedStatus}:{}), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
     attachOperationFailure(run, provider, request, failure);
     run.timeline.push({ at: now(), stage: 'search', status: 'failed', provider, query: domain, latency_ms: Date.now() - started, message: 'Domain enrichment request failed', error: failure.message });
@@ -700,7 +722,7 @@ async function scrapeFirecrawl(run: V1Run, result: V1Result): Promise<void> {
     const body = await response.json().catch(() => ({}));
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     result.scrape_latency_ms = raw.latency_ms;
     result.raw_record_id = `${result.raw_record_id},${raw.id}`;
     if (!response.ok || (body as any)?.success === false) throw new Error(`Firecrawl returned HTTP ${response.status}: ${cleanText((body as any)?.error)}`);
@@ -734,7 +756,7 @@ async function scrapeApifyFallback(run: V1Run, result: V1Result): Promise<boolea
     const body = await response.json().catch(() => ({}));
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw); result.raw_record_id = `${result.raw_record_id},${raw.id}`;
-    if (!response.ok) rememberHardProviderFailure(provider, response.status);
+    if (!response.ok) rememberHardProviderFailure(provider, response.status, settings);
     if (!response.ok) throw new Error(`Apify returned HTTP ${response.status}`);
     const item = Array.isArray(body) ? body[0] : body;
     result.markdown = cleanText((item as any)?.markdown);
@@ -855,7 +877,8 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
   });
 }
 
-async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'bulk'): Promise<void> {
+async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'bulk', settings: AppSettings): Promise<void> {
+  assertResearchSettingsCurrent(settings);
   const domain = run.identity_resolution?.official_domain || '';
   const pagePriority = (url: string) => /(?:management|leadership|team|board|director|executive)/i.test(url) ? 3 : /contact/i.test(url) ? 2 : /about|company/i.test(url) ? 1 : 0;
   // Provider-returned full text from an official-domain URL is equally valid
@@ -878,7 +901,6 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
   const chunks = [...officialChunks.slice(0, 8), ...linkedInChunks.slice(0, 2)];
   run.evidence_workspace = { chunks, accepted_claims: [], rejected_claims: [] };
   if (!chunks.length) return;
-  const settings = getAppSettings();
   const providers = orderAiProviders([
     ...(settings.groq_enabled && settings.groq_api_key ? [{ name: 'groq-extraction', url: 'https://api.groq.com/openai/v1/chat/completions', key: settings.groq_api_key, model: settings.groq_model }] : []),
     ...(settings.nvidia_enabled && settings.nvidia_api_key ? [{ name: 'nvidia-extraction', url: `${(settings.nvidia_base_url || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '')}/chat/completions`, key: settings.nvidia_api_key, model: settings.nvidia_model }] : []),
@@ -895,6 +917,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
     };
     let batchSucceeded = false;
     for (const provider of providers) {
+      assertResearchSettingsCurrent(settings);
       if (!providerAvailable(run, provider.name, `evidence batch ${batchIndex + 1}`)) continue;
       const started = Date.now(); const requestedAt = now();
       try {
@@ -903,7 +926,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
         const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
         run.raw_records.push(raw);
         raw.http_status = response.status;
-        if (!response.ok) rememberHardProviderFailure(provider.name, response.status);
+        if (!response.ok) rememberHardProviderFailure(provider.name, response.status, settings);
         if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
         if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
         validateProviderEnvelope(body, 'ai');
@@ -928,7 +951,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
       } catch (error) {
         const failure = safeError(error);
         attachOperationFailure(run, provider.name, request, failure);
-        if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message)) {
+        if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message) && researchSettingsStillCurrent(settings)) {
           providerCooldowns.set(providerCircuitKey(provider.name), { until: Date.now() + 120_000, reason: failure.message });
         }
         if (!run.raw_records.some(record => record.provider === provider.name && (record.request as any).batch === batchIndex + 1)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
@@ -955,19 +978,22 @@ async function execute(companyName: string, country: string, profile: 'interacti
     : { max_queries: MAX_QUERIES, max_results_per_query: MAX_RESULTS, max_scrapes: MAX_SCRAPES, timeout_ms: RUN_TIMEOUT_MS } };
   run.timeline.push({ at: now(), stage: 'run', status: 'pending', message: `Started bounded V1 enrichment for ${run.company_name} in ${run.country}` });
   try {
-    run.research_context = createV1ResearchContext(profile);
-    run.queries = await generateQueries(run, profile);
+    const settings = Object.freeze({ ...getAppSettings() });
+    run.research_context = createV1ResearchContext(profile, settings);
+    run.queries = await generateQueries(run, profile, settings);
     // V1's supported retrieval path is intentionally narrow: Serper discovers
     // candidates, Hunter enriches the resolved company domain, and bounded
     // deterministic HTTP capture reads the official site. Other experimental
     // providers remain in the repository but cannot enter this critical path.
-    for (const query of run.queries) run.results.push(...await searchSerper(run, query));
-    await resolveSerperSearchLinks(run);
+    for (const query of run.queries) run.results.push(...await searchSerper(run, query, settings));
+    await resolveSerperSearchLinks(run, settings);
+    assertResearchSettingsCurrent(settings);
     run.identity_resolution = resolveOfficialDomain(run.company_name, run.country, run.results);
     run.timeline.push({ at: now(), stage: 'resolution', status: run.identity_resolution.official_domain ? 'success' : 'skipped', message: run.identity_resolution.official_domain
       ? `Resolved official domain ${run.identity_resolution.official_domain} with ${run.identity_resolution.confidence} confidence`
       : 'No domain met the minimum company-ownership evidence threshold; directories remain evidence only' });
-    run.results.push(...await enrichHunter(run, run.identity_resolution.official_domain));
+    run.results.push(...await enrichHunter(run, run.identity_resolution.official_domain, settings));
+    assertResearchSettingsCurrent(settings);
     const unique = [...new Map(run.results.filter(r => r.url&&!isSerperGoogleRedirect(r.url)).map(r => [r.url, r])).values()];
     if (!bulk) await Promise.all(unique.filter(result => result.provider !== 'direct-http' && !result.text && !result.markdown).slice(0, MAX_SCRAPES).map(result => scrapeDirectFallback(run, result)));
     // Search providers may return the same URL for several queries. Fetch it
@@ -985,14 +1011,17 @@ async function execute(companyName: string, country: string, profile: 'interacti
       result.scrape_latency_ms = fetched.scrape_latency_ms; result.status = fetched.status; result.error = fetched.error;
     }
     await crawlOfficialWebsite(run, run.identity_resolution.official_domain);
-    await extractStructuredEvidence(run, profile);
+    await extractStructuredEvidence(run, profile, settings);
+    assertResearchSettingsCurrent(settings);
     const successfulSearchRequests = run.raw_records.filter(record => record.provider === 'serper' && record.kind === 'search' && record.response !== undefined && !record.failure).length;
     const usableCount=run.results.filter(result=>result.status==='success').length;
     run.status = run.results.length>0&&usableCount===0 ? 'FAILED'
       : classifyRunStatus(usableCount, run.timeline.some(e => e.status === 'failed'), successfulSearchRequests);
   } catch (error) {
     run.status = run.results.length ? 'PARTIAL' : 'FAILED';
-    run.timeline.push({ at: now(), stage: 'run', status: 'failed', message: 'Run stopped before all stages completed', error: safeError(error).message });
+    run.timeline.push({ at: now(), stage: 'run', status: 'failed', message: error instanceof Error && error.message === 'RESEARCH_CONFIGURATION_CHANGED'
+      ? 'Provider settings changed; captured evidence was saved. Retry research using the current configuration.'
+      : 'Run stopped before all stages completed', error: safeError(error).message });
   } finally {
     run.completed_at = now();
     run.timeline.push({ at: now(), stage: 'storage', status: 'success', message: `Persisting ${run.raw_records.length} raw records and ${run.results.length} normalized results` });
