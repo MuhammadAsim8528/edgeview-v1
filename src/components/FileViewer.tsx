@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { safeFetchJson, fetchAllFileRows } from '../utils/safeFetch';
+import { safeFetchJson } from '../utils/safeFetch';
 import { loadFilePage, type FilePageResult } from '../utils/filePage';
 import { readShipmentGrouping, saveShipmentGrouping } from '../utils/viewPreferences';
 import {
@@ -33,7 +33,7 @@ interface FileViewerProps {
   file: ParsedFile | null;
   onExportCSV: () => void;
   onSaveToHistory?: (fileId: string) => Promise<any>;
-  onOpenExport?: (payload: GlobalExportPayload) => void;
+  onOpenExport: (payload: GlobalExportPayload) => void;
 }
 
 export interface DisplayColumn {
@@ -858,73 +858,18 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   };
 
   // Export Filtered View via Global Export Manager
-  const [isExportingFiltered, setIsExportingFiltered] = useState(false);
-  const handleExportFilteredCSV = async () => {
-    if (isExportingFiltered || effectiveTotalCount === 0) return;
-    if (onOpenExport && file) {
-      const baseName = file.name.replace(/\.[^/.]+$/, '');
-      onOpenExport({
-        dataset: 'files', title: `${file.name} (Filtered)`, records: [],
-        sourceFileId: file.id, recordCount: effectiveTotalCount,
-        sourceView: { group_shipments: String(isGrouped), search: debouncedSearch,
-          product: productFilter, country: countryFilter, importer: importerFilter,
-          start_date: startDate, end_date: endDate,
-          ...(sortColumn ? { sort_by: sortColumn, sort_dir: sortDirection } : {}) },
-        filenamePrefix: `EdgeView_${baseName}_Filtered`,
-      });
-      return;
-    }
-    let exportRows = sortedRows;
-    if (isServerSide && file) {
-      setIsExportingFiltered(true);
-      try {
-        const result = await fetchAllFileRows(file.id, undefined, {
-          group_shipments: String(isGrouped), search: debouncedSearch,
-          product: productFilter, country: countryFilter, importer: importerFilter,
-          start_date: startDate, end_date: endDate,
-          ...(sortColumn ? { sort_by: sortColumn, sort_dir: sortDirection } : {}),
-        });
-        if (!result.ok || !result.data) {
-          window.alert(result.error || 'Could not load the complete filtered export. Try again.');
-          return;
-        }
-        exportRows = result.data.rows;
-      } finally {
-        setIsExportingFiltered(false);
-      }
-    }
-    if (exportRows.length === 0) return;
-
-    const headers = displayColumns.map((col) => col.label);
-    const csvRows = [headers.join(',')];
-
-    exportRows.forEach((row) => {
-      const values = displayColumns.map((col) => {
-        let val = getCellValue(row, col, fileColumns);
-        if (col.key === 'date') {
-          val = formatExcelDate(val);
-        }
-        const strVal = val !== undefined && val !== null ? String(val) : '';
-        return `"${strVal.replace(/"/g, '""')}"`;
-      });
-      csvRows.push(values.join(','));
+  const handleExportFilteredCSV = () => {
+    if (effectiveTotalCount === 0 || !file) return;
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+    onOpenExport({
+      dataset: 'files', title: `${file.name} (Filtered)`, records: [],
+      sourceFileId: file.id, recordCount: effectiveTotalCount,
+      sourceView: { group_shipments: String(isGrouped), search: debouncedSearch,
+        product: productFilter, country: countryFilter, importer: importerFilter,
+        start_date: startDate, end_date: endDate,
+        ...(sortColumn ? { sort_by: sortColumn, sort_dir: sortDirection } : {}) },
+      filenamePrefix: `EdgeView_${baseName}_Filtered`,
     });
-
-    const csvContent = '\uFEFF' + csvRows.join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    const baseName = file?.name?.replace(/\.[^/.]+$/, '') || 'pharma_shipments';
-    const groupSuffix = isGrouped ? '_grouped' : '';
-    const filterSuffix = activeFilterCount > 0 ? '_filtered' : '';
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${baseName}${groupSuffix}${filterSuffix}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   const [isSaving, setIsSaving] = useState(false);
@@ -1099,12 +1044,12 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           <button
             onClick={handleExportFilteredCSV}
             id="export-filtered-btn"
-            disabled={isExportingFiltered || isDataLoading || effectiveTotalCount === 0}
+            disabled={isDataLoading || effectiveTotalCount === 0}
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-[#10b981] hover:bg-[#10b981]/80 disabled:opacity-50 text-white font-semibold text-xs shadow-xs transition-colors"
             title="Export currently filtered and grouped view to UTF-8 CSV"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{isExportingFiltered ? 'Preparing export…' : 'Export Filtered'}</span>
+            <span>Export Filtered</span>
           </button>
 
           {/* Export all stored rows through the server-owned report pipeline. */}

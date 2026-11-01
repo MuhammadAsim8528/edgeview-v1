@@ -11,7 +11,7 @@ const run = (body: unknown, status = 200, offset = 0) => {
   return loadFilePage('/synthetic', 25, offset, controller.signal);
 };
 try {
-  const markup = renderToStaticMarkup(React.createElement(FileViewer, { file: { id: 'synthetic', name: 'Synthetic.csv', file_type: 'CSV', columns: ['Importer'], rows: [], summary: { total_rows: 17612 } } as any, onExportCSV() {} }));
+  const markup = renderToStaticMarkup(React.createElement(FileViewer, { file: { id: 'synthetic', name: 'Synthetic.csv', file_type: 'CSV', columns: ['Importer'], rows: [], summary: { total_rows: 17612 } } as any, onExportCSV() {}, onOpenExport() {} }));
   assert.match(markup, /Loading shipment records/);
   assert.doesNotMatch(markup, /No matching shipment records found|\(0 items\)/);
   const rows = Array.from({ length: 25 }, (_, index) => ({ Importer: `Synthetic ${index}` }));

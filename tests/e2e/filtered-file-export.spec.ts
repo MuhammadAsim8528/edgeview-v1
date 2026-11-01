@@ -14,6 +14,8 @@ test('filtered grouped export uses the stored file and server view, not browser 
   await page.getByPlaceholder('Global keyword search across Date, Item, Importer, Cost...').fill('MATCH');
   expect((await filtered).status()).toBe(200);
   await expect(page.locator('tbody tr').filter({ hasText: 'Local Buyer' })).toHaveCount(1);
+  let exportPageReads = 0;
+  page.on('request', req => { if (new URL(req.url()).pathname.endsWith('/data')) exportPageReads++; });
   await page.locator('#export-filtered-btn').click();
   const submitted = page.waitForRequest(r => new URL(r.url()).pathname.startsWith('/api/export') && r.method() === 'POST');
   const downloading = page.waitForEvent('download');
@@ -29,6 +31,7 @@ test('filtered grouped export uses the stored file and server view, not browser 
   expect(text.trim().split('\n')).toHaveLength(2);
   expect(text).toContain('MATCH_A'); expect(text).toContain('MATCH_B'); expect(text).not.toContain('Noise Buyer');
   expect(text).toContain('30.00');
+  expect(exportPageReads).toBe(0); // Export must not collect the paginated dataset in the browser.
   const url = new URL(sent.url()).pathname;
   const unanchored = await request.post('/api/export', { data: { dataset: 'files', format: 'csv',
     records: [{ Date: '2026-01-01', Importer: 'FORGED', Country: 'Kenya', Item: 'Not stored', TOT_FC: 999 }] } });
