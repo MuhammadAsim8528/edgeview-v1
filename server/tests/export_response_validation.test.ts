@@ -12,5 +12,6 @@ for (const [format, body, type] of [['csv', 'Company\nSynthetic Δ', 'text/csv']
   assert.ok(result.blob.size > 0);
 }
 await assert.rejects(processAndValidateExportResponse(new Response('temporarily unavailable', { status: 503 }), 'all'), /HTTP 503/);
+await assert.rejects(processAndValidateExportResponse(Response.json({ error: 'SYNTHETIC_PRIVATE_STORAGE_PATH' }, { status: 500 }), 'all'), error => error instanceof Error && error.message === 'Export server error (HTTP 500)');
 await assert.rejects(processAndValidateExportResponse(new Response('<html>failure</html>', { headers: { 'Content-Type': 'text/html' } }), 'all'), /HTML page/);
 console.log('PASS incomplete artifacts refused before body read, safe fixed error, normal five-format responses and HTTP/HTML failures');

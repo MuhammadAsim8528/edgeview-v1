@@ -47,6 +47,9 @@ export async function processAndValidateExportResponse(
   // 1. Check HTTP Status
   if (!response.ok) {
     let errMsg = `Export server error (HTTP ${response.status})`;
+    // Infrastructure failures can contain private paths or exception details.
+    // Retain the status for support without displaying an upstream raw message.
+    if (response.status >= 500) throw new Error(errMsg);
     try {
       const text = await response.text();
       if (text.trim().startsWith('{')) {

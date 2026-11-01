@@ -1934,7 +1934,7 @@ app.post('/api/export', async (req, res) => {
   } catch (err: any) {
     console.error('Unified Export Error:', err);
     if (err instanceof ExportValidationError) return res.status(400).json({ error: err.message, code: 'INVALID_EXPORT_REQUEST' });
-    return res.status(500).json({ error: err?.message || 'Failed to process export request' });
+    return res.status(500).json({ success: false, error: 'Could not generate the export. Please retry or export a smaller selection.', code: 'EXPORT_FAILED' });
   }
 });
 

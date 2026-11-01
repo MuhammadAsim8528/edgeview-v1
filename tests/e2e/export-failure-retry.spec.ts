@@ -7,10 +7,11 @@ test('an incomplete all-formats response is not downloaded as success and a real
   expect(created.status()).toBe(201);
   const partial = new JSZip(); partial.file('Synthetic.csv', 'Product\nRETRY_SAVED_MARKER');
   const partialBytes = await partial.generateAsync({ type: 'nodebuffer' });
-  let intercepted = false;
+  let intercepted = 0;
   await page.route('**/api/export', async route => {
-    if (!intercepted) {
-      intercepted = true;
+    if (intercepted++ === 0) {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'SYNTHETIC_PRIVATE_STORAGE_PATH' }) });
+    } else if (intercepted === 2) {
       await route.fulfill({ status: 200, headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="Synthetic.zip"', 'X-Export-Failed-Formats': 'PDF' }, body: partialBytes });
     } else await route.continue();
   });
@@ -20,6 +21,10 @@ test('an incomplete all-formats response is not downloaded as success and a real
   await page.locator('input[name="export_format"][value="all"]').check();
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   await expect(page.getByText('Export Failed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Export server error (HTTP 500)', { exact: true })).toBeVisible();
+  await expect(page.getByText('SYNTHETIC_PRIVATE_STORAGE_PATH')).toHaveCount(0);
+  expect(downloads).toBe(0);
+  await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   await expect(page.getByText('Export incomplete: one or more requested formats could not be generated. Retry, or export an individual format.', { exact: true })).toBeVisible();
   expect(downloads).toBe(0);
   await expect(page.getByText('Export completed successfully!', { exact: true })).not.toBeVisible();
