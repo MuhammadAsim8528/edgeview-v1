@@ -1316,7 +1316,7 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
     const jobId = req.params.id;
     const { forceFetch } = req.body;
     if (forceFetch !== undefined && typeof forceFetch !== 'boolean') return res.status(400).json({ success: false, error: 'Force Fetch must be true or false.' });
-    const { getJob, runJobLoop, isJobDraining, updateJob } = await import('./server/job_manager');
+    const { getJob, runJobLoop, isJobDraining } = await import('./server/job_manager');
     const job = await getJob(jobId);
     if (!job) {
       return res.status(404).json({ success: false, error: 'Job not found' });
@@ -1326,15 +1326,11 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
     const pendingIds = job.company_ids.filter(id => ['pending', 'processing'].includes(job.company_states[id]?.status));
     const livePending = pendingIds.some(id => job.company_states[id]?.force_live);
     if (!capability.available && (forceFetch || livePending || (pendingIds.length > 0 && !reusableEvidenceSelection(pendingIds.map(id => db.getContactById(id)))))) return unavailableCapabilityResponse(res, capability);
-    if (!capability.available && pendingIds.length > 0) {
-      for (const id of pendingIds) job.company_states[id].reuse_only = true;
-      await updateJob(jobId, { company_states: job.company_states }, true);
-    }
     const automaticIds = pendingIds.filter(id => job.company_states[id]?.reuse_policy_version === 1 && !job.company_states[id]?.reuse_only && !job.company_states[id]?.force_live);
     if (!forceFetch && capability.available && savedEvidenceNeedsChoice(automaticIds.map(id => db.getContactById(id)), 'bulk')) return res.status(409).json({ success: false, code: 'SAVED_EVIDENCE_NEEDS_CHOICE', message: 'Saved results changed or expired. Choose historical review or an explicit live-refresh job.', recoverable: true });
     
     // Background execution
-    const started = await runJobLoop(jobId, Boolean(forceFetch));
+    const started = await runJobLoop(jobId, Boolean(forceFetch), !capability.available);
     if (!started) {
       const draining = isJobDraining(jobId);
       return res.status(409).json({ success: false, code: draining ? 'JOB_DRAINING' : 'JOB_ALREADY_RUNNING', error: draining ? 'Previous work is finishing. Try resuming shortly.' : 'Job is already running' });

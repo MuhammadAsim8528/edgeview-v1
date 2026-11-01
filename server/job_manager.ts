@@ -874,7 +874,7 @@ export function isJobActive(jobId: string): boolean {
   return activeJobs.has(jobId);
 }
 
-export async function runJobLoop(jobId: string, forceFetch = false): Promise<boolean> {
+export async function runJobLoop(jobId: string, forceFetch = false, reviewRetainedOnly = false): Promise<boolean> {
   if (shuttingDown || ownedJobs.has(jobId)) return false;
   ownedJobs.add(jobId);
   activeJobs.add(jobId);
@@ -885,6 +885,11 @@ export async function runJobLoop(jobId: string, forceFetch = false): Promise<boo
     if (shuttingDown || !job || (forceFetch && Object.values(job.company_states).some(state => state.reuse_only))) {
       releaseOwnership(); return false;
     }
+    const queued = Object.values(job.company_states).filter(state => state.status === 'pending' || state.status === 'processing');
+    if (reviewRetainedOnly && (forceFetch || queued.some(state => state.force_live))) { releaseOwnership(); return false; }
+    // Permission changes happen only after ownership is acquired. A refused
+    // duplicate/draining start must not alter the persisted job mode.
+    if (reviewRetainedOnly) for (const state of queued) state.reuse_only = true;
     if (forceFetch) for (const state of Object.values(job.company_states)) state.force_live = true;
     await updateJob(jobId, { status: 'PENDING', company_states: job.company_states }, true);
     if (shuttingDown) { releaseOwnership(); return false; }
