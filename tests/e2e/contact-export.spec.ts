@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test('contact scope, export overrides and saved selection agree in the rendered UI', async ({ page, context, runtime }, testInfo) => {
   const errors: string[] = [];
@@ -35,7 +35,7 @@ test('contact scope, export overrides and saved selection agree in the rendered 
     await expect(page.getByText('1 companies selected for batch action', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Export Selected', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exporter Suppliers & History', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    const downloading = page.waitForEvent('download');
+    const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
     await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
     const download = await downloading;
     const stream = await download.createReadStream();

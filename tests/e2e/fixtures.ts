@@ -7,6 +7,11 @@ import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { unusedTestPort } from '../../scripts/test-server-port.mjs';
 
+// Artifact delivery is distinct from the 15s control/expectation budget.
+// Hosted traces returned valid exports at17–19s. Keep a finite shared wait;
+// content/status checks and product timeouts remain independent.
+export const EXPORT_ARTIFACT_TIMEOUT_MS = 45_000;
+
 type Runtime = { baseURL: string; restart: () => Promise<void>; identity: () => Promise<any>; outboundAttempts: () => number; historyReadFailure: (enabled: boolean) => void };
 export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number; historyFaultInjection: boolean }>({
   savedHistoryCount: [0, { option: true }],

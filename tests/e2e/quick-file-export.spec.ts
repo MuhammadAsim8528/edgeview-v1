@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test('quick full export sends a stored-file reference and includes rows beyond the visible page', async ({ page, context, runtime }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
@@ -10,7 +10,7 @@ test('quick full export sends a stored-file reference and includes rows beyond t
   expect((await uploaded).status()).toBe(201);
   await page.getByRole('button', { name: 'Export Data', exact: true }).click();
   const submitted = page.waitForRequest(request => new URL(request.url()).pathname.startsWith('/api/export') && request.method() === 'POST');
-  const downloading = page.waitForEvent('download');
+  const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const request = await submitted;
   expect(new URL(request.url()).pathname).toMatch(/^\/api\/export\/file\/[^/]+$/);

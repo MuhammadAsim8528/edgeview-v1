@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test('importer analytics download keeps stored file/country/product/value authority', async ({ page, context, request, runtime }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
@@ -19,7 +19,7 @@ test('importer analytics download keeps stored file/country/product/value author
   await page.locator('input[type="date"]').first().fill('2027-01-01');
   await page.getByRole('button', { name: 'Export Full History & Invoices', exact: true }).click();
   const submitted = page.waitForRequest(r => r.url().endsWith('/api/export') && r.method() === 'POST');
-  const downloading = page.waitForEvent('download');
+  const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const sent = (await submitted).postDataJSON();
   const stream = await (await downloading).createReadStream(); const parts: Buffer[] = []; for await (const part of stream!) parts.push(Buffer.from(part));

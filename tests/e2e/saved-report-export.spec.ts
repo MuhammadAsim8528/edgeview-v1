@@ -1,8 +1,8 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 import JSZip from 'jszip';
 import { extractPdfText, pdfTextContains } from '../../server/tests/pdf_inspect';
 
-test('saved report download preserves actual custom columns/text and rejects browser overrides', async ({ page, context, request, runtime }) => {
+test('saved report download preserves actual custom columns/text and rejects browser overrides', async ({ page, context, request, runtime }, testInfo) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
   await runtime.identity();
   const create = async (data: object) => { const response = await request.post('/api/reports/upload', { data }); expect(response.status()).toBe(201); return (await response.json()).report; };
@@ -12,13 +12,21 @@ test('saved report download preserves actual custom columns/text and rejects bro
   await page.goto('/'); await page.locator('#nav-tab-reports').click();
   await expect(page.getByRole('cell', { name: 'SAVED_REPORT_MARKER', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Export Report', exact: true }).click();
-  const sent = page.waitForRequest(r => r.url().endsWith('/api/export') && r.method() === 'POST'); const downloading = page.waitForEvent('download');
+  const started = performance.now();
+  const sent = page.waitForRequest(r => r.url().endsWith('/api/export') && r.method() === 'POST');
+  const responded = page.waitForResponse(r => new URL(r.url()).pathname === '/api/export' && r.request().method() === 'POST', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
+  const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const payload = (await sent).postDataJSON();
+  const response = await responded;
+  expect(response.status()).toBe(200);
+  expect(response.request().postDataBuffer()!.length).toBeLessThan(1024);
   const stream = await (await downloading).createReadStream(); const parts: Buffer[] = []; for await (const part of stream!) parts.push(Buffer.from(part));
   const csv = Buffer.concat(parts).toString('utf8');
   expect(csv).toContain('Product'); expect(csv).toContain('SAVED_REPORT_MARKER'); expect(csv).toContain('42');
   expect(csv).not.toContain('Importer'); expect(payload.report_id).toBe(table.id); expect(payload).not.toHaveProperty('records');
+  await testInfo.attach('report-export-timing.json', { body: JSON.stringify({ status: response.status(), elapsedMs: performance.now() - started,
+    requestBytes: response.request().postDataBuffer()!.length, responseBytes: Buffer.byteLength(csv), buildId: (await runtime.identity()).app.build?.buildId }), contentType: 'application/json' });
   for (const report of [table, text]) for (const format of ['csv','xlsx','docx','pdf','all']) {
     const exported = await request.post('/api/export', { data: { dataset: 'reports', report_id: report.id, format } });
     expect(exported.status()).toBe(200); expect(exported.headers()['x-export-failed-formats']).toBeUndefined();

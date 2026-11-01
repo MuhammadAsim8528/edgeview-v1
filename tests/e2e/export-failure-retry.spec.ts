@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 import JSZip from 'jszip';
 
 test('an incomplete all-formats response is not downloaded as success and a real retry succeeds', async ({ page, context, request, runtime }) => {
@@ -28,7 +28,7 @@ test('an incomplete all-formats response is not downloaded as success and a real
   await expect(page.getByText('Export incomplete: one or more requested formats could not be generated. Retry, or export an individual format.', { exact: true })).toBeVisible();
   expect(downloads).toBe(0);
   await expect(page.getByText('Export completed successfully!', { exact: true })).not.toBeVisible();
-  const download = page.waitForEvent('download');
+  const download = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const stream = await (await download).createReadStream(); const chunks: Buffer[] = [];
   for await (const chunk of stream!) chunks.push(Buffer.from(chunk));

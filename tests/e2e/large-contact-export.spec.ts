@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 import type { Download } from '@playwright/test';
 import JSZip from 'jszip';
 
@@ -36,7 +36,7 @@ test('large stored trade context exports through the real Contacts proceed contr
     observations.push({ format, method: request.method(), route: new URL(request.url()).pathname, bodyBytes: request.postDataBuffer()?.length || 0, status: response.status(), bodyKeys: Object.keys(request.postDataJSON()) });
     if (response.ok()) {
       expect(response.headers()['x-export-failed-formats']).toBeUndefined();
-      await expect.poll(() => downloads.length).toBe(before + 1);
+      await expect.poll(() => downloads.length, { timeout: EXPORT_ARTIFACT_TIMEOUT_MS }).toBe(before + 1);
       const stream = await downloads[before].createReadStream(); const chunks: Buffer[] = [];
       for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
       const bytes = Buffer.concat(chunks);

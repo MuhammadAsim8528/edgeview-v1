@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test('synthetic upload, paging, full CSV, country keyboard drill-down and restart', async ({ page, context, runtime }, testInfo) => {
   const errors: string[] = [];
@@ -32,8 +32,8 @@ test('synthetic upload, paging, full CSV, country keyboard drill-down and restar
   // action wait expired first. Bound the full artifact wait explicitly while
   // preserving status, compact request and complete downloaded-content checks.
   const exportStarted = Date.now();
-  const download = page.waitForEvent('download', { timeout: 45000 });
-  const exportResponse = page.waitForResponse(response => new URL(response.url()).pathname.startsWith('/api/export/file/') && response.request().method() === 'POST', { timeout: 45000 });
+  const download = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
+  const exportResponse = page.waitForResponse(response => new URL(response.url()).pathname.startsWith('/api/export/file/') && response.request().method() === 'POST', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const response = await exportResponse;
   expect(response.status()).toBe(200);

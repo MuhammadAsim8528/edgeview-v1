@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test('filtered grouped export uses the stored file and server view, not browser rows', async ({ page, context, runtime, request }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
@@ -18,7 +18,7 @@ test('filtered grouped export uses the stored file and server view, not browser 
   page.on('request', req => { if (new URL(req.url()).pathname.endsWith('/data')) exportPageReads++; });
   await page.locator('#export-filtered-btn').click();
   const submitted = page.waitForRequest(r => new URL(r.url()).pathname.startsWith('/api/export') && r.method() === 'POST');
-  const downloading = page.waitForEvent('download');
+  const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const sent = await submitted;
   expect(new URL(sent.url()).pathname).toMatch(/^\/api\/export\/file\/[^/]+$/);

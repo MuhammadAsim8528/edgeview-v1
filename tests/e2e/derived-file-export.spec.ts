@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { extractPdfText, pdfTextContains } from '../../server/tests/pdf_inspect';
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test('summary and country downloads resolve explicit stored file scopes and reject browser facts', async ({ page, context, request, runtime }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
@@ -16,7 +16,7 @@ test('summary and country downloads resolve explicit stored file scopes and reje
     await page.locator(section.nav).click();
     await page.getByRole('button', { name: section.button, exact: true }).click();
     const sent = page.waitForRequest(r => r.url().endsWith('/api/export') && r.method() === 'POST');
-    const downloaded = page.waitForEvent('download');
+    const downloaded = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
     await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
     const payload = (await sent).postDataJSON();
     expect(payload.dataset).toBe(section.dataset); expect(payload.source_file_ids).toEqual([fileId]); expect(payload).not.toHaveProperty('records');

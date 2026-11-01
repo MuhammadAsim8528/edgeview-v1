@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
 
 test.use({ historyFaultInjection: true });
 
@@ -25,7 +25,7 @@ test('a real history-read failure refuses partial export, hides private details 
   await expect(page.getByText('Export server error (HTTP 500)', { exact: true })).toBeVisible();
   expect(downloads).toBe(0);
   runtime.historyReadFailure(false);
-  const download = page.waitForEvent('download');
+  const download = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
   const stream = await (await download).createReadStream(); const chunks: Buffer[] = [];
   for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
