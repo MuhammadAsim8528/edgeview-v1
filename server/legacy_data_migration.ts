@@ -7,6 +7,7 @@ import { resolveRuntimeDataRootPath } from '../shared/runtime_paths.mjs';
 import { decodePersistenceRecords } from './sqlite_persistence';
 import { CREDENTIAL_FIELDS } from './credential_store';
 import { CURRENT_SCHEMA_VERSION } from './sqlite';
+import { inspectRuntimeBackup } from '../shared/runtime_backup.mjs';
 
 const ALLOWED = ['edgeview.db', 'edgeview_db.json', 'pharma_db.json', 'config.json', 'config.prev.json', 'data', 'uploads'];
 const MAX_FILES = 50000, MAX_BYTES = 4 * 1024 ** 3, MAX_FILE = 64 * 1024 ** 2;
@@ -136,7 +137,7 @@ async function validateCopiedState(root: string) {
  * deletes the source, changes launcher selection, opens DPAPI secrets or accepts
  * installed updates. Retained source is the rollback authority until activation
  * and a separate verified backup/application compatibility gate succeed. */
-export async function copyLegacyRuntimeData(source: string, destination: string) {
+export async function copyLegacyRuntimeData(source: string, destination: string, backup?: { manifestSha256: string; schema: number }) {
   directory(source); directory(path.dirname(destination));
   if (resolveRuntimeDataRootPath(source, destination) !== destination
     || !missing(destination) || !missing(path.join(source, '.env'))) throw fail();
@@ -146,14 +147,23 @@ export async function copyLegacyRuntimeData(source: string, destination: string)
     if (process.env[key]?.trim() && path.resolve(process.env[key]!.trim()) !== expected) throw fail();
   }
   stopped(source);
+  if (backup && (!/^[a-f0-9]{64}$/.test(backup.manifestSha256) || !Number.isSafeInteger(backup.schema) || backup.schema < 0)) throw fail();
+  const snapshot = backup ? await inspectRuntimeBackup(source, backup.manifestSha256) : null;
   const releaseSource = acquireRuntimeMaintenance(path.join(source, 'edgeview.db.lock'));
   let releaseDestination: (() => void) | undefined;
   let created = false;
   try {
     stopped(source); if (!missing(destination)) throw fail();
     const names = inventory(source);
-    await validateCopiedState(source); // Reject plaintext/invalid data before copying it.
+    const sourceSchema = await validateCopiedState(source); // Reject plaintext/invalid data before copying it.
     const expected = names.map(relative => ({ path: relative.replace(/\\/g, '/'), ...transfer(path.join(source, relative)) }));
+    if (snapshot && backup) {
+      const listed = new Map<string, Entry>(snapshot.entries.map((entry: Entry) => [entry.path, entry]));
+      if (sourceSchema !== backup.schema || listed.size !== expected.length || expected.some(entry => {
+        const approved = listed.get(entry.path);
+        return !approved || approved.sha256 !== entry.sha256 || approved.bytes !== entry.bytes;
+      })) throw fail();
+    }
     const sourceOwner = ownerBytes(source);
     fs.mkdirSync(destination, { mode: 0o700 }); created = true;
     releaseDestination = acquireRuntimeMaintenance(path.join(destination, 'edgeview.db.lock'));
@@ -175,6 +185,7 @@ export async function copyLegacyRuntimeData(source: string, destination: string)
     stopped(source); stopped(destination);
     const completed = path.join(destination, 'migration.complete.json');
     writeJson(completed, { format: 1, status: 'COPIED_NOT_ACTIVATED', sourceSchema: schema,
+      ...(snapshot ? { backupManifestSha256: snapshot.manifestSha256 } : {}),
       createdAt: new Date().toISOString(), files: entries });
     writeJson(path.join(destination, 'migration.ready.json'), { format: 1, status: 'COPIED_NOT_ACTIVATED',
       manifestSha256: transfer(completed).sha256 });

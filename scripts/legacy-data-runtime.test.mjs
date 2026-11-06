@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { buildSync } from 'esbuild';
 import initSqlJs from 'sql.js';
 import { unusedTestPort } from './test-server-port.mjs';
+import { verifyRuntimeBackup } from '../shared/runtime_backup.mjs';
 
 const source = process.cwd(), root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-migration-runtime-'));
 const app = path.join(root, 'app'), data = path.join(root, 'stable-data');
@@ -80,6 +81,40 @@ try {
   assert.deepEqual(fs.readFileSync(legacyDbFile), originalDatabase, 'legacy original remains matched schema1 recovery image');
   assert.deepEqual(fs.readFileSync(path.join(app, 'edgeview_db.json')), originalPrimary, 'new root writes never change retained original authority');
   const restarted = await start(); assert.equal(restarted.app.installation_id, installation); await stop();
+  const backup = spawnSync(process.execPath, [path.join(source, 'scripts/backup-runtime.mjs')], { cwd: app, env, encoding: 'utf8', timeout: 30000, windowsHide: true });
+  assert.equal(backup.error, undefined); assert.equal(backup.status, 0, backup.stderr);
+  const snapshot = JSON.parse(backup.stdout).backup;
+  const { manifestSha256 } = await verifyRuntimeBackup(snapshot);
+  const recoveredData = path.join(root, 'recovered-data');
+  const prepare = (destination, hash, schema) => spawnSync(process.execPath, ['--import', 'tsx', path.join(source, 'scripts/prepare-runtime-recovery.ts'), snapshot, destination, hash, schema],
+    { cwd: source, env, encoding: 'utf8', timeout: 30000, windowsHide: true });
+  for (const [hash, schema] of [['0'.repeat(64), '2'], [manifestSha256, '1']]) {
+    const mismatch = prepare(recoveredData, hash, schema);
+    assert.equal(mismatch.error, undefined); assert.equal(mismatch.status, 1, mismatch.stderr);
+    assert.match(mismatch.stderr, /RECOVERY_COPY_REFUSED/);
+    assert.equal(fs.existsSync(recoveredData), false);
+  }
+  const refusal = prepare(data, manifestSha256, '2');
+  assert.equal(refusal.status, 1); assert.match(refusal.stderr, /RECOVERY_COPY_REFUSED/);
+  await start();
+  const laterId = await upload('after-recovery-checkpoint.csv'); await stop();
+  const activeBytes = fs.readFileSync(path.join(data, 'edgeview_db.json'));
+  const prepared = prepare(recoveredData, manifestSha256, '2');
+  assert.equal(prepared.error, undefined); assert.equal(prepared.status, 0, prepared.stderr);
+  assert.equal(JSON.parse(prepared.stdout).status, 'COPIED_NOT_ACTIVATED');
+  const receipt = JSON.parse(fs.readFileSync(path.join(recoveredData, 'migration.complete.json'), 'utf8'));
+  assert.equal(receipt.backupManifestSha256, manifestSha256); assert.equal(receipt.sourceSchema, 2);
+  env.EDGEVIEW_DATA_DIR = recoveredData;
+  for (let boot = 0; boot < 2; boot++) {
+    const recovery = await start(); assert.equal(recovery.app.installation_id, installation);
+    assert.equal(path.resolve(recovery.app.data_root), recoveredData);
+    const saved = await (await fetch(base + '/api/files', { signal: AbortSignal.timeout(10000) })).json();
+    assert.ok(JSON.stringify(saved).includes(id)); assert.ok(!JSON.stringify(saved).includes(laterId));
+    await stop();
+  }
+  assert.deepEqual(fs.readFileSync(path.join(data, 'edgeview_db.json')), activeBytes);
+  await verifyRuntimeBackup(snapshot, manifestSha256);
+  console.log('PASS verified backup to fresh recovery root, mismatch and overlay refusal, compiled restart and original post-backup writes preserved');
   console.log('PASS compiled legacy-app-root→separate-data copy, incomplete-copy startup refusal, explicit activation, UUID/dataset/country discovery, schema1→2 backup/integrity, isolated writes and restart; installer/update/power-loss NOT VERIFIED');
 } finally {
   await stop(); assert.equal(path.dirname(fs.realpathSync(root)), fs.realpathSync(os.tmpdir()));

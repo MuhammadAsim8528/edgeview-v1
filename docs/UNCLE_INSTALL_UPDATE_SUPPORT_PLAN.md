@@ -60,6 +60,18 @@ Windows installation or proven application-health rollback exists yet.
    Configure provider access locally. Never copy another Windows user's DPAPI
    credentials or a developer database into the installer.
 
+For Store-distributed MSIX, Microsoft signs the certified package during
+publishing. A separately purchased signing certificate is unnecessary for that
+route. MSI and EXE submissions have different signing requirements. For an
+approved off-Store test, SignTool can sign MSIX using a certificate whose subject
+matches the package manifest publisher. Match the block map digest, normally
+SHA-256, use the signer provider's RFC 3161 timestamp endpoint, and verify the
+signature and actual installation under the target Windows trust policy. Keep
+private keys and passwords out of shell arguments, logs and source control.
+
+[Microsoft Store signing requirements](https://learn.microsoft.com/en-us/windows/apps/publish/faq/get-started-with-the-microsoft-store)
+and [SignTool for MSIX](https://learn.microsoft.com/en-us/windows/msix/package/sign-app-package-using-signtool).
+
 ## Storage boundary required before packaging
 
 Implement one canonical writable-user root outside installed binaries for SQLite,
@@ -138,6 +150,14 @@ upgrade journal and supply it as the second argument before a recovery rehearsal
 Keep that recorded hash with the approved journal. A matching digest checks the
 snapshot bytes. The rehearsal must separately prove schema compatibility and a
 successful application restart.
+
+For a local recovery rehearsal, run `node --import tsx scripts/prepare-runtime-recovery.ts <snapshot> <new-data-directory> <manifest-sha256> <expected-schema>`
+from the reviewed source checkout with locked development dependencies. Use
+absolute paths and a fresh, disjoint destination. The command binds the copied
+files to the verified snapshot and records its digest and schema in the readiness
+receipt. It prepares a private copy for a separate app launch and keeps the active
+data directory available. Validate the intended app build against the prepared
+copy before changing the actual launcher or installed application.
 After upgrade: readiness + DB integrity/schema + stored-data read + restart checks.
 Only then mark the candidate accepted. Preserve the last accepted package and backup.
 
