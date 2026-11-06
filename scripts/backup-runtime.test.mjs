@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import initSqlJs from 'sql.js';
+import { verifyRuntimeBackup } from './verify-runtime-backup.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-backup-'));
 const script = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(new URL('./backup-runtime.mjs', import.meta.url));
 const run = (...args) => spawnSync(process.execPath, [...args, script], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '' }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
@@ -56,7 +57,35 @@ try {
   assert.equal(ordinaryOverrides.status, 0, 'explicit canonical paths must remain supported: ' + ordinaryOverrides.stderr);
   const result = JSON.parse(completed.stdout);
   assert.ok(!path.basename(result.backup).startsWith('INCOMPLETE-'));
-  const manifest = JSON.parse(fs.readFileSync(path.join(result.backup, 'manifest.json')));
+  const manifestFile = path.join(result.backup, 'manifest.json');
+  const originalManifest = fs.readFileSync(manifestFile);
+  const manifest = JSON.parse(originalManifest);
+  const expectedHash = crypto.createHash('sha256').update(originalManifest).digest('hex');
+  assert.deepEqual(await verifyRuntimeBackup(result.backup, expectedHash), {
+    files: result.files, bytes: result.bytes, manifestSha256: expectedHash,
+  });
+  await assert.rejects(verifyRuntimeBackup(result.backup, '0'.repeat(64)), /manifest hash mismatch/);
+  const snapshotJson = path.join(result.backup, 'pharma_db.json');
+  const originalJson = fs.readFileSync(snapshotJson);
+  const corruptedJson = Buffer.from(originalJson); corruptedJson[1] ^= 1;
+  fs.writeFileSync(snapshotJson, corruptedJson);
+  await assert.rejects(verifyRuntimeBackup(result.backup), /file hash mismatch/);
+  fs.renameSync(snapshotJson, path.join(root, 'held-pharma.json'));
+  await assert.rejects(verifyRuntimeBackup(result.backup), /missing manifest files/);
+  fs.writeFileSync(snapshotJson, originalJson, { flag: 'wx' });
+  const extra = path.join(result.backup, 'unlisted.txt');
+  fs.writeFileSync(extra, 'unexpected');
+  await assert.rejects(verifyRuntimeBackup(result.backup), /Unexpected backup file/);
+  fs.unlinkSync(extra);
+  for (const unsafePath of ['data/../edgeview.db', 'data/a:stream', 'data/NUL.txt', 'DATA/v1-runs/fixture.json', 'data/V1-RUNS/fixture.json']) {
+    fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, files: [...manifest.files, { ...manifest.files[0], path: unsafePath }] }));
+    await assert.rejects(verifyRuntimeBackup(result.backup), /Unsafe or duplicate backup manifest entry/);
+  }
+  fs.writeFileSync(manifestFile, originalManifest);
+  const backupAlias = path.join(root, 'backup-alias');
+  fs.symlinkSync(path.dirname(result.backup), backupAlias, 'junction');
+  await assert.rejects(verifyRuntimeBackup(path.join(backupAlias, path.basename(result.backup))), /ancestry must be free of links/);
+  fs.unlinkSync(backupAlias);
   const restore = path.join(root, 'isolated-restore'); fs.mkdirSync(restore);
   for (const entry of manifest.files) {
     const bytes = fs.readFileSync(path.join(result.backup, entry.path));

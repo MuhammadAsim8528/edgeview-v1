@@ -50,11 +50,12 @@ Windows installation or proven application-health rollback exists yet.
 2. Use one trusted publisher/package identity and a signed MSIX for the pilot.
    Do not ask the operator to disable Windows security. A private pilot certificate
    requires an explicitly managed trust step and is not a public production signer.
-3. Host immutable versioned packages and an App Installer feed on an owned HTTPS
-   endpoint. Do not invent a working download URL before deployment exists.
-4. Uncle downloads the .appinstaller file from the supplied link, opens it with
-   Windows App Installer and installs. The feed points to the signed MSIX; install
-   from a bare MSIX/USB is possible but does not by itself establish a feed.
+3. Use Microsoft Store distribution when Partner Center eligibility, package
+   identity and certification are confirmed. Use a signed internal MSIX for
+   clean Windows testing under approved device trust.
+4. If the owner chooses off-Store distribution, validate an owned HTTPS App
+   Installer feed separately. A bare MSIX can exercise installation, while the
+   feed requires its own update and trust tests.
 5. First launch initializes his own writable state and installation identity.
    Configure provider access locally. Never copy another Windows user's DPAPI
    credentials or a developer database into the installer.
@@ -95,10 +96,18 @@ manifests; do not put rc/beta text in a numeric package version.
 Pilot/Beta and Stable use separate promotion rules. Avoid concurrent channel
 installations sharing writable state. Uncle receives only accepted pilot builds.
 
-Patch pipeline: narrow commit -> checks -> runtime build -> immutable package ->
-signing -> clean-target install/upgrade/health tests -> publish versioned artifacts ->
-update feed last. Nothing publishes merely because code was committed. Keep release
-notes and previous signed packages. Never overwrite a version's existing artifact.
+For Store delivery, reserve a monotonically increasing numeric package version
+per package identity and record it alongside app SemVer and the exact Git commit.
+Keep the last accepted package, checksums and schema compatibility record. The
+internal prototype version `0.0.0.2` is a test identifier. Obtain the production
+manifest identity from Partner Center and check the version rules for the actual
+submission type before generating the production manifest.
+
+The patch pipeline goes from reviewed commit and checks to an immutable signed
+package, then clean-target install, upgrade and health tests. Promote the approved
+bytes through Partner Center or, for the separate off-Store route, publish the
+versioned artifacts before changing the feed. Keep release notes and previous
+signed packages. Give any changed artifact a new version.
 Updates are deferred while research/export/persistence work is active; close normally
 before applying. Verify installed build, identity and durable data after restart.
 
@@ -108,8 +117,27 @@ Windows package deployment and application-data rollback are separate concerns.
 App Installer can allow downgrade; it does not prove old code can read new schemas.
 Do not globally enable arbitrary downgrades as a substitute for health acceptance.
 
+Microsoft Store delivers certified updates. Partner Center can halt a gradual
+rollout, and the earlier package can serve eligible new acquisitions. Devices
+already on the affected version need a corrected package with a higher applicable
+version. Keep Git review, artifact retention and data recovery in the EdgeView
+release process. App Installer downgrade settings apply to a separate off-Store
+route. Installing older binaries preserves application data as it exists at the
+time of downgrade, including changes made by the newer version.
+
+Microsoft references: [Store updates](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/publish-update-to-your-app-on-store),
+[gradual rollout](https://learn.microsoft.com/windows/apps/publish/gradual-package-rollout),
+[package version rules](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements),
+[MSIX downgrade and data](https://learn.microsoft.com/windows/msix/desktop/managing-your-msix-deployment-downgrading).
+
 Before upgrade: check disk and idle state, stop normally, create/verify a coherent
 state backup and record previous package/schema/build identity in a local journal.
+Run `node scripts/verify-runtime-backup.mjs <snapshot-directory>` to verify the
+snapshot inventory and file hashes. Record the returned manifest SHA-256 in the
+upgrade journal and supply it as the second argument before a recovery rehearsal.
+Keep that recorded hash with the approved journal. A matching digest checks the
+snapshot bytes. The rehearsal must separately prove schema compatibility and a
+successful application restart.
 After upgrade: readiness + DB integrity/schema + stored-data read + restart checks.
 Only then mark the candidate accepted. Preserve the last accepted package and backup.
 
@@ -129,8 +157,8 @@ files, schema mismatch, repeated restart, rollback failure and uninstall/reinsta
 1. Complete monitoring privacy, failure/deadline delivery truth and diagnostics export.
 2. Canonical writable storage plus isolated legacy migration/recovery tests.
 3. Runtime-only staging and Windows bootstrap/process-lifetime behavior.
-4. Signed MSIX + explicit version mapping + feed generation/validation.
-5. Schema-safe upgrade/health acceptance and executable rollback journal.
+4. Schema-safe upgrade, health acceptance and executable rollback journal.
+5. Signed MSIX, explicit version mapping and validation of the selected delivery route.
 6. Clean Windows pilot lifecycle and stress/resource-leak acceptance.
 7. Publish only with explicit owner authorization after evidence review.
 
