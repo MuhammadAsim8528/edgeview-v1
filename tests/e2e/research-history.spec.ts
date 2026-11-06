@@ -13,6 +13,7 @@ test('saved history pages beyond 1000, opens original evidence, and survives res
     expect((await response.json()).code).toBe('HISTORY_PAGE_INVALID');
   }
   let cursor = '';
+  let firstOlderCursor = '';
   const seen = new Set<string>();
   for (let count = 0; count < 21; count++) {
     const response = await page.request.get('/api/v1/runs?' + new URLSearchParams({ limit: '50', ...(cursor ? { cursor } : {}) }));
@@ -21,6 +22,7 @@ test('saved history pages beyond 1000, opens original evidence, and survives res
     expect(body.runs.length).toBeLessThanOrEqual(50);
     for (const run of body.runs) { expect(seen.has(run.id)).toBe(false); seen.add(run.id); }
     cursor = body.next_cursor;
+    if (count === 0) firstOlderCursor = cursor;
     if (!cursor) break;
   }
   expect(seen.size).toBe(1005);
@@ -63,8 +65,10 @@ test('saved history pages beyond 1000, opens original evidence, and survives res
   await selector.selectOption('run-history-0954');
   await expect(page.getByRole('heading', { name: 'Synthetic History Buyer 954', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Newer saved runs', exact: true }).click();
-  await expect(selector).toBeEnabled();
-  await page.route('**/api/v1/runs?*', route => route.fulfill({ status: 503, json: { success: false, message: 'Saved history temporarily unavailable.' } }), { times: 1 });
+  await expect(selector.locator('option[value="run-history-1004"]')).toHaveCount(1);
+  expect(firstOlderCursor).toBeTruthy();
+  await page.route(url => url.origin === runtime.baseURL && url.pathname === '/api/v1/runs' && url.searchParams.get('cursor') === firstOlderCursor,
+    route => route.fulfill({ status: 503, json: { success: false, message: 'Saved history temporarily unavailable.' } }), { times: 1 });
   await page.getByRole('button', { name: 'Older saved runs', exact: true }).click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Synthetic History Buyer 954', exact: true })).toBeVisible();
