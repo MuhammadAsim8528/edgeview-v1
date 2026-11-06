@@ -14,6 +14,12 @@ Product first: five isolated Chromium checks passed for Settings keyboard operat
 
 Desktop compatibility passed on exact c64ebd5 build 36fe5f09b98433390de051d85a0270d7e41ef9dc554261ae20755ee37ee80641. The verified manifest-bound copy opened twice under the compiled production backend on an owned isolated port. Both starts exposed the same persisted dataset ID and 17,612 rows. The copy advanced SQLite schema 1 to 2, passed integrity checks, preserved the history row count and retained an exact pre-migration database image. Installation identity persisted across restart, and no outbound request was attempted. The original SQLite, primary dataset and config hashes still matched the backup. Real launcher and port 3901 replacement remain pending.
 
+Live handoff follow-up: the launcher installed its locked production dependencies in a private stage. The staged runtime passed a real-data-copy smoke check before promotion. The journal retained the previous build and dependencies plus the verified backup digest. Both launcher preflights accepted the promoted files without reinstalling or rebuilding. The real backend opened the original data root, advanced schema 1 to 2, retained an exact pre-migration DB and passed SQLite integrity. A graceful owner shutdown exited 0 and released its lock. `EdgeView.bat` restarted the same build with a new PID and reopened Chrome. Live API confirmed one dataset and 17,612 rows. A first PowerShell count misread the singleton response; direct JSON verification corrected it. Foreign Host and Origin returned 403 and retired NVIDIA diagnostics returned 410. The first Host probe used fetch, which did not transmit the supplied Host, so the verified check used node:http.
+
+Live backend provider connectivity: Serper, NVIDIA and Groq each returned HTTP 200 on the aggregate built-in diagnostic. Hunter was configured but disabled and received no diagnostic request. The public settings and health contracts exposed the supported provider set. Browser Use denied observing Chrome at http://127.0.0.1:3901 because its saved origin permission blocks access. No live UI controls were exercised through that browser. The backend audit remains separate from the UI gate.
+
+Hosted c64ebd5 release run 42212498638 passed native, Docker and verification jobs. Browser failed on the transient research feedback assertion. Artifact 13499753482 showed the enrichment response returned 200 and the expected failure toast appeared in the frame snapshot before the assertion started. The test now starts visibility and color assertions with the click. Three isolated repeats passed all five outcome cases. Hosted acceptance of this correction remains open. Research and inventory succeeded on c64ebd5.
+
 The internal runtime-only factory built c0a98cd successfully from a clean checkout with a regular locked dependency install. The initial dependency junction was rejected by license collection and replaced with a normal install. Build 0dbb414dedc6d19b90c6221481478cc24425215ab4ab424f1706e4e637af1ec9 produced an 82,145,568-byte unsigned MSIX with 14,131 files and SHA-256 12a7a7f32ab3422cc1f37618fd79cd93be41b4ec74d04bdb8a2e2d6582d2ce64. Archive execution, signing, installation and clean Windows remain open. Owner sequence places product and recovery work before installer acceptance and Store submission.
 
 The new read-only backup verifier checks the published snapshot inventory and streams file SHA-256 hashes. It can bind the snapshot to an independently recorded manifest digest. The existing backup/reopen rehearsal passed with tampering, missing and extra files, traversal, alternate data streams, Windows device names, case collisions and a linked ancestor rejected. Matching application/schema rollback and the real data handoff remain open.
@@ -66,7 +72,7 @@ Existing report-export authority was verified rather than rebuilt: actual compil
 
 Hosted terminal observation2026-11-01T13:49:58Z: exact1d4a81c9fc6a00dc76a2423e047f75ddd2012d4b release41311800581 SUCCESS (152Windows steps/browser/native launcher/Docker), research41311800369 SUCCESS and inventory41311800387 SUCCESS. Awaited terminal state before pushing another documentation checkpoint so the existing branch-concurrency policy would not cancel its acceptance. Prepared source/artifact digests were independently rechecked against the canonical source and staged build: both match. This is committed-source/isolated-runtime evidence; native customer installation, clean Windows, current real-company accuracy, monitoring dashboards and safe live handoff remain open.
 
-Current active task: finish EdgeView product acceptance and recovery, confirm the hosted saved-history fix and prepare the desktop backup handoff. Installer acceptance and Store submission follow product readiness and owner review.
+Current active task: finish EdgeView product acceptance on the live desktop build. The data handoff and enabled-provider backend checks passed. Live Chrome controls require origin access. Continue remaining research, security, recovery and hosted checks before installer acceptance and Store submission.
 
 ### November1 source ownership and desktop handoff checkpoint
 
@@ -127,7 +133,7 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 
 ### Release and installation
 
-- [~] REL01: **Desktop handoff and data check** Reviewed source3ac6c39 is now in the permanent original checkout on development/edgeview-v1, with old main preserved. Finish controlled dependency/build/runtime handoff and compatible customer-state acceptance; tracked-source reconciliation alone is not deployment.
+- [x] REL01: **Desktop handoff and data check** Exact c64ebd5 is live in the original checkout on port 3901. Locked dependencies, verified backup, schema migration, integrity and restart passed. One dataset and all 17,612 rows are present after restart.
 - [~] REL01: **Freeze release version and build** Freeze accepted version, commit, build, schema and channel identities.
 - [~] CI01: **Hosted release checks** Exact a864392 source passed release41299362038, research41299362036 and evidence41299362169, including152Windows steps/browser/native/Docker. Final frozen-customer-package evidence remains pending. Preserve historical failures.
 - [~] DIST01: **Self-contained Windows installer** Finish a self-contained customer package without installed Node/npm or developer files.
@@ -137,7 +143,7 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 
 ### Final acceptance and handoff
 
-- [ ] QA01: **Live UI control audit** Complete final live visual/control QA after its prerequisites and owner-reopened gate.
+- [!] QA01: **Live UI control audit** Browser Use denies the live Chrome origin. Complete live visual and control QA when access is available.
 - [~] UX01: **Accessibility and offline workflows** Complete accessibility, offline and essential-workflow acceptance.
 - [~] PERF01: **Performance and soak tests** Repeat representative current-build and target-device performance/long-running checks.
 - [~] FINAL01: **Desktop release folders** Populate Desktop documentation, accepted version snapshots and installer folders accurately; working documentation alone is not final artifacts.
@@ -168,7 +174,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [x] REC01.SNAPSHOT_VERIFICATION: read-only inventory, manifest binding and file hash checks passed on a real synthetic backup and SQLite reopen. The rehearsal rejected corrupt, missing, extra and unsafe entries. Matched package/data rollback remains open.
   - [x] REC01.ISOLATED_RECOVERY: the operator command prepared a new data root from a verified backup, recording its manifest digest and schema. The compiled app opened the recovered root twice with the same installation ID and checkpoint dataset. Later writes stayed in the original data root. Wrong manifest, wrong schema and existing destination were refused. This verifies the isolated recovery workflow with the tested build. Installed application and data rollback remain open.
   - [x] REC01.REAL_BACKUP: the stopped desktop installation was backed up and independently verified. The existing numeric lock remained intact. All 10,640 files matched; schema 1 passed SQLite integrity check.
-  - [x] REC01.REAL_COMPATIBILITY: a separate copy of the verified desktop snapshot passed current-build startup, schema 1 to 2 migration, integrity, dataset discovery and normal restart. The original critical files still match the backup hashes. Live handoff remains open.
+  - [x] REC01.REAL_COMPATIBILITY: a separate copy of the verified desktop snapshot passed current-build startup, schema 1 to 2 migration, integrity, dataset discovery and normal restart. Live handoff subsequently passed with the original root and the preserved pre-migration snapshot.
 - [~] PG01 / directive10: verified arbitrary v* tags previously reached a write-permission publisher for the developer ZIP after CI; removed that automatic publication path. This intentionally prevents shipping while customer-artifact/acceptance gates are open, not a completed promotion system.
   - [x] PG01.AUTO: parsed all3 workflow YAML files locally, confirmed read-only contents permission/no release-create action or command, retained every previous verification job; no tag or publication performed.
   - [ ] PG01.IDENTITY: accepted source/app/build/schema/channel/tag consistency and frozen customer artifact lineage.

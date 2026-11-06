@@ -25,10 +25,13 @@ test('research result feedback distinguishes failed, partial, completed and unkn
     { status: 'UNKNOWN', text: 'V1 enrichment status unverified for Feedback Buyer', color: 'text-amber-200' },
   ]) {
     status = outcome.status;
-    await row.getByRole('button', { name: 'Fetch Details', exact: true }).click();
     const message = page.getByText(outcome.text, { exact: true });
-    await expect(message).toBeVisible();
-    await expect(message.locator('xpath=../..')).toHaveClass(new RegExp(outcome.color));
+    // The hosted trace showed the transient toast before click() returned.
+    await Promise.all([
+      expect(message).toBeVisible(),
+      expect(message.locator('xpath=../..')).toHaveClass(new RegExp(outcome.color)),
+      row.getByRole('button', { name: 'Fetch Details', exact: true }).click(),
+    ]);
     await expect(row.getByRole('button', { name: 'Fetch Details', exact: true })).toBeEnabled();
   }
   await page.screenshot({ path: testInfo.outputPath('result-feedback.png'), fullPage: true });
