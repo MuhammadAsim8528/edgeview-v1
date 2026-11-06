@@ -144,6 +144,12 @@ Microsoft references: [Store updates](https://learn.microsoft.com/windows/apps/p
 
 Before upgrade: check disk and idle state, stop normally, create/verify a coherent
 state backup and record previous package/schema/build identity in a local journal.
+When an interrupted shutdown leaves a numeric backend lock, first verify the
+backend is stopped and independently identify the recorded PID. The operator
+can run `node scripts/backup-runtime.mjs --expect-stale-lock <pid>`. The backup
+requires a missing process and the same ordinary lock file through publication.
+It preserves the lock and refuses an active owner, a changed lock, or a busy
+maintenance gate.
 Run `node scripts/verify-runtime-backup.mjs <snapshot-directory>` to verify the
 snapshot inventory and file hashes. Record the returned manifest SHA-256 in the
 upgrade journal and supply it as the second argument before a recovery rehearsal.

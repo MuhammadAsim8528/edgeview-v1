@@ -10,7 +10,7 @@ import { verifyRuntimeBackup } from './verify-runtime-backup.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-backup-'));
 const script = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(new URL('./backup-runtime.mjs', import.meta.url));
 const run = (...args) => spawnSync(process.execPath, [...args, script], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '' }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
-const withEnv = overrides => spawnSync(process.execPath, [script], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '', ...overrides }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
+const withEnv = (overrides, args = [], preload = []) => spawnSync(process.execPath, [...preload, script, ...args], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '', ...overrides }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
 try {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'not-edgeview' }));
   assert.notEqual(run().status, 0, 'wrong working directory must not be backed up');
@@ -28,6 +28,7 @@ try {
   }
   fs.writeFileSync(path.join(root, 'edgeview.db.lock'), String(process.pid));
   assert.notEqual(run().status, 0);
+  assert.match(withEnv({}, ['--expect-stale-lock', String(process.pid)]).stderr, /BACKUP_STALE_LOCK_REFUSED/);
   assert.equal(fs.existsSync(path.join(root, 'backups')), false, 'live-lock refusal precedes writes');
   fs.unlinkSync(path.join(root, 'edgeview.db.lock'));
   assert.notEqual(run().status, 0, 'empty snapshot must fail');
@@ -41,6 +42,23 @@ try {
   fs.writeFileSync(path.join(root, 'config.json'), '{"synthetic":"local-only"}');
   fs.writeFileSync(path.join(root, 'config.prev.json'), '{"synthetic":"previous-local-only"}');
   fs.writeFileSync(path.join(root, 'pharma_db.json'), '{"synthetic":"legacy-authority"}');
+  const dead = spawnSync(process.execPath, ['-e', ''], { windowsHide: true, timeout: 5000 });
+  assert.equal(dead.status, 0); assert.ok(dead.pid > 0);
+  const lock = path.join(root, 'edgeview.db.lock');
+  fs.writeFileSync(lock, String(dead.pid));
+  assert.notEqual(run().status, 0, 'legacy lock remains fail-closed by default');
+  const staleArgs = ['--expect-stale-lock', String(dead.pid)];
+  const stale = withEnv({}, staleArgs);
+  assert.equal(stale.status, 0, stale.stderr);
+  assert.equal(fs.readFileSync(lock, 'utf8'), String(dead.pid));
+  await verifyRuntimeBackup(JSON.parse(stale.stdout).backup);
+  const publishedBefore = fs.readdirSync(path.join(root, 'backups')).filter(name => !name.startsWith('INCOMPLETE-'));
+  const changeLock = 'data:text/javascript,' + encodeURIComponent(`import fs from 'node:fs';const copy=fs.copyFileSync;fs.copyFileSync=(...args)=>{copy(...args);fs.appendFileSync('edgeview.db.lock',' ');};`);
+  const changed = withEnv({}, staleArgs, ['--import', changeLock]);
+  assert.match(changed.stderr, /BACKUP_STALE_LOCK_REFUSED/);
+  assert.deepEqual(fs.readdirSync(path.join(root, 'backups')).filter(name => !name.startsWith('INCOMPLETE-')), publishedBefore);
+  fs.unlinkSync(lock);
+  for (const name of publishedBefore) fs.renameSync(path.join(root, 'backups', name), path.join(root, name));
   const fixture = new URL('./test-fixtures/backup-copy-failure.mjs', import.meta.url).href;
   const failed = run('--import', fixture);
   assert.notEqual(failed.status, 0);

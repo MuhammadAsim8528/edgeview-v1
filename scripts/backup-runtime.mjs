@@ -5,6 +5,9 @@ import path from 'node:path';
 import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
 import { acquireRuntimeMaintenance } from '../shared/runtime_maintenance.mjs';
 const appRoot = process.cwd();
+const args = process.argv.slice(2);
+const stalePid = args.length === 2 && args[0] === '--expect-stale-lock' && /^[1-9]\d{0,9}$/.test(args[1]) ? Number(args[1]) : null;
+if (args.length && (stalePid === null || stalePid > 2147483647)) throw new Error('Usage: node scripts/backup-runtime.mjs [--expect-stale-lock <pid>]');
 if (JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
 const root = resolveRuntimeDataRoot(appRoot);
 // A completed fixed-layout snapshot must never imply that externally located
@@ -25,9 +28,29 @@ for (const [key, expected] of Object.entries(expectedPaths)) {
 if (process.env.NODE_ENV === 'test' || ['1', 'true'].includes(process.env.EDGEVIEW_TEST_MODE)) {
   throw new Error('BACKUP_TEST_LAYOUT_UNSUPPORTED: operational backup does not resolve test-only storage paths.');
 }
-const requireStopped = () => {
-  if (fs.existsSync(path.join(root, 'edgeview.db.lock'))) throw new Error('Stop EdgeView normally before backup. Backup never removes an existing backend lock.');
-};
+const lock = path.join(root, 'edgeview.db.lock');
+let staleIdentity;
+function requireStopped() {
+  let stat;
+  try { stat = fs.lstatSync(lock, { bigint: true }); }
+  catch (error) { if (error.code === 'ENOENT' && stalePid === null) return; throw error; }
+  if (stalePid === null) throw new Error('Stop EdgeView normally before backup. Backup never removes an existing backend lock.');
+  const refused = () => new Error('BACKUP_STALE_LOCK_REFUSED: The expected stopped owner or unchanged lock could not be verified.');
+  if (!stat.isFile() || stat.nlink !== 1n || stat.size > 16n) throw refused();
+  const fd = fs.openSync(lock, 'r');
+  try {
+    const opened = fs.fstatSync(fd, { bigint: true });
+    const signature = info => [info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs].join(':');
+    const identity = signature(stat), buffer = Buffer.alloc(17);
+    const bytes = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (signature(opened) !== identity || BigInt(bytes) !== stat.size || buffer.toString('utf8', 0, bytes).trim() !== String(stalePid)
+      || (staleIdentity !== undefined && staleIdentity !== identity)) throw refused();
+    try { process.kill(stalePid, 0); throw refused(); }
+    catch (error) { if (error.code !== 'ESRCH') throw refused(); }
+    if (signature(fs.lstatSync(lock, { bigint: true })) !== identity) throw refused();
+    staleIdentity = identity;
+  } finally { fs.closeSync(fd); }
+}
 requireStopped();
 const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}`;
 const destination = path.join(root, 'backups', `EdgeView-${stamp}`);
@@ -58,7 +81,7 @@ async function copyTree(source, target, relative) {
 }
 
 const parent = path.dirname(destination);
-const releaseMaintenance = acquireRuntimeMaintenance(path.join(root, 'edgeview.db.lock'));
+const releaseMaintenance = acquireRuntimeMaintenance(lock);
 try {
   requireStopped();
   if (fs.existsSync(parent) && fs.lstatSync(parent).isSymbolicLink()) throw new Error('Backup destination links are not supported.');
@@ -71,6 +94,7 @@ try {
   if (!manifest.files.length) throw new Error('No EdgeView runtime files were found to back up.');
   requireStopped();
   fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+  requireStopped();
   fs.renameSync(staging, destination);
   console.log(JSON.stringify({ backup: destination, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0) }));
 } finally {
