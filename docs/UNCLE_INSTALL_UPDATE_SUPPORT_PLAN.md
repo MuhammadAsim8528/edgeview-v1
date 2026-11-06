@@ -178,6 +178,14 @@ Test: wrong publisher, tampered package/feed, offline check, disk full, active j
 interrupted install/migration/restore, corrupt DB/backup, failed first launch, stale
 files, schema mismatch, repeated restart, rollback failure and uninstall/reinstall.
 
+For the later clean Windows acceptance run, use a fresh Windows 11 VMware guest
+or a spare PC. Use normal Windows trust policy, a standard user, synthetic data
+and the exact package intended for the test. Start with a pre-install VM snapshot
+and record install, native launch, update, data recovery and uninstall separately.
+A VM checkpoint makes the rehearsal repeatable. EdgeView's backup and restore
+must also work inside the running guest. The VM needs a local volume with room
+for Windows and snapshots. [Windows 11 virtual machine requirements](https://learn.microsoft.com/en-us/windows/whats-new/windows-11-requirements)
+
 ## Implementation order and release blockers
 
 1. Complete monitoring privacy, failure/deadline delivery truth and diagnostics export.
