@@ -2,6 +2,12 @@
 
 Current readiness verdict: NOT READY
 
+### November 6 release audit checkpoint
+
+Hosted 4c4dd35 release run 41336659353 finished with native launcher, Docker and 152-step verification success. Browser job 124937852365 failed only on saved-history pagination. The test armed a one-shot error route broad enough to catch the in-flight return to the newest page. c0a98cd waits for that page's actual run option and matches the injected error by the exact older-page cursor. Three isolated browser repeats passed with all 1,005 saved runs, pagination, injected 503 recovery, restart and zero provider calls. Fresh hosted release run 42208336543 remains in progress. Research and inventory workflows passed.
+
+The latest local handoff check found no port 3901 listener and neither previous backend nor launcher process. The legacy numeric lock still records the previous backend PID. The backup script refuses any existing backend lock. Real backup, compatibility copy and desktop replacement remain pending. C: measured 6.81 GiB free before package staging.
+
 ### November1 Slim compiled captured-source acceptance — scoped PASS
 
 Exact4c4dd35/build ec0c353bbd99122d381a789bc3840c2150c7313f34ec4d6fce573e021749a2f4. Persisted today's actual official236,494-byte page as a deliberately PARTIAL public-capture-only immutable fixture (no generated queries, model extraction or fabricated provider responses). Synthetic same-name Sri Lanka/Pakistan trade controls remained separate. Current projection durably saved all3independently published office addresses, exactly the public general mailbox and checked phone. API/intelligence and normal restart retained every address; local source provenance asserted. Rendered Contacts/Intelligence and actual selected CSV control PASS. Downloaded CSV/XLSX/PDF/DOCX/all-format ZIP each contained all3office address identifiers, mailbox and phone. Explicit saved-only reuse succeeded with network denied, immutable run bytes unchanged and0provider calls; no additional unreviewed fields promoted. The private isolated prior Slim folder was unavailable; no claim to rerun its original live-provider capture. This verifies current captured-source downstream behavior and the reproduced parser defect, not fresh query/provider/extraction, customer deployment, final visual QA or clean Windows. Original data/config/dist and live3901 untouched.
@@ -50,7 +56,7 @@ Existing report-export authority was verified rather than rebuilt: actual compil
 
 Hosted terminal observation2026-11-01T13:49:58Z: exact1d4a81c9fc6a00dc76a2423e047f75ddd2012d4b release41311800581 SUCCESS (152Windows steps/browser/native launcher/Docker), research41311800369 SUCCESS and inventory41311800387 SUCCESS. Awaited terminal state before pushing another documentation checkpoint so the existing branch-concurrency policy would not cancel its acceptance. Prepared source/artifact digests were independently rechecked against the canonical source and staged build: both match. This is committed-source/isolated-runtime evidence; native customer installation, clean Windows, current real-company accuracy, monitoring dashboards and safe live handoff remain open.
 
-Current active task: prioritize current-engine Getz Kenya country/contact truthset and engine correction if a defect reproduces, after the bounded CI export-wait checkpoint. Preserve unfinished HIST01/CC05 and the remaining queue; controlled desktop update still awaits confirmed normal stop. Permanent source is the original Pharma-AI checkout on development/edgeview-v1; prior integration is reference-only. Native/install/update/clean-Windows, wider company and owner-review gates remain open.
+Current active task: build and verify the internal Windows package, confirm the hosted saved-history fix and prepare the desktop backup handoff. Trusted signing, installed activation, clean Windows and owner review remain release gates.
 
 ### November1 source ownership and desktop handoff checkpoint
 
@@ -80,54 +86,54 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 
 ### Research and data accuracy
 
-- [ ] CC05: Finish conservative evidence-backed entity aliases, backend admission, raw-name provenance, country isolation, uniqueness/concurrency and restart-safe migration; reuse current identity mechanisms.
-- [~] HIST01: Complete local research-history navigation and explicit valid reuse/live refresh, bounded pagination and freshness/version/provider/objective semantics on existing immutable records.
+- [ ] CC05: **Evidence-backed company aliases** Finish conservative evidence-backed entity aliases, backend admission, raw-name provenance, country isolation, uniqueness/concurrency and restart-safe migration; reuse current identity mechanisms.
+- [~] HIST01: **Research history and reuse** Complete local research-history navigation and explicit valid reuse/live refresh, bounded pagination and freshness/version/provider/objective semantics on existing immutable records.
 
-- [~] CC01: Complete company-country isolation across extraction, cache, history, UI and exports.
-- [~] CC02: Finish parent, subsidiary, distributor and field-level source attribution.
-- [~] CC04: Complete fresh Emerchemie official-page retrieval and rendered acceptance; corrected retained evidence is verified only in its stated scope.
-- [~] QA01: Verify Getz Kenya, Global Pharmaceuticals, Thorne Berry, Emerchemie and Slim Pharma against public sources through persistence/API/UI/export.
-- [ ] DATA01: Reconcile the real importer dataset, duplicates, exporter exclusions, weak profiles, contacts and counts.
-- [~] CORE01: Verify all four enabled providers, including quota, authentication, timeout and recovery.
-- [~] JOB01: Finish batch progress, cancellation, retries and interrupted-job recovery.
+- [~] CC01: **Country isolation** Complete company-country isolation across extraction, cache, history, UI and exports.
+- [~] CC02: **Parent and subsidiary attribution** Finish parent, subsidiary, distributor and field-level source attribution.
+- [~] CC04: **Emerchemie live research** Complete fresh Emerchemie official-page retrieval and rendered acceptance; corrected retained evidence is verified only in its stated scope.
+- [~] QA01: **Company fact checks** Verify Getz Kenya, Global Pharmaceuticals, Thorne Berry, Emerchemie and Slim Pharma against public sources through persistence/API/UI/export.
+- [ ] DATA01: **Importer dataset reconciliation** Reconcile the real importer dataset, duplicates, exporter exclusions, weak profiles, contacts and counts.
+- [~] CORE01: **Provider verification** Verify all four enabled providers, including quota, authentication, timeout and recovery.
+- [~] JOB01: **Batch recovery** Finish batch progress, cancellation, retries and interrupted-job recovery.
 
 ### Data safety and recovery
 
-- [~] DATA02: Finish applying legacy-history reconciliation safely; isolated journaled repair is not live installation acceptance.
-- [~] MIG01: Complete stable-data-directory migration with backups and interruption recovery.
-- [~] REC01: Finish safe restore, link/junction protection and stale-file handling.
-- [ ] REC01: Prove compatible application and customer-data rollback together.
-- [~] DATA03/PERF01: Complete corruption, permission, disk-full and unexpected-termination acceptance across supported workflows.
+- [~] DATA02: **Legacy history repair** Finish applying legacy-history reconciliation safely; isolated journaled repair is not live installation acceptance.
+- [~] MIG01: **Data migration and backups** Complete stable-data-directory migration with backups and interruption recovery.
+- [~] REC01: **Safe restore** Finish safe restore, link/junction protection and stale-file handling.
+- [ ] REC01: **App and data rollback** Prove compatible application and customer-data rollback together.
+- [~] DATA03/PERF01: **Storage failure recovery** Complete corruption, permission, disk-full and unexpected-termination acceptance across supported workflows.
 
 ### Security, monitoring and support
 
-- [~] SEC01: Recheck security protections against the final integrated build, including the active provider-transport correction.
-- [~] SEC02/CI01: Resolve dependency findings and verify final secret/history/package scans, licenses and SBOM.
-- [!] SEC02: Rotate previously exposed provider keys; owner/account participation remains necessary.
-- [~] MON01/MON02: Verify fresh final-build Sentry/PostHog receipt, privacy controls and crash coverage; current browser-tool access is unavailable.
-- [~] DIAG01: Finish diagnostics, redaction, retention and support instructions/acceptance.
-- [~] PRIV01/UX01: Finish truthful privacy, external-provider disclosures, About and third-party notices.
-- [~] ID01: Verify installation-identity recovery; HWID/licensing remains deliberately deferred.
+- [~] SEC01: **Integrated security checks** Recheck security protections against the final integrated build, including the active provider-transport correction.
+- [~] SEC02/CI01: **Dependencies and secret scanning** Resolve dependency findings and verify final secret/history/package scans, licenses and SBOM.
+- [!] SEC02: **Exposed key rotation** Rotate previously exposed provider keys; owner/account participation remains necessary.
+- [~] MON01/MON02: **Monitoring delivery and privacy** Verify fresh final-build Sentry/PostHog receipt, privacy controls and crash coverage; current browser-tool access is unavailable.
+- [~] DIAG01: **Diagnostics and support** Finish diagnostics, redaction, retention and support instructions/acceptance.
+- [~] PRIV01/UX01: **Privacy and license notices** Finish truthful privacy, external-provider disclosures, About and third-party notices.
+- [~] ID01: **Installation identity recovery** Verify installation-identity recovery; HWID/licensing remains deliberately deferred.
 
 ### Release and installation
 
-- [~] REL01: Reviewed source3ac6c39 is now in the permanent original checkout on development/edgeview-v1, with old main preserved. Finish controlled dependency/build/runtime handoff and compatible customer-state acceptance; tracked-source reconciliation alone is not deployment.
-- [~] REL01: Freeze accepted version, commit, build, schema and channel identities.
-- [~] CI01: Exact a864392 source passed release41299362038, research41299362036 and evidence41299362169, including152Windows steps/browser/native/Docker. Final frozen-customer-package evidence remains pending. Preserve historical failures.
-- [~] DIST01: Finish a self-contained customer package without installed Node/npm or developer files.
-- [!] DIST01/MS01: Verify trusted MSIX installation and native launch; signing/application-control/account gates remain open.
-- [ ] UPD01: Finish the selected Store-compatible update mechanism, post-update acceptance and recovery.
-- [ ] PILOT01: Test install, upgrade, interrupted upgrade and uninstall/reinstall on clean Windows.
+- [~] REL01: **Desktop handoff and data check** Reviewed source3ac6c39 is now in the permanent original checkout on development/edgeview-v1, with old main preserved. Finish controlled dependency/build/runtime handoff and compatible customer-state acceptance; tracked-source reconciliation alone is not deployment.
+- [~] REL01: **Freeze release version and build** Freeze accepted version, commit, build, schema and channel identities.
+- [~] CI01: **Hosted release checks** Exact a864392 source passed release41299362038, research41299362036 and evidence41299362169, including152Windows steps/browser/native/Docker. Final frozen-customer-package evidence remains pending. Preserve historical failures.
+- [~] DIST01: **Self-contained Windows installer** Finish a self-contained customer package without installed Node/npm or developer files.
+- [!] DIST01/MS01: **Signed install and native launch** Verify trusted MSIX installation and native launch; signing/application-control/account gates remain open.
+- [ ] UPD01: **Updates and recovery** Finish the selected Store-compatible update mechanism, post-update acceptance and recovery.
+- [ ] PILOT01: **Clean Windows pilot** Test install, upgrade, interrupted upgrade and uninstall/reinstall on clean Windows.
 
 ### Final acceptance and handoff
 
-- [ ] QA01: Complete final live visual/control QA after its prerequisites and owner-reopened gate.
-- [~] UX01: Complete accessibility, offline and essential-workflow acceptance.
-- [~] PERF01: Repeat representative current-build and target-device performance/long-running checks.
-- [~] FINAL01: Populate Desktop documentation, accepted version snapshots and installer folders accurately; working documentation alone is not final artifacts.
-- [ ] FINAL01: Produce separate full-source, private-data and customer-runtime artifacts.
-- [ ] FINAL01: Produce final checksums, notices, release notes and readiness report.
-- [ ] FINAL01: Stop with a verified owner-review packet before publication or uncle deployment.
+- [ ] QA01: **Live UI control audit** Complete final live visual/control QA after its prerequisites and owner-reopened gate.
+- [~] UX01: **Accessibility and offline workflows** Complete accessibility, offline and essential-workflow acceptance.
+- [~] PERF01: **Performance and soak tests** Repeat representative current-build and target-device performance/long-running checks.
+- [~] FINAL01: **Desktop release folders** Populate Desktop documentation, accepted version snapshots and installer folders accurately; working documentation alone is not final artifacts.
+- [ ] FINAL01: **Source, data and runtime artifacts** Produce separate full-source, private-data and customer-runtime artifacts.
+- [ ] FINAL01: **Checksums and release notes** Produce final checksums, notices, release notes and readiness report.
+- [ ] FINAL01: **Owner review before shipping** Stop with a verified owner-review packet before publication or uncle deployment.
 
 ## Live customer-readiness board — additional directive reconciled 2026-10-31
 

@@ -17,6 +17,9 @@ assert.ok(model.sections[0].items.some(item=>item.nested),'reached parent goals 
 const secret='nvapi-'+'CANARY000000000000000000000000';
 for(const canary of [secret,'person@private.example','https://private.example/path?token=private','C:\\Users\\Private\\secret.db'])assert.ok(!safeStatusText(canary).includes(canary),'dashboard status projection must omit private value patterns');
 const html=progressHtml(model);
+assert.equal(model.acceptanceGroups.length,5);
+assert.ok(html.includes('<strong>Self-contained Windows installer</strong>'));
+assert.ok(html.indexOf('Release checklist')<html.indexOf('Detailed engineering checks'));
 assert.ok(!html.includes('Latest completed work and checks'),'do not copy unrestricted historical notes/raw logs');
 assert.ok(html.includes("connect-src 'none'"));assert.ok(!html.includes('http://127.0.0.1:3901'));
 assert.throws(()=>progressModel(ledger.replace('### P0 BLOCKERS','### MISSING BLOCKERS'),{}),/all nine/,'never silently display a partial queue');
