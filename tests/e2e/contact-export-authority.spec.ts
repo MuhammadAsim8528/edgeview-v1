@@ -1,5 +1,43 @@
 import { test, expect } from './fixtures';
 
+test('directory and downloads preserve distinct business names and their trade partners across restart', async ({ request, runtime }) => {
+  await runtime.identity();
+  const upload = await request.post('/api/files/upload', { multipart: { file: {
+    name: 'distinct-businesses.csv', mimeType: 'text/csv', buffer: Buffer.from(
+      'Date,Importer,Country,Exporter,Item,TOT_FC\n' +
+      '2026-01-01,Isolation,Kenya,Base Supplier,Base Product,10\n' +
+      '2026-01-01,Isolation Labs Ltd,Kenya,Lab Supplier,Lab Product,20\n' +
+      '2026-01-01,Isolation Labs Ltd,Pakistan,Foreign Supplier,Foreign Product,30\n')
+  } } });
+  expect(upload.status()).toBe(201);
+  for (const restart of [false, true]) {
+    if (restart) await runtime.restart();
+    const response = await request.get('/api/international-importer-directory');
+    expect(response.status()).toBe(200);
+    const directory = await response.json();
+    expect(directory.totalImporters).toBe(2);
+    const rows = directory.countrySections.flatMap(section => section.importers);
+    const base = rows.find(row => row.importer.toLowerCase() === 'isolation');
+    const labs = rows.find(row => row.importer.toLowerCase() === 'isolation labs ltd');
+    expect(base.tradedWith).toContain('Base Supplier');
+    expect(base.tradedWith).not.toContain('Lab Supplier');
+    expect(labs.tradedWith).toContain('Lab Supplier');
+    expect(labs.tradedWith).not.toContain('Base Supplier');
+    expect(labs.tradedWith).not.toContain('Foreign Supplier');
+    const contacts = await (await request.get('/api/companies')).json();
+    const download = await request.post('/api/export', { data: {
+      dataset: 'contacts', title: 'Distinct businesses', format: 'csv', report_type: 'international_importer',
+      records: contacts.map(contact => ({ id: contact.id }))
+    } });
+    expect(download.status()).toBe(200);
+    const csv = await download.text();
+    expect(csv).toContain('Base Supplier');
+    expect(csv).toContain('Lab Supplier');
+    expect(csv).not.toContain('Foreign Supplier');
+  }
+  expect(runtime.outboundAttempts()).toBe(0);
+});
+
 test('contact download uses stored facts and refuses stale or mixed record selections', async ({ request, runtime }) => {
   await runtime.identity();
   const upload = await request.post('/api/files/upload', { multipart: { file: { name: 'export-authority.csv', mimeType: 'text/csv', buffer: Buffer.from('Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,Authoritative Buyer,Kenya,Supplier,Product,10\n2026-01-01,Other Buyer,Uganda,Supplier,Product,20\n') } } });

@@ -1,6 +1,6 @@
 import { db } from './db';
 import { getDb } from './sqlite';
-import { canonicalCountryIdentityKey, canonicalEntityIdentityKey } from './company_identity';
+import { canonicalCompanyIdentityKey, canonicalCountryIdentityKey, canonicalEntityIdentityKey } from './company_identity';
 
 export interface ResolvedTradeRelationship {
   partnerName: string;
@@ -12,45 +12,11 @@ export interface ResolvedTradeRelationship {
 
 export class TradeRelationshipResolver {
   /**
-   * Cleans and normalizes a company name for conservative matching.
-   * Removes punctuation, common corporate suffixes, and extra spaces.
+   * Formatting-only key shared with company and country identity.
+   * Legal suffixes and business words require evidence-backed alias admission.
    */
   public static cleanCompanyName(name: string): string {
-    if (!name) return '';
-    let clean = name.trim().toLowerCase();
-
-    // Remove common corporate designators (with word boundaries or endings)
-    const suffixes = [
-      /\bprivate\s+limited\b/g,
-      /\bpvt\W+ltd\b/g,
-      /\bpvt\s+ltd\b/g,
-      /\bltd\b/g,
-      /\blimited\b/g,
-      /\bcorp\b/g,
-      /\bcorporation\b/g,
-      /\binc\b/g,
-      /\bincorporated\b/g,
-      /\bllc\b/g,
-      /\bco\b/g,
-      /\bcompany\b/g,
-      /\bgmbh\b/g,
-      /\bag\b/g,
-      /\bs\.a\b/g,
-      /\bpty\b/g,
-      /\blabs\b/g,
-      /\blaboratories\b/g,
-    ];
-
-    for (const suffix of suffixes) {
-      clean = clean.replace(suffix, '');
-    }
-
-    // Strip out all non-alphanumeric characters
-    clean = clean.replace(/[^a-z0-9]/g, ' ');
-    // Collapse multiple spaces
-    clean = clean.replace(/\s+/g, ' ').trim();
-
-    return clean;
+    return canonicalCompanyIdentityKey(name);
   }
 
   /**

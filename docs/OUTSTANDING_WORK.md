@@ -2,6 +2,12 @@
 
 Current readiness verdict: NOT READY
 
+### November 7 private pilot delivery boundary
+
+Owner deferred Microsoft Store enrollment, certification and publication. The next delivery is a private Windows pilot installer for the uncle after essential correctness, privacy, installation and recovery acceptance. Keep version/build/schema identity, patch delivery, matched application/data recovery, diagnostics and sanitized owner monitoring in scope. Store work remains deferred. No installer installation or recovery acceptance is implied by creating a package. The owner requested a 24-hour target, which remains a target rather than verified completion evidence.
+
+The pending report-identity correction passed the expanded focused regression, including legal/business-word distinctions, Unicode spelling and Sudan/South Sudan separation. Typecheck and lint passed in the staged full check. That check stopped at research-publication-order startup readiness. Two standalone reruns subsequently passed the overlap, restart and publication-drain assertions. Full-suite acceptance and compiled export verification remain pending. The live Chrome audit was retried and the saved origin permission again denied observation. Independent synthetic Playwright acceptance remains available.
+
 ### November 6 release audit checkpoint
 
 Hosted 4c4dd35 release run 41336659353 finished with native launcher, Docker and 152-step verification success. Browser job 124937852365 failed on saved-history pagination. The test armed a one-shot error route broad enough to catch the in-flight return to the newest page. c0a98cd waits for that page's actual run option and matches the injected error by the exact older-page cursor. Three isolated browser repeats passed with all 1,005 saved runs, pagination, injected 503 recovery, restart and zero provider calls. Hosted c0a98cd release run 42208336543 passed browser, native launcher, Docker and 152-step verification. Research 42208336499 and inventory 42208336538 also succeeded. The backup verifier was added after that run and has separate local test evidence.
@@ -293,6 +299,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 - [ ] FINAL01 / directive19,21–24: run exact-source final matrix after implementation queue closes, freeze three distinct artifacts, readiness report and owner checkpoint. Verdict cannot be READY while known supported-path High/Medium, installer/update/data/security/monitoring/CI gates remain open. Do not submit/publish.
 
 ### NEW HIGH/MEDIUM FINDINGS
+
+- [~] High CC05.REPORT_IDENTITY: real directory audit found 2,086 eligible conservative entity keys reduced to 1,977 report rows. Report grouping and trade lookup used a suffix stripper that removed legal suffixes and business words such as Labs. A synthetic regression produced two entities instead of three and demonstrated cross-company contact merging. The shared resolver now uses the existing formatting-only identity key. Focused trade, international-directory, completeness and schema-alias suites pass. Staged typecheck, lint and the full V1 suite passed. Compiled API acceptance passed directory/trade-partner separation, authoritative CSV and restart, plus existing tampered-selection refusal (two Playwright tests). The first added export fixture omitted required record IDs and was corrected to the existing ID-only contract. Live deployment and real-directory remeasurement remain open. Evidence-backed alias admission remains a separate unfinished goal.
 
 - [x] Medium QA01.SLIM_OFFICE_WRAPPERS: actual official-page capture reproduced missing deterministic addresses; narrow bounded-layout correction/adversarial regression, full checks/build and compiled captured-source persistence/API/rendered UI/all-format export/restart acceptance PASS on4c4dd35. All3published addresses and public mailbox checked; zero provider calls. This verifies the parser defect, not full live provider/extraction or clean-Windows acceptance.
 
