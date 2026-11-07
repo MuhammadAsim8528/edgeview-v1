@@ -1093,7 +1093,11 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
       };
 
       await checkpoint('Starting bounded V1 worker pool');
-      await Promise.all(Array.from({ length: Math.min(5, permittedIds.length || 1) }, () => worker()));
+      // Retained-only work is synchronous projection and SQLite persistence on
+      // one event loop. Parallel workers cannot speed up that CPU work and can
+      // queue several expensive projections before serving control requests.
+      const workerLimit = permittedIds.every(id => job.company_states[id]?.reuse_only) ? 1 : 5;
+      await Promise.all(Array.from({ length: Math.min(workerLimit, permittedIds.length || 1) }, () => worker()));
       await persistChain;
       if (!activeJobs.has(jobId)) {
         await updateJob(jobId, {
