@@ -18,7 +18,7 @@ Live handoff follow-up: the launcher installed its locked production dependencie
 
 Live backend provider connectivity: Serper, NVIDIA and Groq each returned HTTP 200 on the aggregate built-in diagnostic. Hunter was configured but disabled and received no diagnostic request. The public settings and health contracts exposed the supported provider set. Browser Use denied observing Chrome at http://127.0.0.1:3901 because its saved origin permission blocks access. No live UI controls were exercised through that browser. The backend audit remains separate from the UI gate.
 
-Hosted c64ebd5 release run 42212498638 passed native, Docker and verification jobs. Browser failed on the transient research feedback assertion. Artifact 13499753482 showed the enrichment response returned 200 and the expected failure toast appeared in the frame snapshot before the assertion started. The test now starts visibility and color assertions with the click. Three isolated repeats passed all five outcome cases. Hosted acceptance of this correction remains open. Research and inventory succeeded on c64ebd5.
+Hosted c64ebd5 release run 42212498638 passed native, Docker and verification jobs. Browser failed on the transient research feedback assertion. Artifact 13499753482 showed the enrichment response returned 200 and the expected failure toast appeared in the frame snapshot before the assertion started. The test now starts visibility and color assertions with the click. Three isolated repeats passed all five outcome cases. Hosted acceptance passed on 0abbbfb in release run 42215929502 and companion runs 42215929427 and 42215929428. Research and inventory succeeded on c64ebd5.
 
 The internal runtime-only factory built c0a98cd successfully from a clean checkout with a regular locked dependency install. The initial dependency junction was rejected by license collection and replaced with a normal install. Build 0dbb414dedc6d19b90c6221481478cc24425215ab4ab424f1706e4e637af1ec9 produced an 82,145,568-byte unsigned MSIX with 14,131 files and SHA-256 12a7a7f32ab3422cc1f37618fd79cd93be41b4ec74d04bdb8a2e2d6582d2ce64. Archive execution, signing, installation and clean Windows remain open. Owner sequence places product and recovery work before installer acceptance and Store submission.
 
@@ -129,7 +129,7 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 - [~] MON01/MON02: **Monitoring delivery and privacy** Verify fresh final-build Sentry/PostHog receipt, privacy controls and crash coverage; current browser-tool access is unavailable.
 - [~] DIAG01: **Diagnostics and support** Finish diagnostics, redaction, retention and support instructions/acceptance.
 - [~] PRIV01/UX01: **Privacy and license notices** Finish truthful privacy, external-provider disclosures, About and third-party notices.
-- [~] ID01: **Installation identity recovery** Verify installation-identity recovery; HWID/licensing remains deliberately deferred.
+- [x] ID01: **Installation identity recovery** Creation, persistence, corruption recovery, reset and test isolation passed. The verified backup, migrated desktop identity and live health response agree after restart. Deferred licensing design remains in EDGEVIEW_LICENSING_DESIGN.md.
 
 ### Release and installation
 
@@ -283,6 +283,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 - [ ] PILOT01 / directive17: exact self-contained install→configure→import→research/batch→evidence/export→close/reopen→monitoring/diagnostics→upgrade→restart→uninstall/reinstall/data-retention sequence without dev Node/npm/repository/config.
 - [~] PERF01 / directive18: supported target workload/time/RAM/navigation/research/export/idle/long trend evidence; five export repetitions are not a long leak test.
+  - [x] PERF01.LIVE_READ_SMOKE: November 7 live backend PID 33344 handled 100 read-only requests at concurrency 12 with zero failures, p95 247 ms, max 661 ms and RSS 273.4 to 295.5 MB. The probe covered health, runtime state and company reads. Long-duration and installed-device checks remain open.
   - [x] PERF01.NAVIGATION_768EFD9: current compiled build1d09665c completed300seconds/15paced60-row navigation cycles plus idle/settling,18resource samples, zero page/console errors; final RSS115.35MiB versus peak141.47MiB. This is a scoped baseline, not long-run leak, large-dataset, research/export or installed-device acceptance.
 
 ### FINAL RELEASE GATES
