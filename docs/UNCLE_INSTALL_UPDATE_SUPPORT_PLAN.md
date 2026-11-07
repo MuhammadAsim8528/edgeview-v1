@@ -45,6 +45,12 @@ Windows installation or proven application-health rollback exists yet.
 
 ## Intended pilot flow
 
+November 7 owner direction makes a private Windows pilot the next delivery.
+Microsoft Store enrollment and publication are deferred. Acceptance still requires
+the packaged workflows, trusted installation, state preservation and tested
+compatible recovery. The existing unsigned prototype is insufficient for that
+handoff. Product fixes and monitoring acceptance remain prerequisites.
+
 1. Produce an immutable runtime-only package containing the compiled app, supported
    Node runtime, launcher and third-party notices; no npm install/build on his PC.
 2. Use one trusted publisher/package identity and a signed MSIX for the pilot.
