@@ -67,6 +67,7 @@ for (const entry of report.files) {
   assert.equal(fs.statSync(file).size, entry.bytes); assert.equal(hash(file), entry.sha256);
 }
 assert.equal(fs.existsSync(path.join(app, 'node_modules/mammoth/test')), false);
+assert.ok(fs.statSync(path.join(app, 'dist/fatal-reporter.cjs')).isFile());
 for (const name of ['config.json', 'config.prev.json', '.env', 'edgeview.db', 'edgeview_db.json', 'data', 'logs', 'uploads', 'backups']) {
   assert.equal(fs.existsSync(path.join(app, name)), false, 'package must not carry customer state');
 }

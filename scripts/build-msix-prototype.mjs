@@ -87,7 +87,8 @@ export async function buildMsixPrototype(root) {
     fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify(inputs.manifest, null, 2));
     fs.writeFileSync(path.join(app, 'package-lock.json'), JSON.stringify(inputs.seedLock, null, 2));
     fs.writeFileSync(path.join(app, 'THIRD_PARTY_NOTICES.txt'), notices.document);
-    const distNames = new Set(['index.html', 'server.cjs', 'server.cjs.map', 'build-info.json', 'edgeview-mark.png', 'assets']);
+    if (!fs.statSync(path.join(root, 'dist/fatal-reporter.cjs')).isFile()) throw new Error('MSIX_FATAL_REPORTER_MISSING');
+    const distNames = new Set(['index.html', 'server.cjs', 'server.cjs.map', 'fatal-reporter.cjs', 'build-info.json', 'edgeview-mark.png', 'assets']);
     for (const name of fs.readdirSync(path.join(root, 'dist'))) {
       if (!distNames.has(name)) throw new Error('MSIX_UNREVIEWED_BUILD_OUTPUT');
       if (name === 'assets') {

@@ -21,6 +21,8 @@ export function isProductMonitoringEvent(name: unknown): boolean {
 const ERROR_MESSAGES = {
   UNEXPECTED_ERROR: 'Unexpected EdgeView error',
   REACT_RENDER_FAILED: 'EdgeView interface rendering failed',
+  PROCESS_UNCAUGHT_EXCEPTION: 'EdgeView stopped after an uncaught exception',
+  PROCESS_UNHANDLED_REJECTION: 'EdgeView stopped after an unhandled rejection',
   PROVIDER_AUTH_FAILED: 'Provider authentication failed',
   PROVIDER_RATE_LIMITED: 'Provider request rate limited',
   PROVIDER_TIMEOUT: 'Provider request timed out',

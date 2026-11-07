@@ -64,6 +64,14 @@ assert.equal(delivery.projected, true);
 assert.equal(delivery.sentry, true);
 assert.equal(delivery.posthog, false, 'errors use Sentry; analytics does not duplicate error tracking');
 
+for (const error_code of ['PROCESS_UNCAUGHT_EXCEPTION', 'PROCESS_UNHANDLED_REJECTION']) {
+  const fatal = await captureMonitoringEvent('runtime_error', {
+    stage: 'shutdown', outcome: 'failed', error_code, exception: secret, stack: secret, company: secret,
+  }, true);
+  assert.equal(fatal.sentry, true);
+  assert.equal(fatal.posthog, false);
+}
+
 await captureMonitoringEvent('research_completed', {
   stage: 'resolution', outcome: 'success', duration_ms: 456,
   company_name: secret, contacts: [secret], raw_provider_body: secret,
@@ -90,6 +98,10 @@ const posthogBodies = requests.filter(entry => !entry.url.includes('/api/1/envel
   entry.headers['content-encoding'] === 'gzip' ? gunzipSync(entry.body).toString('utf8') : entry.body.toString('utf8')
 ).join('\n');
 assert.ok(posthogBodies.includes('$geoip_disable'), 'PostHog transport must disable server-side GeoIP enrichment');
+for (const code of ['PROCESS_UNCAUGHT_EXCEPTION', 'PROCESS_UNHANDLED_REJECTION']) {
+  assert.ok(combined.includes(code), 'fixed fatal code must survive the real SDK transport');
+  assert.ok(!posthogBodies.includes(code), 'PostHog must not duplicate fatal error events');
+}
 
 const status = getMonitoringStatus();
 assert.equal(status.sentry.state, 'TRANSPORT_OK');

@@ -20,6 +20,8 @@ console.log(JSON.stringify({status:'PASS',directPackages:Object.keys(input.manif
 const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
 const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'edgeview-runtime-graph-'));
 try {
+  fs.mkdirSync(path.join(scratch,'server'));
+  fs.writeFileSync(path.join(scratch,'server/fatal_reporter.ts'),'export {};');
   fs.writeFileSync(path.join(scratch,'package.json'),JSON.stringify({name:'synthetic',version:'1.0.0',dependencies:{vite:'1.0.0'}}));
   fs.writeFileSync(path.join(scratch,'package-lock.json'),JSON.stringify({lockfileVersion:3,packages:{'':{},'node_modules/vite':{version:'1.0.0'}}}));
   fs.writeFileSync(path.join(scratch,'server.ts'),"import 'vite';");

@@ -15,7 +15,7 @@ EdgeView turns an exact company name and country from an uploaded trade dataset 
 ## Active enrichment path
 
 1. `server.ts` receives a single-company or persistent-job request.
-2. `server/job_manager.ts` owns resumable batch state, five bounded workers, checkpoints, provider counters, stop/resume behavior, and failure isolation.
+2. `server/job_manager.ts` owns resumable batch state, up to five live-provider workers, one retained-only projection worker, checkpoints, provider counters, stop/resume behavior, and failure isolation.
 3. `server/v1_engine.ts` runs the V1 pipeline:
    - The configured AI priority controls query generation and evidence extraction. The shipped default is NVIDIA NIM primary, with Groq as the other enabled-provider fallback. If AI query generation is unavailable, bounded deterministic company-country queries remain available; this does not fabricate extracted facts.
    - Serper performs every web-search request.

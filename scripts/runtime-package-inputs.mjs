@@ -18,7 +18,7 @@ export async function runtimePackageInputs(root) {
   const source = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   if (lock.lockfileVersion !== 3 || !lock.packages?.['']) throw new Error('RUNTIME_LOCK_FORMAT');
-  const graph = await build({ absWorkingDir: root, entryPoints: ['server.ts'], bundle: true, platform: 'node', format: 'cjs', packages: 'external', metafile: true, write: false, logLevel: 'silent' });
+  const graph = await build({ absWorkingDir: root, entryPoints: ['server.ts', 'server/fatal_reporter.ts'], outdir: 'dist', bundle: true, platform: 'node', format: 'cjs', packages: 'external', metafile: true, write: false, logLevel: 'silent' });
   const externals = Object.values(graph.metafile.outputs).flatMap(output => output.imports.filter(item => item.external));
   if (externals.some(item => packageName(item.path) === 'vite' && item.kind !== 'dynamic-import')) throw new Error('RUNTIME_VITE_REQUIRES_REVIEW');
   const imports = [...new Set(externals.map(item => item.path))];

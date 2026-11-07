@@ -49,6 +49,7 @@ import { getV1EngineDiagnostics, getV1ProviderMetrics, getV1Run, listV1RunSummar
 import { withContactPublication, persistV1ContactOverlay, projectHistoricalContactFields, reusableContactRun, reusableEvidenceContacts, reusableEvidenceSelection, stopJobsForShutdown } from './server/job_manager';
 import { installRuntimeLogging, readRuntimeLogs } from './server/runtime_log';
 import { installFatalErrorHandlers } from './server/fatal_errors';
+import { reportFatalIsolated } from './server/fatal_reporting';
 import { hasRecentProviderObservation, isRecentProviderOperation, projectV1ProviderUsage } from './shared/provider_telemetry';
 import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
@@ -94,7 +95,13 @@ const V1_SETTING_FIELDS = new Set([
 ]);
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 if (!isTestProcess()) installRuntimeLogging(getRuntimeDataRoot());
-if (!isTestProcess()) installFatalErrorHandlers();
+if (!isTestProcess()) installFatalErrorHandlers(kind => {
+  if (!runningBuild.available || !getMonitoringStatus().sentry.enabled) return;
+  reportFatalIsolated(getProjectRoot(), {
+    version: runningBuild.version, build_id: runningBuild.buildId,
+    channel: monitoringChannel, installation_id: getInstallationId(),
+  }, kind);
+});
 
 function boundedText(value: unknown, field: string, maxLength: number, required = false): string | undefined {
   if (value === undefined) return undefined;

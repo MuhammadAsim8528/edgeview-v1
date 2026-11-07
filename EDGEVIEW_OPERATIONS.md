@@ -26,6 +26,19 @@ of zero remains a normal stop. Dependency-install and rebuild failures abort
 before the backend starts. A failed rebuild restores the previous dist files
 but does not launch that restored build as an automatic fallback.
 
+For an uncaught backend exception or unhandled promise rejection, EdgeView exits
+with error code 1 without resuming application work or flushing possibly invalid
+in-memory database state. When error reporting is configured and currently
+enabled, a separate reporter gets only a fixed failure category and the existing
+version/build/channel/random installation identity. The failed backend waits
+synchronously for at most three seconds, then exits even if reporting fails.
+The reporter uses the existing Sentry privacy projection, has its own 2.5-second
+deadline, and receives no provider keys, exception text, stack, logs or customer
+data. It does not send a PostHog error event, write customer storage or restart
+EdgeView. Offline failures may not arrive remotely. Errors before handler setup,
+forced termination and operating-system/process crashes are not covered by this
+JavaScript error hook. Review diagnostics after restarting normally.
+
 ## Normal workflow
 
 1. Open or upload the trade file.

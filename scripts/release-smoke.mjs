@@ -8,6 +8,9 @@ import net from 'node:net';
 import { gzipSync, deflateSync } from 'node:zlib';
 import { unusedTestPort } from './test-server-port.mjs';
 
+assert.ok(fs.lstatSync('dist/fatal-reporter.cjs').isFile()
+  && !fs.lstatSync('dist/fatal-reporter.cjs').isSymbolicLink(), 'compiled release must retain the isolated fatal reporter');
+
 const port = Number(process.env.EDGEVIEW_RELEASE_TEST_PORT || await unusedTestPort());
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid isolated test port.');
 const base = `http://127.0.0.1:${port}`;
