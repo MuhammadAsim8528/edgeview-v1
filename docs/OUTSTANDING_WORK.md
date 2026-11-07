@@ -2,7 +2,11 @@
 
 Current readiness verdict: NOT READY
 
-### November 7 private pilot delivery boundary
+### November 7 current verified checkpoint
+
+Original desktop serves source 33aca80/build aea5f6db4210 with 2724 contacts, 2086 eligible directory entries, operational integrity OK, schema 2 and the preserved installation identity. Read-only SQLite inspection found 17612 history rows, 18 research jobs and 2724 V1 overlays. Hosted ddea6f7 checks all passed. Controlled matching-build Sentry/PostHog dashboard receipt and render-error API delivery are verified below. These scoped results supersede older pending-deployment/account-access notes, which remain historical evidence. Product, final-package, clean-Windows and recovery gates remain open.
+
+### November 7 earlier private pilot checkpoints (historical)
 
 Hosted 9fc16606dd5c433adf4404f83ee572c4bc5b0293 release 42337144683 completed successfully with 152 verification steps, browser, Docker and native-launcher jobs. Research 42337144599 and inventory 42337144586 also succeeded. This verifies the report-identity source checkpoint; its live deployment remains pending.
 
@@ -144,7 +148,7 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 - [~] SEC01: **Integrated security checks** Recheck security protections against the final integrated build, including the active provider-transport correction.
 - [~] SEC02/CI01: **Dependencies and secret scanning** Resolve dependency findings and verify final secret/history/package scans, licenses and SBOM.
 - [ ] SEC02: **Exposed key rotation** Owner plans to revoke previously exposed keys later. Track the account action separately from local engineering and verify it when completed.
-- [~] MON01/MON02: **Monitoring delivery and privacy** Verify fresh final-build Sentry/PostHog receipt, privacy controls and crash coverage; current browser-tool access is unavailable.
+- [~] MON01/MON02: **Monitoring delivery and privacy** Current compiled-build controlled Sentry/PostHog and render-error API receipts verified in authenticated dashboards; actual crash, alert/retention and final installed-build acceptance remain open.
 - [~] DIAG01: **Diagnostics and support** Finish diagnostics, redaction, retention and support instructions/acceptance.
 - [~] PRIV01/UX01: **Privacy and license notices** Finish truthful privacy, external-provider disclosures, About and third-party notices.
 - [x] ID01: **Installation identity recovery** Creation, persistence, corruption recovery, reset and test isolation passed. The verified backup, migrated desktop identity and live health response agree after restart. Deferred licensing design remains in EDGEVIEW_LICENSING_DESIGN.md.
@@ -282,6 +286,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
 
 - [~] MON01/MON02/DIAG01/PRIV01 / directive4–6,P,20: reuse strict existing adapters, visible opt-outs and diagnostics projection; no replay/unreviewed tracing, business payloads, private exceptions or hardware identifiers. Prior specific-build real dashboard receipt preserved; final-package receipt/crash/alert/retention acceptance remains open.
 - [x] MON01.ACCOUNT_ACCESS: owner-authenticated Sentry and PostHog tabs inspected on November 7. Existing project identity and privacy controls verified, with fresh matching-build synthetic dashboard receipt. Final-package/crash/alert/retention acceptance remains open.
+  - [x] MON01.RENDER_API_RECEIPT: current compiled build fixed-code frontend-report endpoint verified in Sentry event e8dbccceffb6447bbbde6751c8a84cae with matching build/temporary UUID, REACT_RENDER_FAILED/render and filtered geography. This is not an actual rendered React crash.
+  - [~] MON01.FATAL_COVERAGE: existing uncaught-exception/rejection handler exits1 immediately without invoking telemetry. Preserve prompt termination and no unsafe persistence while completing safe crash/startup coverage.
 
 ### PACKAGING / UPDATE
 
@@ -289,8 +295,8 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [x] DIST01.CURRENT_SDK: existing factory on6b21ac0 produced SDK-validated unsigned internal MSIX; exact archive SHA256 recorded below. First missing-PNG attempt failed closed and remains unexplained WARN, not a claimed source fix.
   - [x] DIST01.EXTRACTED_RUNTIME: exact current archive independently re-extracted; vendor Node bytes/source artifact/file hashes verified, global Node/npm absent from PATH, empty first launch, synthetic country-separated upload/HTML export, missing-provider503, safe diagnostics, owner-pipe shutdown/restart/UUID/data and no app-root writes passed. Not installed/native/clean Windows acceptance.
   - [x] DIST01.RUNTIME_INPUTS: derives12 roots from actual server build, preserves canonical overrides, verifies327 canonical lock components and actual npm install/startup/static shell/all5formats/restart without Vite/frontend Node packages. Host executable used; not an installed distribution.
-  - [ ] DIST01.RUNTIME_FACTORY: integrate derived manifest/lock plus needed runtime resources and retained compiled-frontend notices into the actual MSIX factory, then re-extract and test that exact archive.
-  - [~] DIST01.RUNTIME_PAYLOAD: current27411-file prototype still includes frontend/build Node packages. Backend external-import graph measured; finish runtime-only dependencies while retaining compiled UI, required resources and proper license/SBOM evidence.
+  - [~] DIST01.RUNTIME_FACTORY: existing derived runtime manifest/lock/resources/frontend notices are integrated and historical c0a98cd archive build succeeded. Revalidate the current Sentry lock and source in an exact extracted archive; installed/native/customer acceptance remains open.
+  - [~] DIST01.RUNTIME_PAYLOAD: historical c0a98cd reduced runtime archive contains 14131 files versus the earlier 27411-file prototype. Current-source archive/runtime and complete notice/SBOM acceptance remain open. Do not rebuild the already integrated dependency derivation.
   - [~] DIST01.CONTENT_LICENSE: developer-package content scanner and adversarial canary/failure/preservation regressions PASS; license-inventory helper PASS never confers clearance. Final MSIX-wide content/SBOM/license review remains open.
   - [!] DIST01.TRUSTED_ACTIVATION: native launcher was compiled but NOT EXECUTED/installed in this probe; publisher identity, trusted signing and supported native activation remain unverified. No Windows security setting changes.
   - [ ] DIST01.UPDATE_ACCEPTANCE: accepted installer-compatible updates, preserved user state and compatible application/data recovery.
@@ -3274,3 +3280,9 @@ Existing scripts/probe-existing-monitoring-build.mjs ran successfully against so
 Desktop deployment used a fresh independently verified 10640-file / 2609424097-byte backup, manifest SHA256 ae814ae8ac3168f66d9f564c12f83eb569180392734570b8179a0271f0218d0d. Previous owned console received Ctrl+C, released database lock and port, but launcher wrapper exit was 1, not verified clean exit 0. Only dist/node_modules were replaced and the previous runtime retained. Existing data/configuration were not replaced or rolled back. Real EdgeView.bat preflights passed and current live HTTP identity/data checks passed. This controlled handoff is not a completed production updater or compatible app/data rollback acceptance.
 
 Exact ddea6f7a93830d75235cade89b15d56f182240bb hosted research 42373757620, inventory 42373757667 and release 42373757769 all completed SUCCESS, including 152 verification steps, native launcher, browser E2E and Docker. These checks do not close clean-Windows customer acceptance. Readiness remains NOT READY.
+
+### MON01 render delivery probe correction — 2026-11-07
+
+The QA probe previously killed its isolated child immediately after the asynchronous frontend-report 202. Added a 10-second bounded status wait requiring a new Sentry transport success, distinct from the earlier doctor event. No product route, consent, collection or fatal-termination behavior changed. Existing probe regression now exercises loopback-only fake runtimes for delayed success, stale prior success and rejection, alongside exact real-send opt-in/sanitized failure checks. All pass. Real controlled rerun exited0 and actual authenticated Sentry event e8dbccceffb6447bbbde6751c8a84cae independently confirms current build aea5f6db4210, REACT_RENDER_FAILED/render and filtered geography. Private screenshot saved. No actual production UI crash was injected and live backend was not restarted.
+
+Read-only post-handoff SQL integrity_check returned ok, user_version2, history_data17612, research_jobs18 and v1_contact_enrichment2724. Installation identity bytes match the verified backup hash. This does not prove whole-dataset factual accuracy or all recovery scenarios. Packaging board corrected to recognize existing factory integration and historical reduced archive rather than reimplementing it. Current SDK/source archive and native/clean Windows remain unverified.

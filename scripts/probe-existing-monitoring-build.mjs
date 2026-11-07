@@ -67,9 +67,25 @@ try {
     body: JSON.stringify({ code: 'REACT_RENDER_FAILED' }), signal: AbortSignal.timeout(5000) });
   const frontendResult = await frontend.json();
   if (frontend.status !== 202 || frontendResult.delivery !== 'NOT_CONFIRMED') throw new Error('Controlled frontend-report boundary failed.');
+  // Acceptance is asynchronous. Do not terminate the owned child while its
+  // frontend event is still queued, or reuse the earlier doctor transport result.
+  const previousSuccess = result.monitoring.sentry.last_transport_success_at;
+  let frontendTransportConfirmed = false;
+  for (const deadline = Date.now() + 10_000; Date.now() < deadline;) {
+    const statusResponse = await fetch(`${base}/api/monitoring/status`, { signal: AbortSignal.timeout(2000) });
+    if (!statusResponse.ok) throw new Error('Controlled monitoring status unavailable.');
+    const status = (await statusResponse.json()).monitoring?.sentry;
+    if (status?.state === 'ERROR' || status?.state === 'DISABLED') throw new Error('Controlled frontend transport failed.');
+    if (status?.state === 'TRANSPORT_OK' && status.last_transport_success_at
+      && status.last_transport_success_at !== previousSuccess) {
+      frontendTransportConfirmed = true; break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  if (!frontendTransportConfirmed) throw new Error('Controlled frontend transport was not confirmed within the bound.');
   console.log(JSON.stringify({ qaOnly: true, artifactCommit: build.gitCommit, buildId: build.buildId,
     version: build.version, installationId: health.app.installation_id, startedAt,
-    delivery: { sentry: true, posthog: true }, frontendReportAccepted: true, dashboardVerified: false,
+    delivery: { sentry: true, posthog: true }, frontendReportAccepted: true, frontendTransportConfirmed, dashboardVerified: false,
     limitation: 'Controlled temporary compiled runtime and synthetic frontend-report API; not live app/browser, actual React crash, dashboard receipt or whole privacy acceptance.' }, null, 2));
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
