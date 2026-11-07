@@ -24,7 +24,7 @@ export function reportFatalIsolated(root: string, identity: MonitoringIdentity, 
       cwd: root, env, input: JSON.stringify({ identity: {
         version: safe.version, build_id: safe.build_id, channel: safe.channel, installation_id: safe.installation_id,
       }, kind }), stdio: ['pipe', 'ignore', 'ignore'],
-      timeout: 3000, windowsHide: true,
+      timeout: 6000, windowsHide: true,
     });
     return !result.error && result.status === 0;
   } catch { return false; }

@@ -31,7 +31,7 @@ with error code 1 without resuming application work or flushing possibly invalid
 in-memory database state. When error reporting is configured and currently
 enabled, a separate reporter gets only a fixed failure category and the existing
 version/build/channel/random installation identity. The failed backend waits
-synchronously for at most three seconds, then exits even if reporting fails.
+synchronously for at most six seconds, then exits even if reporting fails.
 The reporter uses the existing Sentry privacy projection, has its own 2.5-second
 deadline, and receives no provider keys, exception text, stack, logs or customer
 data. It does not send a PostHog error event, write customer storage or restart

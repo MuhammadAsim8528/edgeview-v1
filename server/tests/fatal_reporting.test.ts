@@ -30,7 +30,7 @@ try {
     fs.writeFileSync(reporter, 'setInterval(()=>{},1000)');
     const start=Date.now();
     assert.equal(reportFatalIsolated(root,identity,'uncaught exception'),false);
-    assert.ok(Date.now()-start<6000,'hung reporter must not delay termination without a bound');
+    assert.ok(Date.now()-start<9000,'hung reporter must not delay termination without a bound');
     fs.unlinkSync(reporter);
     assert.equal(reportFatalIsolated(root,identity,'uncaught exception'),false);
   } finally {
