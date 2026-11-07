@@ -13,8 +13,8 @@ const root = fs.mkdtempSync(path.join(repo,'.test-cache','batch-lifecycle-'));
 const engine = path.join(repo,'server/v1_engine.ts');
 const children = new Set();
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
-async function until(check, label) {
-  for (const end = Date.now()+30000; Date.now()<end;) { if (await check()) return; await sleep(40); }
+async function until(check, label, timeoutMs = 30000) {
+  for (const end = Date.now()+timeoutMs; Date.now()<end;) { if (await check()) return; await sleep(40); }
   throw new Error(typeof label === 'function' ? label() : label);
 }
 const noEgress = path.join(root,'deny-egress.cjs');
@@ -23,11 +23,19 @@ const fs=require('node:fs'); const timer=setInterval(()=>{if(process.env.FIXTURE
 try {
   await build({entryPoints:['server.ts'],outfile:path.join(root,'server.cjs'),bundle:true,platform:'node',format:'cjs',packages:'external',logLevel:'silent',plugins:[{
     name:'batch-provider-barrier',setup(plugin) {
-      if (process.argv.includes('--replay-completed-mutant')) plugin.onLoad({filter:/job_manager\.ts$/},args => {
-        const source=fs.readFileSync(args.path,'utf8');
-        const original="return status === 'pending' || status === 'processing';";
-        assert.ok(source.includes(original),'mutant must target the real resume selection');
-        return {contents:source.replace(original,'return true;'),loader:'ts',resolveDir:path.dirname(args.path)};
+      if (process.argv.includes('--replay-completed-mutant') || process.argv.includes('--no-yield-mutant')) plugin.onLoad({filter:/job_manager\.ts$/},args => {
+        let source=fs.readFileSync(args.path,'utf8');
+        if (process.argv.includes('--replay-completed-mutant')) {
+          const original="return status === 'pending' || status === 'processing';";
+          assert.ok(source.includes(original),'mutant must target the real resume selection');
+          source = source.replace(original, 'return true;');
+        }
+        if (process.argv.includes('--no-yield-mutant')) {
+          const original = 'await yieldToEventLoop();';
+          assert.ok(source.includes(original), 'mutant must target the real worker yield');
+          source = source.replace(original, '');
+        }
+        return {contents:source,loader:'ts',resolveDir:path.dirname(args.path)};
       });
       plugin.onResolve({filter:/^(?:\.\/server\/|\.\/)(v1_engine)$/},args => {
         if ([path.join(repo,'server.ts'),path.join(repo,'server/job_manager.ts')].includes(path.resolve(args.importer))) return {path:'engine',namespace:'fixture'};
@@ -40,7 +48,9 @@ try {
         export async function runV1Enrichment(company_name,country) {
           const position=++ordinal;
           fs.appendFileSync(process.env.FIXTURE_CALLS,JSON.stringify({company_name,position})+'\\n');
-          const held=process.env.FIXTURE_SCENARIO!=='crash' || position>5;
+          const cpuScenario = process.env.FIXTURE_SCENARIO === 'cpu';
+          if (cpuScenario) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+          const held=!cpuScenario && (process.env.FIXTURE_SCENARIO!=='crash' || position>5);
           const end=Date.now()+25000;
           while(held&&!fs.existsSync(process.env.FIXTURE_RELEASE)) {
             if(Date.now()>end) throw new Error('Synthetic provider barrier expired');
@@ -53,7 +63,7 @@ try {
     }
   }]});
   const SQL=await initSqlJs();
-  for(const scenario of ['stop','graceful','crash']) {
+  for(const scenario of (process.argv.includes('--responsiveness-only') ? ['cpu'] : ['stop','graceful','crash','cpu'])) {
     const state=path.join(root,scenario);fs.mkdirSync(state);fs.writeFileSync(path.join(state,'data.json'),'[]');
     const port=await unusedTestPort();const base=`http://127.0.0.1:${port}`;
     const env=Object.fromEntries(['SystemRoot','WINDIR','PATH','TEMP','TMP','USERPROFILE','APPDATA','LOCALAPPDATA'].filter(key=>process.env[key]).map(key=>[key,process.env[key]]));
@@ -68,11 +78,38 @@ try {
     const calls=()=>fs.existsSync(env.FIXTURE_CALLS)?fs.readFileSync(env.FIXTURE_CALLS,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)):[];
     const post=async(url,data={})=>{const response=await fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});assert.equal(response.status,200,`${url} status`);return response.json();};
     await launch();
-    const form=new FormData();form.append('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n'+Array.from({length:8},(_,i)=>`2026-01-01,Queueanchor ${i+1},Kenya,Synthetic Supplier,Synthetic Product,10`).join('\n')]),'synthetic.csv');
+    const companyCount = scenario === 'cpu' ? 64 : 8;
+    const form=new FormData();form.append('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n'+Array.from({length:companyCount},(_,i)=>`2026-01-01,Queueanchor ${i+1},Kenya,Synthetic Supplier,Synthetic Product,10`).join('\n')]),'synthetic.csv');
     assert.equal((await fetch(base+'/api/files/upload',{method:'POST',body:form})).status,201);
-    const contacts=await fetch(base+'/api/companies').then(response=>response.json());const ids=contacts.filter(contact=>contact.company_name.startsWith('Queueanchor ')).map(contact=>contact.id);assert.equal(ids.length,8);
+    const contacts=await fetch(base+'/api/companies').then(response=>response.json());const ids=contacts.filter(contact=>contact.company_name.startsWith('Queueanchor ')).map(contact=>contact.id);assert.equal(ids.length,companyCount);
     const {jobId}=await post('/api/enrich/jobs',{company_ids:ids,mode:'importer'});
     const readJob=async()=>{const response=await fetch(base+`/api/enrich/job/${jobId}`);assert.equal(response.status,200);return (await response.json()).job;};
+    if (scenario === 'cpu') {
+      // Bounded synthetic synchronous work exposes starvation without a timing
+      // assertion. Health must be served while some selected work remains.
+      const starting = post(`/api/enrich/job/${jobId}/start`);
+      void starting.catch(() => {});
+      await until(() => calls().length > 0, 'CPU fixture must begin actual worker dispatch');
+      const health = await fetch(base + '/api/health', { signal: AbortSignal.timeout(15000) }).catch(error => {
+        throw new Error(`CPU responsiveness health request failed: ${error.name}`);
+      });
+      assert.equal((await health.json()).app.pid, child.pid);
+      assert.ok(calls().length < companyCount, 'batch must serve health before exhausting synchronous work');
+      await starting;
+      let snapshot;
+      // The 15s health budget and before-completion assertion above are the
+      // responsiveness gate. This deliberately blocking workload has a separate
+      // bounded completion budget, including its real durable file writes.
+      await until(async () => {
+        snapshot = await readJob();
+        assert.notEqual(snapshot.status, 'FAILED');
+        return snapshot.status === 'COMPLETED';
+      }, () => `CPU batch completion: ${snapshot?.status}, ${snapshot?.completed_companies}/${companyCount}`, 120000);
+      assert.equal((await readJob()).completed_companies, companyCount);
+      assert.equal(calls().length, companyCount, 'yielding must not skip or duplicate work');
+      await terminate();
+      continue;
+    }
     await post(`/api/enrich/job/${jobId}/start`);
     await until(()=>calls().length===(scenario==='crash'?8:5),'expected bounded initial provider calls');
     if(scenario!=='crash') {
@@ -107,7 +144,9 @@ try {
     const completed=await readJob();assert.equal(Object.values(completed.company_states).filter(item=>item.status==='completed').length,8);
     await terminate();await launch();const final=await readJob();assert.equal(final.status,'COMPLETED');assert.equal(final.completed_companies,8);assert.equal(calls().length,recorded.length,'startup does not silently start provider work');await terminate();
   }
-  console.log('PASS eight-company batch: bounded dispatch, stop/graceful drain preserve queue, durable checkpoint + forced interruption, explicit resume, no completed-company replay/count inflation, final restart');
+  console.log(process.argv.includes('--responsiveness-only')
+    ? 'PASS 64-company CPU fixture serves health before all work completes, with no skipped or duplicate dispatch'
+    : 'PASS eight-company batch stop/recovery/restart plus 64-company CPU responsiveness and exact dispatch');
 } finally {
   for(const child of children)child.kill();await Promise.all([...children].map(child=>until(()=>child.exitCode!==null||child.signalCode!==null,'cleanup child')));
   if(path.dirname(root)!==path.resolve(repo,'.test-cache'))throw new Error('Unsafe fixture cleanup boundary');fs.rmSync(root,{recursive:true,force:true});

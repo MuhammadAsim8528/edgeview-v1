@@ -1,3 +1,4 @@
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { getDb } from './sqlite';
 import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, assessV1FreshReuse, createV1ResearchContext, type V1ResearchContext, type V1Run } from './v1_engine';
 import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
@@ -945,6 +946,11 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
 
       const worker = async () => {
         while (activeJobs.has(jobId)) {
+          // Cached projection and durable SQLite writes can finish entirely in
+          // microtasks. Let status, cancellation and shutdown requests run
+          // between companies instead of waiting for the entire queue.
+          await yieldToEventLoop();
+          if (!activeJobs.has(jobId)) return;
           const position = cursor++;
           if (position >= permittedIds.length) return;
           const companyId = permittedIds[position];
