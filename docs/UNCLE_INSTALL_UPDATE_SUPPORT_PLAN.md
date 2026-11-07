@@ -51,6 +51,42 @@ the packaged workflows, trusted installation, state preservation and tested
 compatible recovery. The existing unsigned prototype is insufficient for that
 handoff. Product fixes and monitoring acceptance remain prerequisites.
 
+The owner also requests a conventional setup wizard with an installation-directory
+choice, readable privacy information and an explicit acknowledgement step. Review
+the available installer route against these requirements before committing to it.
+Inno Setup documents destination selection, LicenseFile and InfoBeforeFile. Its
+current website requests commercial users purchase a license, so do not assume
+unconditional zero-cost use or accept purchasing terms for the owner. MSIX uses
+Windows package deployment and its managed package location, so the existing
+prototype does not establish acceptance of the requested wizard.
+
+The existing React/Vite/Express application uses a browser and bundled Node
+runtime. A standalone Chromium distribution is not an established dependency.
+WebView2 is a possible native host with an Evergreen or fixed runtime, but choosing
+it requires host integration and runtime distribution checks. Preserve the current
+architecture while assessing that choice. A privacy acknowledgement must describe
+actual external provider requests separately from optional monitoring. Do not
+invent publisher terms or enable monitoring merely because setup was accepted.
+
+NSIS is an additional mature candidate for the private wizard. Its official
+manual documents license and directory pages and describes free use, including
+commercial use under its component licenses. Evaluate it as the candidate wizard
+route without adding a second updater. Neither its wizard nor a setup agreement
+implements EdgeView's application/data rollback. That remains an explicit tested
+recovery requirement.
+
+Official references checked November 7, 2026
+
+- [Inno Setup destination configuration](https://jrsoftware.org/ishelp/topic_setup_defaultdirname.htm)
+- [License page configuration](https://jrsoftware.org/ishelp/topic_setup_licensefile.htm)
+- [Information before installation](https://jrsoftware.org/ishelp/topic_setup_infobeforefile.htm)
+- [Inno Setup distribution and commercial-use information](https://jrsoftware.org/isinfo.php)
+- [Windows package installation behavior](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes)
+- [WebView2 runtime distribution](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)
+- [NSIS introduction and license](https://nsis.sourceforge.io/Docs/Chapter1.html)
+- [NSIS setup pages](https://nsis.sourceforge.io/Docs/Chapter2.html)
+- [NSIS component licenses](https://nsis.sourceforge.io/License)
+
 1. Produce an immutable runtime-only package containing the compiled app, supported
    Node runtime, launcher and third-party notices; no npm install/build on his PC.
 2. Use one trusted publisher/package identity and a signed MSIX for the pilot.
