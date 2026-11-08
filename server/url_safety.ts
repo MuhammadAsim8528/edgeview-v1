@@ -151,6 +151,7 @@ export const DEFAULT_EXTERNAL_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 export interface SafeOutboundTextResult {
   response: Response;
   text: string;
+  provenance: { finalUrl: string; redirectCount: number };
   transport?: { contentEncoding: 'gzip'; encodedBytes: number; decodedBytes: number; headers: Record<string, string> };
 }
 
@@ -313,6 +314,7 @@ async function captureOutboundText(
           // decode gzip, with its wire representation recorded separately.
           const body = [204, 205, 304].includes(validStatus) ? null : new Uint8Array(bytes);
           resolve({ response: new Response(body, { status: validStatus, headers: responseHeaders }), text,
+            provenance: { finalUrl: currentUrl, redirectCount: maxRedirects - redirectsLeft },
             ...(compressed ? { transport: { contentEncoding: 'gzip' as const, encodedBytes: encodedBytes!,
               decodedBytes: bytes.length, headers: wireHeaders! } } : {}) });
         };

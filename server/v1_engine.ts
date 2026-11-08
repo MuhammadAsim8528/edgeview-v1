@@ -790,7 +790,7 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
   const started = Date.now(); const requestedAt = now();
   let responseRecorded = false;
   try {
-    const { response, text, transport } = await safeFetchOutboundText(result.url, {
+    const { response, text, transport, provenance } = await safeFetchOutboundText(result.url, {
       timeoutMs,
       maxBytes: request.max_bytes,
       maxBytesDomain: officialDomain,
@@ -802,7 +802,7 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
       },
     });
     const headers = Object.fromEntries(response.headers.entries());
-    const payload = { status: response.status, headers, body: text, ...(transport ? { transport } : {}) };
+    const payload = { status: response.status, headers, body: text, provenance, ...(transport ? { transport } : {}) };
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'scrape', provider, request, ...(response.ok ? { response: payload } : { response: payload, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(payload) };
     run.raw_records.push(raw); responseRecorded = true;
     result.raw_record_id = [result.raw_record_id, raw.id].filter(Boolean).join(',');

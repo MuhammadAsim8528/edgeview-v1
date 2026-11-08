@@ -39,6 +39,7 @@ try {
   assert.equal(captured.text, '<p>Public local office — Kenya</p>');
   assert.equal(await captured.response.text(), captured.text);
   assert.equal(captured.response.headers.get('content-encoding'), null, 'decoded Response cannot claim wire gzip bytes');
+  assert.deepEqual(captured.provenance, { finalUrl: 'https://official.test/contact', redirectCount: 0 });
   assert.equal(captured.transport?.contentEncoding, 'gzip');
   assert.equal(captured.transport?.encodedBytes, payload.length);
   assert.equal(captured.transport?.decodedBytes, Buffer.byteLength(captured.text));

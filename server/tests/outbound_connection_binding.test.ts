@@ -46,6 +46,7 @@ try {
   dns.resolve4 = (async () => { throw new Error('Second resolver must never run'); }) as typeof dns.resolve4;
   http.request = transport; https.request = transport as typeof https.request;
   const captured = await safeFetchOutboundText('https://company.test:8443/contact?q=one');
+  assert.deepEqual(captured.provenance, { finalUrl: 'https://company.test:8443/contact?q=one', redirectCount: 0 });
   assert.equal(captured.text, 'ok'); assert.equal(captured.response.status, 200); assert.equal(lookups, 1);
   assert.equal(calls[0].hostname, '93.184.216.34'); assert.equal(calls[0].family, 4);
   assert.equal(calls[0].servername, 'company.test'); assert.equal(calls[0].headers.host, 'company.test:8443');
@@ -128,7 +129,9 @@ try {
     if (lookups > 1) { status = 200; headers = { 'content-type': 'text/html' }; }
     return [{ address: '93.184.216.34', family: 4 }];
   };
-  assert.equal((await safeFetchOutboundText('https://company.test/start')).text, 'ok');
+  const redirected = await safeFetchOutboundText('https://company.test/start');
+  assert.equal(redirected.text, 'ok');
+  assert.deepEqual(redirected.provenance, { finalUrl: 'https://company.test/contact', redirectCount: 1 });
   assert.equal(calls[1].path, '/contact');
   reset(); status = 302; headers.location = '/next';
   lookup = () => new Promise(resolve => setTimeout(() => resolve([{ address: '93.184.216.34', family: 4 }]), 10));

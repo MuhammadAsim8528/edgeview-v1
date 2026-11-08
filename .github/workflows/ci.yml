@@ -122,6 +122,7 @@ jobs:
       - run: node --import tsx server/tests/config_persistence_safety.test.ts
       - run: node --import tsx server/tests/install_identity.test.ts
       - run: node --import tsx server/tests/company_alias_candidates.test.ts
+      - run: node --import tsx server/tests/company_alias_evidence.test.ts
       - name: Verify Windows user data protection primitive
         shell: pwsh
         run: |
