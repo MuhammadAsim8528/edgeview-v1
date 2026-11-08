@@ -13,6 +13,7 @@ import { selectFileViewRows, FileViewValidationError } from './server/file_view'
 import { computeSummary } from './server/summary';
 import { statsRouter, extractRowData, selectImporterShipments } from './server/stats_router';
 import { uploadRouter } from './server/routes/upload';
+import { companyAliasReviewRouter } from './server/routes/company_alias_review';
 import { hasUnattributedHistory, HISTORY_RECONCILIATION_REQUIRED } from './server/history_ownership';
 import {
   saveFileToDb,
@@ -581,6 +582,8 @@ async function hydrateContactsFromCache(): Promise<void> {
   // V1 results are immutable run records, not projections from the retired
   // autonomous contact-cache engine. Kept as a no-op for stable API callers.
 }
+
+app.use('/api/companies', companyAliasReviewRouter);
 
 app.get('/api/companies', async (req, res) => {
   await hydrateContactsFromCache();
