@@ -30,6 +30,7 @@ jobs:
       - run: node scripts/audit-git-secrets.mjs
       - run: node scripts/shipped-docs-contract.test.mjs
       - run: node scripts/provider-fetch-policy.test.mjs
+      - run: node scripts/test-egress-boundary.test.mjs
       - run: node --import tsx server/tests/provider_request_path.test.ts
       - run: npm audit --omit=dev --audit-level=high
       - run: node scripts/vite-install-boundary.test.mjs

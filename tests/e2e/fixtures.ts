@@ -54,7 +54,7 @@ export const test = base.extend<{ runtime: Runtime; savedHistoryCount: number; h
     };
     const start = async () => {
       stderr = '';
-      child = spawn(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), path.resolve('dist/server.cjs')], {
+      child = spawn(process.execPath, ['--require', path.resolve('scripts/test-no-egress.cjs'), path.resolve('dist/server.cjs')], {
         cwd: process.cwd(), stdio: ['ignore', 'ignore', 'pipe'], env: { ...inherited, NODE_ENV: 'test', PORT: String(port),
           EDGEVIEW_TEST_MODE: '1', EDGEVIEW_TEST_DB_DIR: root, EDGEVIEW_JSON_DB: json,
           EDGEVIEW_SQLITE_DB: path.join(root, 'operational.db'), EDGEVIEW_CONFIG: path.join(root, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(root, 'runs'), EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit, ...(historyFaultInjection ? { EDGEVIEW_E2E_HISTORY_FAULT_FILE: historyFault } : {}) },

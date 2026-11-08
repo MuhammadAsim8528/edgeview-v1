@@ -3457,3 +3457,12 @@ Focused typecheck/lint/readback tests pass. Actual HTTP fixture seeds a decision
 
 
 Registered-decision terminal checks: corrected focused unit/actual HTTP passed, followed by typecheck, lint, full V1, production build and release smoke exit0 (alias-readback-full-check.log). The inherited79236a2 Docker failure was inspected after this coherent unit: its missing test preload is the next scoped fix. Exact79236a2 research42453295023 and inventory42453295119 passed; main hosted release is not green because Docker failed. Repository visibility was verified private, default main unchanged. No merge/publication/customer migration.
+
+
+### CI01 shared QA network-denial fixture — 2026-11-08
+
+After readback checkpoint9ed2b0c, fixed the confirmed79236a2 Docker input failure by moving the existing test-only preload from the browser-only folder to scripts/test-no-egress.cjs, already included by Docker's deny-by-default QA context. Updated both V1 HTTP child/seed and Playwright callers to the same file. No duplicate networking helper, production request-policy change, Docker context expansion or customer runtime inclusion. Earlier429ea53/40318735819 historical evidence records the same category of browser-folder coupling; retained as history, while this shared fixture removes that coupling for the new consumers.
+
+New test-egress-boundary.test.mjs runs in both V1 and the hosted verify job: a real preloaded child refuses fetch/http/https before connection, records all3 attempts and retains the inbound-server primitive. Local shared fixture, actual alias HTTP/restart/registration checks and E2E typecheck pass. Three compiled browser cases passed: history-read failure/export recovery, pause/checkpoint feedback, and history beyond1000/restart, retaining zero-egress behavior. No old active path references remain; historical ledger references are intentionally preserved.
+
+Local Docker CLI exists but the Linux engine pipe is unavailable; the daemon was not started or changed. Actual container verification remains pending in hosted CI. This is a scoped gate limitation, not a reason to stop locally verifiable work or claim Docker acceptance from Windows tests.

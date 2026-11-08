@@ -20,7 +20,7 @@ fs.writeFileSync(env.EDGEVIEW_JSON_DB, '[]'); fs.writeFileSync(env.EDGEVIEW_CONF
 let child: ChildProcess | undefined, stderr = '';
 async function start() {
   let readinessFailure = 'not checked';
-  child = spawn(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
+  child = spawn(process.execPath, ['--require', path.resolve('scripts/test-no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
     import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
     import {persistV1Run} from './server/v1_engine.ts';
     const response={status:200,body:'\\n'.repeat(6000)+'<p>Global Pharma Ltd is also known as Global Pharma in Kenya.</p>',
@@ -101,7 +101,7 @@ try {
   await stop();
   // Seed only the stopped, owned fixture through the real durable boundary.
   // No admission route is exposed and no second process writes a live DB.
-  const seeded = spawnSync(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
+  const seeded = spawnSync(process.execPath, ['--require', path.resolve('scripts/test-no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
     import {getV1Run} from './server/v1_engine.ts';
     import {prepareCompanyAliasAdmission,persistCompanyAliasAdmission} from './server/company_alias_registry.ts';
     const plan=prepareCompanyAliasAdmission(${JSON.stringify(alias)},${JSON.stringify(canonical)},getV1Run('run-alias-review'),'raw-alias-review');
