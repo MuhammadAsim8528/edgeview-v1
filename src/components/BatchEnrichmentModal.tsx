@@ -129,7 +129,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     } else {
       stopPolling();
     }
-    return () => { controller.abort(); controlRequestRef.current?.abort(); stopPolling(); };
+    return () => {
+      controller.abort(); controlRequestRef.current?.abort(); controlRequestRef.current = null; stopPolling();
+    };
   }, [isOpen]);
 
   // Toggle selection
@@ -322,13 +324,26 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     setControlAction('pause');
     setControlError(null);
     let acknowledged = false;
-    let timedOut = false;
-    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
+    const timeout = setTimeout(() => {
+      if (controller.signal.aborted || controlRequestRef.current !== controller) return;
+      // Retire this request before cancellation. Transport/body settlement may
+      // lag or never arrive; it must not own the UI deadline or a later retry.
+      controlRequestRef.current = null;
+      controller.abort();
+      if (openRef.current) {
+        setControlAction(null);
+        setControlError(acknowledged
+          ? 'Stop was requested, but its checkpoint could not be confirmed. EdgeView will keep checking.'
+          : 'Pausing took too long. The stop result is unknown; EdgeView will keep checking.');
+        if (acknowledged) startPolling(activeJobId);
+      }
+    }, 15000);
     try {
       const res = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}/stop`, {
         method: 'POST', signal: controller.signal,
       });
       const result = await res.json();
+      if (controller.signal.aborted || !openRef.current) return;
       if (!res.ok || result.success !== true) throw new Error('Stop refused');
       acknowledged = true;
       const checkpoint = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}`, { signal: controller.signal });
@@ -346,10 +361,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
         startPolling(activeJobId);
       }
     } catch {
-      if (openRef.current && (!controller.signal.aborted || timedOut)) {
+      if (openRef.current && controlRequestRef.current === controller && !controller.signal.aborted) {
         setControlError(acknowledged
           ? 'Stop was requested, but its checkpoint could not be confirmed. EdgeView will keep checking.'
-          : timedOut ? 'Pausing took too long. The stop result is unknown; EdgeView will keep checking.'
           : 'Could not pause research. Check that EdgeView is running and try again.');
         if (acknowledged) startPolling(activeJobId);
       }
@@ -368,8 +382,15 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     controlRequestRef.current = controller;
     setControlAction('resume');
     setControlError(null);
-    let timedOut = false;
-    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
+    const timeout = setTimeout(() => {
+      if (controller.signal.aborted || controlRequestRef.current !== controller) return;
+      controlRequestRef.current = null;
+      controller.abort();
+      if (openRef.current) {
+        setControlAction(null);
+        setControlError('Resuming took too long. The result is unknown; check research status before retrying.');
+      }
+    }, 15000);
     try {
       const res = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}/start`, {
         method: 'POST', signal: controller.signal,
@@ -386,9 +407,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       }
       startPolling(activeJobId);
     } catch {
-      if (openRef.current && (!controller.signal.aborted || timedOut)) setControlError(timedOut
-        ? 'Resuming took too long. Check that EdgeView is running and try again.'
-        : 'Could not resume research. Check that EdgeView is running and try again.');
+      if (openRef.current && controlRequestRef.current === controller && !controller.signal.aborted) {
+        setControlError('Could not resume research. Check that EdgeView is running and try again.');
+      }
     } finally {
       clearTimeout(timeout);
       if (controlRequestRef.current === controller) {
@@ -582,6 +603,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                   
                   <button
                     onClick={() => {
+                      controlRequestRef.current?.abort();
+                      controlRequestRef.current = null;
+                      setControlAction(null);
                       stopPolling();
                       setActiveJobId(null);
                       setJobData(null);
