@@ -1,14 +1,14 @@
 import express from 'express';
 import { db } from '../db';
 import { getV1Run } from '../v1_engine';
-import { prepareCompanyAliasAdmission } from '../company_alias_registry';
+import { prepareCompanyAliasAdmission, readCompanyAliasRegistration } from '../company_alias_registry';
 
 export const companyAliasReviewRouter = express.Router();
 const validId = (value: unknown): value is string => typeof value === 'string' && /^[a-z0-9-]{1,100}$/i.test(value);
 
 /** Read-only review of existing records and immutable captures. This is not an
  * admission endpoint: nothing is grouped, persisted, refreshed or published. */
-companyAliasReviewRouter.post('/:id/alias-review', (req, res) => {
+companyAliasReviewRouter.post('/:id/alias-review', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const body = req.body;
   if (!validId(req.params.id) || !body || typeof body !== 'object' || Array.isArray(body)
@@ -18,10 +18,16 @@ companyAliasReviewRouter.post('/:id/alias-review', (req, res) => {
     return res.status(400).json({ success: false, code: 'ALIAS_REVIEW_INPUT_INVALID',
       message: 'Choose existing company and saved evidence records.' });
   }
+  const registration = await readCompanyAliasRegistration(req.params.id, () => Array.from(db.contacts.values()), getV1Run);
   const alias = db.getContactById(req.params.id);
   const canonical = db.getContactById(body.canonical_id);
   if (!alias || !canonical) return res.status(404).json({ success: false, code: 'ALIAS_RECORD_NOT_FOUND',
     message: 'One of the company records is no longer available.' });
+  if (registration.status === 'invalid' || (registration.status === 'verified' && registration.canonical_id !== canonical.id)) {
+    return res.status(409).json({ success: false, review_only: true, admitted: false,
+      code: registration.status === 'invalid' ? 'ALIAS_REGISTRATION_REVIEW_REQUIRED' : 'ALIAS_MAPPING_CONFLICT',
+      message: 'The saved alias decision needs review. Existing records remain unchanged.' });
+  }
   let run: ReturnType<typeof getV1Run>;
   try { run = getV1Run(body.run_id); }
   catch {
@@ -34,7 +40,7 @@ companyAliasReviewRouter.post('/:id/alias-review', (req, res) => {
     const plan = prepareCompanyAliasAdmission(alias, canonical, run, body.raw_record_id);
     const proof = JSON.parse(plan.row.proof_json);
     return res.json({ success: true, review_only: true, admitted: false, publication: 'NOT_APPLIED',
-      alias_id: alias.id, canonical_id: canonical.id, confirmation_sha256: plan.confirmation_sha256, proof });
+      alias_id: alias.id, canonical_id: canonical.id, confirmation_sha256: plan.confirmation_sha256, registration, proof });
   } catch (error) {
     const code = String((error as { code?: unknown })?.code || '');
     return res.status(409).json({ success: false, review_only: true, admitted: false,

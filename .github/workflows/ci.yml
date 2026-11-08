@@ -124,6 +124,7 @@ jobs:
       - run: node --import tsx server/tests/company_alias_candidates.test.ts
       - run: node --import tsx server/tests/company_alias_evidence.test.ts
       - run: node --import tsx server/tests/company_alias_registry.test.ts
+      - run: node --import tsx server/tests/company_alias_readback.test.ts
       - run: node --import tsx server/tests/company_alias_review_endpoint.test.ts
       - name: Verify Windows user data protection primitive
         shell: pwsh

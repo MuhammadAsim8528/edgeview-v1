@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import initSqlJs from 'sql.js';
 import { unusedTestPort } from '../../scripts/test-server-port.mjs';
@@ -19,6 +19,7 @@ const env = { ...inherited, NODE_ENV: 'test', PORT: String(port), EDGEVIEW_TEST_
 fs.writeFileSync(env.EDGEVIEW_JSON_DB, '[]'); fs.writeFileSync(env.EDGEVIEW_CONFIG, '{}');
 let child: ChildProcess | undefined, stderr = '';
 async function start() {
+  let readinessFailure = 'not checked';
   child = spawn(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
     import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
     import {persistV1Run} from './server/v1_engine.ts';
@@ -39,9 +40,12 @@ async function start() {
     try {
       const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1000) });
       assert.equal((await response.json()).app.pid, child.pid); return;
-    } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+    } catch (error) {
+      readinessFailure = error instanceof Error ? error.message : 'Unknown readiness failure';
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
   }
-  throw new Error('Owned alias-review runtime did not become ready');
+  throw new Error(`Owned alias-review runtime did not become ready: ${readinessFailure}; ${stderr}`);
 }
 async function stop() {
   if (child && child.exitCode === null && child.signalCode === null) {
@@ -72,6 +76,7 @@ try {
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const review = await response.json();
   assert.equal(review.review_only, true); assert.equal(review.admitted, false); assert.equal(review.publication, 'NOT_APPLIED');
+  assert.deepEqual(review.registration, { status: 'unlinked' });
   assert.equal(review.alias_id, alias.id); assert.equal(review.canonical_id, canonical.id);
   assert.equal(review.proof.source_url, 'https://global.example.test/legal');
   assert.ok(JSON.stringify(review).length < 8192, 'review returns bounded proof, not the full raw payload');
@@ -93,9 +98,45 @@ try {
   assert.deepEqual({ primary: sha(env.EDGEVIEW_JSON_DB), sqlite: sha(env.EDGEVIEW_SQLITE_DB), run: sha(path.join(runs, 'run-alias-review.json')) }, preimage);
   const SQL = await initSqlJs(), sql = new SQL.Database(fs.readFileSync(env.EDGEVIEW_SQLITE_DB));
   assert.equal(sql.exec('SELECT count(*) FROM company_aliases')[0].values[0][0], 0); sql.close();
-  await stop(); await start();
+  await stop();
+  // Seed only the stopped, owned fixture through the real durable boundary.
+  // No admission route is exposed and no second process writes a live DB.
+  const seeded = spawnSync(process.execPath, ['--require', path.resolve('tests/e2e/no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
+    import {getV1Run} from './server/v1_engine.ts';
+    import {prepareCompanyAliasAdmission,persistCompanyAliasAdmission} from './server/company_alias_registry.ts';
+    const plan=prepareCompanyAliasAdmission(${JSON.stringify(alias)},${JSON.stringify(canonical)},getV1Run('run-alias-review'),'raw-alias-review');
+    await persistCompanyAliasAdmission(plan,plan.confirmation_sha256);
+  `], { cwd: process.cwd(), env, encoding: 'utf8', timeout: 30000, windowsHide: true });
+  assert.equal(seeded.status, 0, 'fixture seed must pass the actual durable registry boundary');
+  await start();
   const afterRestart = await post(alias.id, request); assert.equal(afterRestart.status, 200);
-  assert.equal((await afterRestart.json()).confirmation_sha256, review.confirmation_sha256);
+  const registeredReview = await afterRestart.json();
+  assert.equal(registeredReview.confirmation_sha256, review.confirmation_sha256);
+  assert.deepEqual(registeredReview.registration, { status: 'verified', alias_id: alias.id, canonical_id: canonical.id, country: 'kenya' });
+  assert.equal(registeredReview.admitted, false, 'reading an existing registration is not a new admission or publication');
+  // Raw contact reconstruction stamps a new last_updated at startup. Keep all
+  // identity, membership and fact comparisons; exclude only that lifecycle field.
+  const withoutRebuildTime = (items: any[]) => items.map(item => {
+    const copy = { ...item }; delete copy.last_updated; return copy;
+  });
+  assert.deepEqual(withoutRebuildTime(await (await fetch(`${base}/api/companies`)).json()), withoutRebuildTime(contacts),
+    'readback does not activate grouping or change facts');
+  const conflict = await post(alias.id, { ...request, canonical_id: find('Global Pharma Ltd', 'Pakistan').id });
+  assert.equal(conflict.status, 409); assert.equal((await conflict.json()).code, 'ALIAS_MAPPING_CONFLICT');
+  await stop();
+  const registryImage = fs.readFileSync(env.EDGEVIEW_SQLITE_DB);
+  const imageHash = crypto.createHash('sha256').update(registryImage).digest('hex');
+  // sql.js may own and mutate its input buffer. Keep the recovery preimage
+  // separate from the deliberately modified fixture database.
+  const changed = new SQL.Database(Uint8Array.from(registryImage));
+  changed.run('UPDATE company_aliases SET proof_json=? WHERE alias_id=?', ['{"policy_version":999}', alias.id]);
+  fs.writeFileSync(env.EDGEVIEW_SQLITE_DB, changed.export()); changed.close();
+  assert.equal(crypto.createHash('sha256').update(registryImage).digest('hex'), imageHash);
+  await start();
+  const invalid = await post(alias.id, request); assert.equal(invalid.status, 409);
+  assert.equal((await invalid.json()).code, 'ALIAS_REGISTRATION_REVIEW_REQUIRED');
+  await stop(); fs.writeFileSync(env.EDGEVIEW_SQLITE_DB, registryImage); await start();
+  assert.equal((await post(alias.id, request)).status, 200, 'restored fixture retains its original valid registration');
   const envelope = JSON.parse(fs.readFileSync(path.join(runs, 'run-alias-review.json'), 'utf8'));
   const hash = envelope.raw_records[0].response.__edgeview_blob_ref__.sha256;
   fs.writeFileSync(path.join(runs, 'blobs', 'sha256', hash.slice(0, 2), `${hash}.json.gz`), 'PRIVATE_SYNTHETIC_CORRUPTION');
