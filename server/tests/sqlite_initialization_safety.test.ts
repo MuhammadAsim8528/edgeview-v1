@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import initSqlJs from 'sql.js';
-import { getDb, resetDbInstanceForTests, getOperationalDatabaseStatus } from '../sqlite';
+import { getDb, resetDbInstanceForTests, getOperationalDatabaseStatus, CURRENT_SCHEMA_VERSION } from '../sqlite';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-schema-safety-'));
 process.env.EDGEVIEW_TEST_MODE = '1';
 const SQL = await initSqlJs();
@@ -25,7 +25,7 @@ async function scenario(name: string, sql: string | null, succeeds: boolean) {
     assert.equal((await db.get('SELECT email FROM contact_cache WHERE company_name = ?', ['Synthetic Legacy Company'])).email, 'fixture@example.invalid');
     const reopened = new SQL.Database(fs.readFileSync(file));
     assert.equal(reopened.exec('PRAGMA integrity_check')[0].values[0][0], 'ok');
-    assert.equal(reopened.exec('PRAGMA user_version')[0].values[0][0], 2);
+    assert.equal(reopened.exec('PRAGMA user_version')[0].values[0][0], CURRENT_SCHEMA_VERSION);
     reopened.close();
     const backups = fs.readdirSync(root).filter(entry => entry.startsWith(`${name}.db.pre-migration-`));
     assert.equal(backups.length, 1);
@@ -38,7 +38,7 @@ async function scenario(name: string, sql: string | null, succeeds: boolean) {
 try {
   await scenario('corrupt', null, false);
   await scenario('empty', null, false);
-  await scenario('future', 'PRAGMA user_version=3; CREATE TABLE retained(value TEXT);', false);
+  await scenario('future', `PRAGMA user_version=${CURRENT_SCHEMA_VERSION + 1}; CREATE TABLE retained(value TEXT);`, false);
   await scenario('partial-schema-failure', 'CREATE TABLE research_campaigns (id TEXT);', false);
   await scenario('legacy', "CREATE TABLE contact_cache (id INTEGER PRIMARY KEY, company_name TEXT UNIQUE, email TEXT); INSERT INTO contact_cache VALUES (1, 'Synthetic Legacy Company', 'fixture@example.invalid');", true);
   console.log('PASS corrupt/future/failed-schema bytes retained; legacy rows, backup, integrity and idempotent reopen');

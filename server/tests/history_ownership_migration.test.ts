@@ -1,3 +1,4 @@
+import { CURRENT_SCHEMA_VERSION } from '../sqlite';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -36,7 +37,7 @@ try {
           'migration must preserve the row and never invent ownership from a filename');
         assert.equal(await hasUnattributedHistory('same.csv'), true);
         const reopened = new SQL.Database(fs.readFileSync(file));
-        assert.equal(reopened.exec('PRAGMA user_version')[0].values[0][0], 2);
+        assert.equal(reopened.exec('PRAGMA user_version')[0].values[0][0], CURRENT_SCHEMA_VERSION);
         assert.equal(reopened.exec('PRAGMA integrity_check')[0].values[0][0], 'ok'); reopened.close();
         resetDbInstanceForTests();
         assert.equal((await (await getDb()).get('SELECT COUNT(*) AS count FROM history_data')).count, 1);
@@ -46,7 +47,7 @@ try {
     assert.equal(backups.length, 1, 'both success and failure preserve the pre-upgrade recovery image');
     assert.deepEqual(fs.readFileSync(path.join(root, backups[0])), original);
   }
-  console.log('PASS schema1→2 history preservation, unknown ownership, exact recovery bytes, failed write and integrity/reopen');
+  console.log('PASS legacy history preservation through current schema, unknown ownership, exact recovery bytes, failed write and integrity/reopen');
 } finally {
   resetDbInstanceForTests();
   assert.equal(path.dirname(fs.realpathSync(root)), fs.realpathSync(os.tmpdir()));

@@ -38,7 +38,7 @@ export async function buildHistoryRepairCandidate(primary: Uint8Array, original:
     const SQL = await initSqlJs();
     db = new SQL.Database(original);
     if (db.exec('PRAGMA integrity_check')[0]?.values[0]?.[0] !== 'ok'
-      || db.exec('PRAGMA user_version')[0]?.values[0]?.[0] !== 2) throw new Error('UNSUPPORTED_DATABASE');
+      || ![2, 3].includes(Number(db.exec('PRAGMA user_version')[0]?.values[0]?.[0]))) throw new Error('UNSUPPORTED_DATABASE');
     // Refuse nonstandard dependencies rather than silently changing related state.
     if (records(db, "SELECT name FROM sqlite_master WHERE type='trigger'").length) throw new Error('UNSUPPORTED_DATABASE');
     if (records(db, 'PRAGMA foreign_key_list(history_data)').length) throw new Error('UNSUPPORTED_DATABASE');

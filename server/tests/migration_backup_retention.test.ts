@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import initSqlJs from 'sql.js';
 import { pruneMigrationBackups } from '../migration_backup_retention';
-import { getDb, resetDbInstanceForTests } from '../sqlite';
+import { getDb, resetDbInstanceForTests, CURRENT_SCHEMA_VERSION } from '../sqlite';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-migration-retention-'));
 process.env.EDGEVIEW_TEST_MODE = '1';
@@ -105,7 +105,7 @@ try {
         assert.ok(backups.some(name => fs.readFileSync(path.join(directory, name)).equals(original)), 'immediate original bytes retained');
         const disk = new SQL.Database(fs.readFileSync(dbFile));
         assert.equal(disk.exec('PRAGMA integrity_check')[0].values[0][0], 'ok');
-        assert.equal(disk.exec('PRAGMA user_version')[0].values[0][0], 2); disk.close();
+        assert.equal(disk.exec('PRAGMA user_version')[0].values[0][0], CURRENT_SCHEMA_VERSION); disk.close();
         // Current-version restart must not prune manually retained extra images.
         backup(dbFile, 0, 1600000000000);
         resetDbInstanceForTests();

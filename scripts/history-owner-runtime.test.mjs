@@ -50,7 +50,7 @@ function history() {
   const db = new SQL.Database(fs.readFileSync(path.join(state, 'edgeview.db')));
   try {
     assert.equal(db.exec('PRAGMA integrity_check')[0].values[0][0], 'ok');
-    assert.equal(db.exec('PRAGMA user_version')[0].values[0][0], 2);
+    assert.equal(db.exec('PRAGMA user_version')[0].values[0][0], 3);
     return db.exec('SELECT importer, file_id FROM history_data ORDER BY importer')[0]?.values || [];
   } finally { db.close(); }
 }

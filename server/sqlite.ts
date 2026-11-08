@@ -4,6 +4,16 @@ import path from 'path';
 import { getSqlitePath, isTestProcess } from './db_paths';
 import { pruneMigrationBackups } from './migration_backup_retention';
 
+export interface CompanyAliasRow {
+  alias_id: string;
+  alias_key: string;
+  canonical_id: string;
+  canonical_key: string;
+  country: string;
+  proof_json: string;
+  created_at: string;
+}
+
 export interface DatabaseWrapper {
   exec(sql: string): Promise<void>;
   get(sql: string, params?: any[]): Promise<any>;
@@ -11,6 +21,7 @@ export interface DatabaseWrapper {
   run(sql: string, params?: any[]): Promise<{ lastID?: number; changes?: number }>;
   flush(): Promise<void>;
   saveContactOverlayDurably(companyId: string, runId: string, overlayJson: string, updatedAt: string): Promise<void>;
+  insertCompanyAliasDurably(row: CompanyAliasRow): Promise<CompanyAliasRow>;
   prepare(sql: string): Promise<{
     run: (...params: any[]) => Promise<void>;
     finalize: () => Promise<void>;
@@ -29,7 +40,7 @@ export async function flushInitializedDatabase(): Promise<void> {
   if (initPromise) await initPromise;
   if (dbInstance) await dbInstance.flush();
 }
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** Re-open the isolated on-disk database for persistence regression tests. */
 export function resetDbInstanceForTests(): void {
@@ -129,6 +140,41 @@ export async function getDb(): Promise<DatabaseWrapper> {
     };
 
     const wrapper: DatabaseWrapper = {
+      // Admission is insert-only and synchronous through conflict checks, write
+      // and undo. A failed write cannot escape later via another DB flush.
+      async insertCompanyAliasDurably(row) {
+        if (rollbackFailure) throw rollbackFailure;
+        if (pendingPersistenceError) flushPendingSave();
+        const select = (sql: string, values: string[]) => {
+          const statement = db.prepare(sql);
+          try { statement.bind(values); return statement.step() ? statement.getAsObject() : undefined; }
+          finally { statement.free(); }
+        };
+        const prior = select('SELECT * FROM company_aliases WHERE alias_id = ? OR alias_key = ?', [row.alias_id, row.alias_key]);
+        if (prior) {
+          const same = (['alias_id', 'alias_key', 'canonical_id', 'canonical_key', 'country', 'proof_json'] as const)
+            .every(key => prior[key] === row[key]);
+          if (!same) throw Object.assign(new Error('ALIAS_MAPPING_CONFLICT'), { code: 'ALIAS_MAPPING_CONFLICT' });
+          return prior as unknown as CompanyAliasRow;
+        }
+        if (row.alias_id === row.canonical_id || row.alias_key === row.canonical_key
+          || select('SELECT alias_id FROM company_aliases WHERE alias_id = ? OR alias_key = ? OR canonical_id = ? OR canonical_key = ?',
+            [row.canonical_id, row.canonical_key, row.alias_id, row.alias_key])) {
+          throw Object.assign(new Error('ALIAS_CHAIN_REFUSED'), { code: 'ALIAS_CHAIN_REFUSED' });
+        }
+        db.run(`INSERT INTO company_aliases (alias_id, alias_key, canonical_id, canonical_key, country, proof_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`, [row.alias_id, row.alias_key, row.canonical_id, row.canonical_key, row.country, row.proof_json, row.created_at]);
+        try { flushPendingSave(); }
+        catch (failure) {
+          try { db.run('DELETE FROM company_aliases WHERE alias_id = ?', [row.alias_id]); }
+          catch (undoError) {
+            rollbackFailure = Object.assign(new Error('PERSISTENCE_ROLLBACK_FAILED: Restart required; operational writes are disabled.', { cause: undoError }), { code: 'PERSISTENCE_ROLLBACK_FAILED' });
+            operationalStatus = 'degraded';
+          }
+          throw rollbackFailure || failure;
+        }
+        return { ...row };
+      },
       // This one-row operation is synchronous through its mutation, disk write
       // and undo. No other job/checkpoint can observe or persist an intermediate
       // rejected row. Avoid copying the entire sql.js database as a preimage.
@@ -319,6 +365,21 @@ export async function getDb(): Promise<DatabaseWrapper> {
           overlay_json TEXT NOT NULL,
           updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS company_aliases (
+          alias_id TEXT PRIMARY KEY NOT NULL,
+          alias_key TEXT UNIQUE NOT NULL,
+          canonical_id TEXT NOT NULL,
+          canonical_key TEXT NOT NULL,
+          country TEXT NOT NULL CHECK(length(country) BETWEEN 1 AND 100),
+          proof_json TEXT NOT NULL CHECK(length(proof_json) BETWEEN 1 AND 8192),
+          created_at TEXT NOT NULL,
+          CHECK(alias_id <> canonical_id),
+          CHECK(alias_key <> canonical_key),
+          CHECK(substr(alias_key, -length(country)-2) = '__' || country),
+          CHECK(substr(canonical_key, -length(country)-2) = '__' || country)
+      );
+      CREATE INDEX IF NOT EXISTS company_aliases_canonical ON company_aliases(canonical_id);
 
       CREATE TABLE IF NOT EXISTS research_campaigns (
           id TEXT PRIMARY KEY,

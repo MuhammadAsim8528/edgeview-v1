@@ -43,7 +43,7 @@ const ownedReopened = new SQL.Database(partlyOwned.candidate);
 assert.deepEqual(ownedReopened.exec("SELECT id,uploaded_at FROM history_data WHERE file_id='first'")[0].values, kept);
 ownedReopened.close();
 for (const change of ["UPDATE history_data SET country='Pakistan' WHERE file_name='same.csv'",
-  'PRAGMA user_version=3', 'CREATE TRIGGER unexpected AFTER DELETE ON history_data BEGIN DELETE FROM untouched; END',
+  'PRAGMA user_version=4', 'CREATE TRIGGER unexpected AFTER DELETE ON history_data BEGIN DELETE FROM untouched; END',
   'CREATE TABLE dependent(history_id INTEGER REFERENCES history_data(id))']) {
   const bad = new SQL.Database(original); bad.exec(change);
   const refused = await buildHistoryRepairCandidate(primary, bad.export(), 'same.csv');
@@ -67,5 +67,16 @@ const duplicateDb = new SQL.Database(duplicate.candidate);
 assert.deepEqual(duplicateDb.exec("SELECT importer,file_id FROM history_data WHERE file_name='same.csv' ORDER BY file_id")[0].values,
   [['Buyer B', 'copy-one'], ['Buyer B', 'copy-two']], 'derive duplicate multiplicity from primary IDs, not guesses about the old row');
 duplicateDb.close();
+const schema3 = new SQL.Database(original);
+schema3.exec(`PRAGMA user_version=3; CREATE TABLE company_aliases(alias_id TEXT PRIMARY KEY, proof_json TEXT);
+  INSERT INTO company_aliases VALUES('synthetic-alias','{"raw_name":"Synthetic original alias","run_id":"run-retained"}');`);
+const aliasPreimage = schema3.exec('SELECT * FROM company_aliases')[0].values;
+const newerCandidate = await buildHistoryRepairCandidate(primary, schema3.export(), 'same.csv');
+assert.equal(newerCandidate.status, 'CANDIDATE_ONLY');
+const newerReopened = new SQL.Database(newerCandidate.candidate);
+assert.equal(newerReopened.exec('PRAGMA user_version')[0].values[0][0], 3);
+assert.deepEqual(newerReopened.exec('SELECT * FROM company_aliases')[0].values, aliasPreimage,
+  'history repair preserves existing alias proofs verbatim');
+newerReopened.close(); schema3.close();
 repaired.close();
 console.log('PASS offline history candidate: preserved preimages/siblings/owned metadata, restored missing rows, reopened integrity, current no-op, unsafe input/schema/trigger refusal; no filesystem apply');

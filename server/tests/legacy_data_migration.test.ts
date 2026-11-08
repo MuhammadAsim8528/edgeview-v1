@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildSync } from 'esbuild';
 import initSqlJs from 'sql.js';
+import { CURRENT_SCHEMA_VERSION } from '../sqlite';
 import { copyLegacyRuntimeData, retryInterruptedLegacyMigration } from '../legacy_data_migration';
 import { resolveRuntimeDataRoot } from '../../shared/runtime_paths.mjs';
 
@@ -60,7 +61,7 @@ try {
   await assert.rejects(copyLegacyRuntimeData(oversized.source, oversized.destination));
   assert.equal(fs.existsSync(oversized.destination), false, 'size limit refuses before allocation/copy');
   const future = fixture('future');
-  const newer = new SQL.Database(originalDb); newer.exec('PRAGMA user_version=3');
+  const newer = new SQL.Database(originalDb); newer.exec(`PRAGMA user_version=${CURRENT_SCHEMA_VERSION + 1}`);
   fs.writeFileSync(path.join(future.source, 'edgeview.db'), newer.export()); newer.close();
   await assert.rejects(copyLegacyRuntimeData(future.source, future.destination));
   assert.equal(fs.existsSync(future.destination), false);

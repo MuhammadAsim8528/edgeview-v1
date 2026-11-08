@@ -74,7 +74,7 @@ try {
   assert.ok(companies.some(company => company.company_name === 'Synthetic Local Buyer' && company.country === 'Kenya'));
   await upload('new-root-only.csv'); await stop();
   const upgraded = new SQL.Database(fs.readFileSync(path.join(data, 'edgeview.db')));
-  assert.equal(upgraded.exec('PRAGMA user_version')[0].values[0][0], 2);
+  assert.equal(upgraded.exec('PRAGMA user_version')[0].values[0][0], 3);
   assert.equal(upgraded.exec('PRAGMA integrity_check')[0].values[0][0], 'ok'); upgraded.close();
   const backups = fs.readdirSync(data).filter(name => name.startsWith('edgeview.db.pre-migration-v1-'));
   assert.equal(backups.length, 1); assert.deepEqual(fs.readFileSync(path.join(data, backups[0])), originalDatabase);
@@ -88,22 +88,22 @@ try {
   const recoveredData = path.join(root, 'recovered-data');
   const prepare = (destination, hash, schema) => spawnSync(process.execPath, ['--import', 'tsx', path.join(source, 'scripts/prepare-runtime-recovery.ts'), snapshot, destination, hash, schema],
     { cwd: source, env, encoding: 'utf8', timeout: 30000, windowsHide: true });
-  for (const [hash, schema] of [['0'.repeat(64), '2'], [manifestSha256, '1']]) {
+  for (const [hash, schema] of [['0'.repeat(64), '3'], [manifestSha256, '1'], [manifestSha256, '2']]) {
     const mismatch = prepare(recoveredData, hash, schema);
     assert.equal(mismatch.error, undefined); assert.equal(mismatch.status, 1, mismatch.stderr);
     assert.match(mismatch.stderr, /RECOVERY_COPY_REFUSED/);
     assert.equal(fs.existsSync(recoveredData), false);
   }
-  const refusal = prepare(data, manifestSha256, '2');
+  const refusal = prepare(data, manifestSha256, '3');
   assert.equal(refusal.status, 1); assert.match(refusal.stderr, /RECOVERY_COPY_REFUSED/);
   await start();
   const laterId = await upload('after-recovery-checkpoint.csv'); await stop();
   const activeBytes = fs.readFileSync(path.join(data, 'edgeview_db.json'));
-  const prepared = prepare(recoveredData, manifestSha256, '2');
+  const prepared = prepare(recoveredData, manifestSha256, '3');
   assert.equal(prepared.error, undefined); assert.equal(prepared.status, 0, prepared.stderr);
   assert.equal(JSON.parse(prepared.stdout).status, 'COPIED_NOT_ACTIVATED');
   const receipt = JSON.parse(fs.readFileSync(path.join(recoveredData, 'migration.complete.json'), 'utf8'));
-  assert.equal(receipt.backupManifestSha256, manifestSha256); assert.equal(receipt.sourceSchema, 2);
+  assert.equal(receipt.backupManifestSha256, manifestSha256); assert.equal(receipt.sourceSchema, 3);
   env.EDGEVIEW_DATA_DIR = recoveredData;
   for (let boot = 0; boot < 2; boot++) {
     const recovery = await start(); assert.equal(recovery.app.installation_id, installation);
@@ -115,7 +115,7 @@ try {
   assert.deepEqual(fs.readFileSync(path.join(data, 'edgeview_db.json')), activeBytes);
   await verifyRuntimeBackup(snapshot, manifestSha256);
   console.log('PASS verified backup to fresh recovery root, mismatch and overlay refusal, compiled restart and original post-backup writes preserved');
-  console.log('PASS compiled legacy-app-root→separate-data copy, incomplete-copy startup refusal, explicit activation, UUID/dataset/country discovery, schema1→2 backup/integrity, isolated writes and restart; installer/update/power-loss NOT VERIFIED');
+  console.log('PASS compiled legacy-app-root→separate-data copy, incomplete-copy startup refusal, explicit activation, UUID/dataset/country discovery, schema1→3 backup/integrity, isolated writes and restart; installer/update/power-loss NOT VERIFIED');
 } finally {
   await stop(); assert.equal(path.dirname(fs.realpathSync(root)), fs.realpathSync(os.tmpdir()));
   fs.rmSync(root, { recursive: true, force: true });
