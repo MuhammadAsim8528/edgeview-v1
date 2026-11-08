@@ -94,7 +94,7 @@ Existing report-export authority was verified rather than rebuilt: actual compil
 
 Hosted terminal observation2026-11-01T13:49:58Z: exact1d4a81c9fc6a00dc76a2423e047f75ddd2012d4b release41311800581 SUCCESS (152Windows steps/browser/native launcher/Docker), research41311800369 SUCCESS and inventory41311800387 SUCCESS. Awaited terminal state before pushing another documentation checkpoint so the existing branch-concurrency policy would not cancel its acceptance. Prepared source/artifact digests were independently rechecked against the canonical source and staged build: both match. This is committed-source/isolated-runtime evidence; native customer installation, clean Windows, current real-company accuracy, monitoring dashboards and safe live handoff remain open.
 
-Current active task: finish current-build monitoring crash/retention/alert acceptance after verified desktop deployment and controlled dashboard receipt, then continue the known product, recovery and installer queue. The live Chrome audit requires origin access. Store setup and publication remain deferred.
+Current active task: continue company/entity alias and research-history correctness, then the remaining supported customer/recovery queue. Current unsigned MSIX factory/extracted runtime is verified only within its recorded scope. Native signing/installation, monitoring configuration, updates/rollback, clean Windows and full release acceptance remain open.
 
 ### November1 source ownership and desktop handoff checkpoint
 
@@ -293,7 +293,7 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
     - [x] MON01.FATAL_COMPILED: actual compiled exception/rejection, global monitoring disabled and errors opted out pass against isolated storage and a local reporter receipt sink. Exit1, no resumed timer and only four safe identity fields verified. This fixture uses synthetic build metadata, not a real vendor receipt.
     - [x] MON01.FATAL_SDK: existing actual SDK transport/privacy regression passes both fixed fatal codes, no PostHog error duplication and no synthetic private markers across six wire requests. Loopback receiver only.
     - [x] MON01.FATAL_DASHBOARD: actual isolated current-source exception and rejection receipts verified in Sentry for9ddd4c7/build67f4516aee1a with distinct matching temporary installation UUIDs and filtered geography. No production crash injection.
-    - [ ] MON01.FATAL_PACKAGE: verify retained reporter in exact customer archive/install. Native trust and clean-Windows gates remain open.
+    - [~] MON01.FATAL_PACKAGE: reporter presence/hash verified in current exact extracted archive. Prototype monitoring disabled; native installed crash delivery and trusted activation remain open.
 
 ### PACKAGING / UPDATE
 
@@ -301,8 +301,14 @@ Same ledger and goals, not a replacement roadmap. [ ] NOT STARTED/not yet accept
   - [x] DIST01.CURRENT_SDK: existing factory on6b21ac0 produced SDK-validated unsigned internal MSIX; exact archive SHA256 recorded below. First missing-PNG attempt failed closed and remains unexplained WARN, not a claimed source fix.
   - [x] DIST01.EXTRACTED_RUNTIME: exact current archive independently re-extracted; vendor Node bytes/source artifact/file hashes verified, global Node/npm absent from PATH, empty first launch, synthetic country-separated upload/HTML export, missing-provider503, safe diagnostics, owner-pipe shutdown/restart/UUID/data and no app-root writes passed. Not installed/native/clean Windows acceptance.
   - [x] DIST01.RUNTIME_INPUTS: derives12 roots from actual server build, preserves canonical overrides, verifies327 canonical lock components and actual npm install/startup/static shell/all5formats/restart without Vite/frontend Node packages. Host executable used; not an installed distribution.
-  - [~] DIST01.RUNTIME_FACTORY: existing derived runtime manifest/lock/resources/frontend notices are integrated and historical c0a98cd archive build succeeded. Revalidate the current Sentry lock and source in an exact extracted archive; installed/native/customer acceptance remains open.
-  - [~] DIST01.RUNTIME_PAYLOAD: historical c0a98cd reduced runtime archive contains 14131 files versus the earlier 27411-file prototype. Current-source archive/runtime and complete notice/SBOM acceptance remain open. Do not rebuild the already integrated dependency derivation.
+  - [x] DIST01.RUNTIME_FACTORY: existing reduced-runtime factory verified against exact6b9f75c build908009ed20ac and archive fbd161b93865. All required construction/extraction/runtime children below passed. This does not close customer installation or full DIST01 acceptance.
+    - [x] DIST01.RUNTIME_FACTORY.CLEAN_BUILD: clean detached6b9f75c checkout, unchanged locked dependencies, production build908009ed20ac0a38eeaee4d015aa0c5b75f912ef45c775d68d003d517ef7197a passed. This is a new internal build, not promotion of prior bytes.
+    - [x] DIST01.RUNTIME_FACTORY.ARCHIVE: retry completed exit0.14307 files,82760681 bytes, SHA256fbd161b93865effd5855345aaf6154278c13e7a423d735ddc3fa47f8246f4e8f. First incomplete archive retained and never accepted.
+    - [x] DIST01.RUNTIME_FACTORY.EXTRACT: independent exact-SHA SDK extraction, file manifest hashes, artifact identity and byte-identical signed vendor Node verified. Unsigned package trust remains unverified.
+    - [x] DIST01.RUNTIME_FACTORY.EMPTY_START: actual extracted bundled-node launch, empty first state, fresh installation identity, missing-provider503 and private-marker-free diagnostics passed. Prototype monitoring was disabled.
+    - [x] DIST01.RUNTIME_FACTORY.EXPORT: five stored-file export formats and synthetic country-separated upload/export passed against the extracted runtime. No real-company/UI truthset inferred.
+    - [x] DIST01.RUNTIME_FACTORY.RESTART: owned-pipe close/reopen, durable synthetic data/identity and no application-root writes passed with global Node/npm absent from PATH and NODE_PATH empty. Native launcher not executed.
+  - [~] DIST01.RUNTIME_PAYLOAD: current14307-file archive has12 runtime roots,328 verified canonical runtime-lock entries and318 CycloneDX SBOM components. Build dependency roots omitted and frontend notices retained. Transitive payload/minimization and full OSS/security/customer acceptance remain open.
   - [~] DIST01.CONTENT_LICENSE: developer-package content scanner and adversarial canary/failure/preservation regressions PASS; license-inventory helper PASS never confers clearance. Final MSIX-wide content/SBOM/license review remains open.
   - [!] DIST01.TRUSTED_ACTIVATION: native launcher was compiled but NOT EXECUTED/installed in this probe; publisher identity, trusted signing and supported native activation remain unverified. No Windows security setting changes.
   - [ ] DIST01.UPDATE_ACCEPTANCE: accepted installer-compatible updates, preserved user state and compatible application/data recovery.
@@ -1397,9 +1403,11 @@ REAL_WORLD_APP_READINESS_RESEARCH, UNCLE_INSTALL_UPDATE_SUPPORT_PLAN and securit
 recovery, monitoring and distribution documents support these IDs. Their historical
 claims do not automatically close current acceptance. New requests extend these IDs.
 
-Writer: this session only. Authority: integration/edgeview-v1-20261024, initially
-clean at 75e8cac. Research/review session owns no implementation. No review approval
-is inferred. The older edgeview-chatgpt worktree has an unfinished, independently
+Writer: this session only. Current authority is the original development checkout
+on development/edgeview-v1, reconciled and deployed as recorded in the November
+checkpoints above. integration/edgeview-v1-20261024 at75e8cac is the historical
+starting lane, not the current writer location. Research/review sessions own no
+implementation. No review approval is inferred. The older edgeview-chatgpt worktree has an unfinished, independently
 reviewed package-content scanning candidate; preserve it without automatic merge.
 No live 3901 restart, operational-data mutation or publication is authorized merely
 by this plan. Synthetic isolated fixtures first.
@@ -3321,3 +3329,23 @@ Whole isolated real exception test terminated4232ms/exit1 and rejection4993ms/ex
 Corrected exact-source disposable developer ZIP checker exited0:154 files, launch/packaged backup/integrity/private-file exclusion PASS, SHA2566e3c8c86d7a175b71b8db6b06edb7f4c88838b9edb5651285085572abd871b6a.120 development files, Node/npm required, customerRuntimeReady=false. Generated ZIP removed by its checker. Original detached QA fixture showed CRLF/stat-only status entries with zero git diff/numstat content changes, and Git refused switching it. No force/reset/discard was used; that fixture was preserved, then a new exact detached fixture was created with checked native-byte digests. Authoritative tree remained clean. These are QA fixture preparation refusals, not customer-data changes.
 
 Hosted5e734ac research42378344501, inventory42378344511 and release42378344551 all completed SUCCESS, including154 verify steps plus browser/native/Docker. Corrected9ddd4c7 hosted acceptance remains pending next push. The existing root ledger/derived Desktop board remain authoritative. Parent monitoring, installed archive, startup-before-handler/native crash assessment, alerts/retention and full release acceptance remain unfinished.
+
+### DIST01 current clean-source factory — in progress, 2026-11-07
+
+Started exact6b9f75c1a3b2e026a4a69dd3814043e26d1d6814 detached clean checkout under the existing ignored QA area. Moved only the owned locked full test-dependency directory into that checkout after resolved-path/type/manifest equality checks; original/live node_modules stayed intact. Previous stage source and metadata preserved. New checkout uses native Git checkout bytes and a fresh build, not promotion/rebuild of the previously accepted67f4516aee1a artifact. Production build passed with build908009ed20ac0a38eeaee4d015aa0c5b75f912ef45c775d68d003d517ef7197a. Internal factory process is still running; no new archive, install, signature, runtime or rollback acceptance claimed.
+
+Current6b9f75c clean-checkout focused legacy migration and migration-backup retention tests passed. Backup-runtime fixtures initially inherited NODE_ENV=test/EDGEVIEW_TEST_MODE=1 from the operator harness and correctly hit BACKUP_TEST_LAYOUT_UNSUPPORTED, before the intended stale-lock assertion. Rerun with curated OS-only environment passed without weakening the operational guard. The handbook now documents actual full-snapshot versus three-image SQLite retention, preservation of interrupted copies/gates and same-user credential limitations. These support instructions are not executable installed rollback or generic restore acceptance.
+
+Factory interruption follow-up: outer owned factory session ended ETIMEDOUT. Observed original factory PID30288 and MakeAppx PID25484 both absent, incomplete SDK log and no release-info.json. Existing55,637,196-byte MSIX is unverified and retained as interrupted, not accepted. No duplicate process was started while either owner was observed alive. One retry from the same clean6b9f75c checkout is in progress. Subsequent live read-only health confirms original PID2812/source33aca80/operational DBok. No runtime restart, Windows policy change or customer-state write was performed.
+
+Hosted exact6b9f75c research42379977308, inventory42379977152 and release42379977154 completed SUCCESS with154 verify steps plus native/browser/Docker. Internal current MSIX retry remains active; observed SDK PID30944 at3087/14307 mapped entries with advancing log. No archive acceptance inferred from file existence or running process.
+
+### DIST01 exact current unsigned MSIX — scoped acceptance, 2026-11-08
+
+Factory retry from clean detached6b9f75c1a3b2e026a4a69dd3814043e26d1d6814 completed exit0. App version1.0.0-rc.2, internal manifest0.0.0.2, build908009ed20ac0a38eeaee4d015aa0c5b75f912ef45c775d68d003d517ef7197a. SDK-created archive82760681bytes/14307files, SHA256fbd161b93865effd5855345aaf6154278c13e7a423d735ddc3fa47f8246f4e8f. Independently recorded hash, SDK re-extraction, all file hashes, source/artifact bindings, exact vendor-signed bundled Node bytes, runtime lock and frontend notice hashes passed.
+
+verify-msix-runtime.mjs exited0: bundled Node used with global Node/npm absent from PATH and NODE_PATH empty; build packages omitted; inherited developer-mode flag fenced to static production; empty first launch/fresh UUID; synthetic country-separated upload and five export formats; missing-provider503; diagnostics private-marker absence; owned-pipe close/restart, durable UUID/data and no app-root writes. Fatal reporter is retained and hashed. Monitoring deliberately disabled for this prototype; native launcher NOT EXECUTED, installed activation/clean Windows/updates/rollback NOT VERIFIED. Full legal notice review remains NOT VERIFIED with419 texts captured,119 optional/not-installed entries and19 installed packages without root license text. No trusted certificate, Windows policy, Store, feed, public release or uncle deployment action occurred.
+
+Generated exact runtime CycloneDX SBOM offline using isolated empty npm configs and actual runtime lock.318 components; source-lock guard verified328 canonical runtime lock entries (different count semantics). Bound SBOM receipt to archive/build/lock SHA256 and scanned generated JSON for developer/repository paths. Source-build SBOM480 is not substituted for this runtime inventory. Final vulnerability/secret/MSIX-wide legal clearance remains open. Internal immutable evidence copy is retained under .test-cache/msix-evidence/6b9f75c-fbd161b93865 with archive, report, sums, runtime SBOM and extracted-runtime result, explicitly NOT A CUSTOMER RELEASE. No final clean source/Desktop version snapshot was made.
+
+Read-only public contact-page comparison also resumed for Emerchemie. Official https://emerchemie.lk/contact-us.php currently identifies Sri Lankan head office and warehouse contacts. Live API has two conservative Sri Lankan identity records with prior-policy fields withheld and retained-evidence revalidation available. No real record was rewritten, foreign contact filled or provider credit spent. Leadership source https://emerchemie.lk/leadership.php timed out in independent web retrieval, so current leadership truth is not claimed. This is a scoped source/live-state observation, not completed CC01/CC02/CC04 or alias acceptance.
