@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { canonicalEntityIdentityKey, canonicalCountryIdentityKey } from './company_identity';
 import { verifyCompanyAliasEvidence, COMPANY_ALIAS_PROOF_POLICY } from './company_alias_evidence';
 import { getDb, getOperationalDatabaseStatus, type CompanyAliasRow } from './sqlite';
+import { withCompanyIdentityChange } from './company_identity_work';
 import type { CompanyContact } from './db';
 import type { V1Run } from './v1_engine';
 
@@ -41,6 +42,32 @@ export async function persistCompanyAliasAdmission(plan: ReturnType<typeof prepa
   // Copy before the await: caller-owned objects cannot change a queued write.
   const row = { ...plan.row, created_at: new Date().toISOString() };
   return (await getDb()).insertCompanyAliasDurably(row);
+}
+
+/** Confirm a specific reviewed decision using current server-owned records.
+ * Keep this internal until the application can safely consume the mapping. */
+export async function confirmCompanyAliasAdmission(
+  selection: Readonly<{ aliasId: string; canonicalId: string; runId: string; rawRecordId: string; confirmation: string }>,
+  sources: {
+    getContact: (id: string) => CompanyContact | undefined;
+    getRun: (id: string) => V1Run | null;
+  },
+): Promise<CompanyAliasRow> {
+  const { aliasId, canonicalId, runId, rawRecordId, confirmation } = selection;
+  if (![aliasId, canonicalId, runId, rawRecordId].every(id => typeof id === 'string' && /^[a-z0-9-]{1,100}$/i.test(id))
+    || typeof confirmation !== 'string' || !/^[a-f0-9]{64}$/.test(confirmation)) return refuse('ALIAS_CONFIRMATION_INVALID');
+  return withCompanyIdentityChange(async () => {
+    if (getOperationalDatabaseStatus().status !== 'ok') return refuse('ALIAS_REGISTRATION_UNAVAILABLE');
+    const alias = sources.getContact(aliasId);
+    const canonical = sources.getContact(canonicalId);
+    if (!alias || !canonical || alias.id !== aliasId || canonical.id !== canonicalId) return refuse('ALIAS_RECORD_NOT_FOUND');
+    let run: V1Run | null;
+    try { run = sources.getRun(runId); }
+    catch { return refuse('ALIAS_EVIDENCE_UNREADABLE'); }
+    if (!run || run.id !== runId) return refuse('ALIAS_RUN_NOT_FOUND');
+    const plan = prepareCompanyAliasAdmission(alias, canonical, run, rawRecordId);
+    return persistCompanyAliasAdmission(plan, confirmation);
+  });
 }
 
 export type CompanyAliasRegistration =

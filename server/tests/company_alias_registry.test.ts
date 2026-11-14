@@ -6,8 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import initSqlJs from 'sql.js';
-import { prepareCompanyAliasAdmission, persistCompanyAliasAdmission } from '../company_alias_registry';
+import { confirmCompanyAliasAdmission, prepareCompanyAliasAdmission, persistCompanyAliasAdmission } from '../company_alias_registry';
 import { getDb, resetDbInstanceForTests, CURRENT_SCHEMA_VERSION } from '../sqlite';
+import { withCompanyIdentityWork } from '../company_identity_work';
 import type { CompanyContact } from '../db';
 import type { V1Run } from '../v1_engine';
 
@@ -20,7 +21,7 @@ const contact = (id: string, company_name: string, country = 'Kenya') => ({
   id, company_name, country, type: 'Importer', ceo: '', email: '', phone: '', whatsapp: '', linkedin: '',
   message_sent: false, last_updated: '2026-11-08T01:00:00.000Z',
 } as CompanyContact);
-function plan(alias: CompanyContact, canonical: CompanyContact) {
+function evidence(alias: CompanyContact, canonical: CompanyContact) {
   const response = { status: 200,
     body: `<p>${alias.company_name} is also known as ${canonical.company_name} in Kenya.</p>`,
     provenance: { finalUrl: 'https://global.example.test/legal', redirectCount: 0 } };
@@ -29,8 +30,10 @@ function plan(alias: CompanyContact, canonical: CompanyContact) {
     raw_records: [{ id: 'raw-registry', run_id: 'run-registry', kind: 'scrape', provider: 'direct-http', response,
       sha256: crypto.createHash('sha256').update(JSON.stringify(response)).digest('hex') }],
   } as V1Run;
-  return prepareCompanyAliasAdmission(alias, canonical, run, 'raw-registry');
+  return run;
 }
+const plan = (alias: CompanyContact, canonical: CompanyContact) =>
+  prepareCompanyAliasAdmission(alias, canonical, evidence(alias, canonical), 'raw-registry');
 const admit = (prepared: ReturnType<typeof plan>) => persistCompanyAliasAdmission(prepared, prepared.confirmation_sha256);
 try {
   // Actual schema2 migration must preserve unrelated state and a byte-exact backup.
@@ -50,11 +53,37 @@ try {
   const inputs = JSON.stringify([alias, canonical]);
   const prepared = plan(alias, canonical);
   await assert.rejects(persistCompanyAliasAdmission(prepared, '0'.repeat(64)), { code: 'ALIAS_CONFIRMATION_CHANGED' });
+  const selection = { aliasId: alias.id, canonicalId: canonical.id,
+    runId: 'run-registry', rawRecordId: 'raw-registry', confirmation: prepared.confirmation_sha256 };
+  const run = evidence(alias, canonical);
+  let current: CompanyContact | undefined = canonical;
+  const sources = {
+    getContact: (id: string) => id === alias.id ? alias : current,
+    getRun: () => run,
+  };
+  const confirm = () => confirmCompanyAliasAdmission(selection, sources);
+  await withCompanyIdentityWork(async () => {
+    await assert.rejects(confirm(), { code: 'COMPANY_IDENTITY_BUSY' });
+  });
+  current = undefined;
+  await assert.rejects(confirm(), { code: 'ALIAS_RECORD_NOT_FOUND' });
+  current = { ...canonical, country: 'Pakistan' };
+  await assert.rejects(confirm());
+  current = canonical;
+  await assert.rejects(confirmCompanyAliasAdmission(selection, { ...sources, getRun: () => ({ ...run, id: 'wrong-run' }) }),
+    { code: 'ALIAS_RUN_NOT_FOUND' });
+  const changed = evidence(alias, canonical);
+  const response = changed.raw_records[0].response as { provenance: { finalUrl: string } };
+  response.provenance.finalUrl = 'https://global.example.test/updated';
+  changed.raw_records[0].sha256 = crypto.createHash('sha256').update(JSON.stringify(response)).digest('hex');
+  await assert.rejects(confirmCompanyAliasAdmission(selection, { ...sources, getRun: () => changed }),
+    { code: 'ALIAS_CONFIRMATION_CHANGED' });
+  assert.deepEqual(await db.all('SELECT * FROM company_aliases'), [], 'refused confirmations leave no mapping');
   const results = await Promise.allSettled([admit(prepared), admit(plan(alias, { ...canonical, id: 'canonical-other' }))]);
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1, 'racing conflicting targets never both commit');
   const refusal = results.find(result => result.status === 'rejected') as PromiseRejectedResult;
   assert.equal(refusal.reason.code, 'ALIAS_MAPPING_CONFLICT');
-  const first = await admit(prepared);
+  const first = await confirm();
   await assert.rejects(db.insertCompanyAliasDurably({ ...first, alias_id: 'foreign-alias',
     alias_key: 'global pharma limited__pakistan' }), /CHECK constraint failed/,
   'storage constraints independently reject country-key mismatch');
