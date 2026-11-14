@@ -1,3 +1,4 @@
+import { identityWorkHandler } from './server/company_identity_work';
 import express from 'express';
 import { buildCountryOverview } from './shared/country_overview';
 import path from 'path';
@@ -443,7 +444,7 @@ app.get('/api/files/:id', (req, res) => {
 });
 
 // Explicit endpoint to save current file to History DB
-app.post(['/api/files/:id/save-to-history', '/api/stats/save-to-history'], async (req, res) => {
+app.post(['/api/files/:id/save-to-history', '/api/stats/save-to-history'], identityWorkHandler(async (req, res) => {
   try {
     const fileId = req.params.id || req.body?.file_id;
     if (!fileId) {
@@ -465,7 +466,7 @@ app.post(['/api/files/:id/save-to-history', '/api/stats/save-to-history'], async
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Failed to save file to history' });
   }
-});
+}));
 
 // Optimized Paginated Data Endpoint with filter, sort, limit, offset & grouping support
 app.get('/api/files/:id/data', (req, res) => {
@@ -508,7 +509,7 @@ app.get('/api/files/:id/data', (req, res) => {
 // File upload routes handled by uploadRouter (/api/files/upload and /api/upload)
 
 // Delete File
-app.delete('/api/files/:id', async (req, res) => {
+app.delete('/api/files/:id', identityWorkHandler(async (req, res) => {
   try {
     const id = req.params.id;
     if (!db.files.has(id)) {
@@ -568,14 +569,14 @@ app.delete('/api/files/:id', async (req, res) => {
     console.error('File delete route error:', err);
     return res.status(500).json({ error: err?.message || 'Failed to delete file' });
   }
-});
+}));
 
 // Reset / Re-seed sample data
-app.post('/api/sample-data/seed', (req, res) => {
+app.post('/api/sample-data/seed', identityWorkHandler((req, res) => {
   if (process.env.EDGEVIEW_ENABLE_SAMPLE_DATA !== '1') return res.status(404).json({ error: 'Sample data is disabled.' });
   db.seedInitialData();
   res.json({ success: true, message: 'Sample files reseeded successfully' });
-});
+}));
 
 // 2. Contacts Endpoints
 async function hydrateContactsFromCache(): Promise<void> {
@@ -864,7 +865,7 @@ app.post('/api/settings/test', async (req, res) => {
 
 // EdgeView V1: exact company + country -> AI query generation -> deterministic
 // provider retrieval, immutable raw capture, normalization and display.
-app.post('/api/enrich/company', async (req, res) => {
+app.post('/api/enrich/company', identityWorkHandler(async (req, res) => {
   const monitoringStartedAt = Date.now();
   try {
     const { company_name, id, forceFetch, reuseOnly, country, entity_key } = req.body;
@@ -958,7 +959,7 @@ app.post('/api/enrich/company', async (req, res) => {
     void captureMonitoringEvent('runtime_error', { stage: 'run', outcome: 'failed', duration_ms, error_code: classifyMonitoringError(err) });
     res.status(400).json({ success: false, error: err?.message || 'Failed to enrich company details' });
   }
-});
+}));
 
 app.get('/api/v1/runs', (_req, res) => {
   try {
@@ -978,7 +979,7 @@ app.get('/api/v1/runs/:id', (req, res) => {
   res.json({ success: true, run });
 });
 
-app.post('/api/enrich/batch', async (req, res) => {
+app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
   const monitoringStartedAt = Date.now();
   try {
     const { company_ids, forceFetch, reuseOnly } = req.body;
@@ -1126,11 +1127,11 @@ app.post('/api/enrich/batch', async (req, res) => {
       res.end();
     }
   }
-});
+}));
 
 // --- NEW RESEARCH JOB & RESOURCE GOVERNOR ENDPOINTS ---
 
-app.post('/api/enrich/jobs', async (req, res) => {
+app.post('/api/enrich/jobs', identityWorkHandler(async (req, res) => {
   try {
     const { company_ids, mode, reuseOnly, forceFetch } = req.body;
     if ((reuseOnly !== undefined && typeof reuseOnly !== 'boolean') || (forceFetch !== undefined && typeof forceFetch !== 'boolean') || (reuseOnly && forceFetch)) return res.status(400).json({ success: false, error: 'Invalid research mode.' });
@@ -1176,7 +1177,7 @@ app.post('/api/enrich/jobs', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+}));
 
 app.get('/api/enrich/jobs', async (req, res) => {
   try {
@@ -1321,7 +1322,7 @@ app.get('/api/enrich/job/:id/progress', async (req, res) => {
   }
 });
 
-app.post('/api/enrich/job/:id/start', async (req, res) => {
+app.post('/api/enrich/job/:id/start', identityWorkHandler(async (req, res) => {
   try {
     const jobId = req.params.id;
     const { forceFetch } = req.body;
@@ -1349,7 +1350,7 @@ app.post('/api/enrich/job/:id/start', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+}));
 
 app.post('/api/enrich/job/:id/stop', async (req, res) => {
   try {

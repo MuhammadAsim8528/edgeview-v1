@@ -1,3 +1,4 @@
+import { acquireCompanyIdentityWork } from './company_identity_work';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -1031,17 +1032,20 @@ async function execute(companyName: string, country: string, profile: 'interacti
 }
 
 export async function runV1Enrichment(companyName: string, country: string, options: V1RunOptions = {}): Promise<V1Run> {
-  const company = cleanText(companyName); const nation = cleanText(country);
-  if (!company || !nation) throw new Error('Exact company name and country are required');
-  const profile = options.profile || 'interactive';
-  const key = `${profile}::${company.toLowerCase()}::${nation.toLowerCase()}`;
-  const existing = activeRuns.get(key); if (existing) return existing;
-  // Every outbound operation has its own hard timeout. Returning the actual
-  // execution promise avoids the former race where callers saw a timeout while
-  // the same run continued mutating and persisted later in the background.
-  const task = execute(company, nation, profile);
-  activeRuns.set(key, task);
-  try { return await task; } finally { activeRuns.delete(key); }
+  const releaseIdentityWork = acquireCompanyIdentityWork();
+  try {
+    const company = cleanText(companyName); const nation = cleanText(country);
+    if (!company || !nation) throw new Error('Exact company name and country are required');
+    const profile = options.profile || 'interactive';
+    const key = `${profile}::${company.toLowerCase()}::${nation.toLowerCase()}`;
+    const existing = activeRuns.get(key); if (existing) return existing;
+    // Every outbound operation has its own hard timeout. Returning the actual
+    // execution promise avoids the former race where callers saw a timeout while
+    // the same run continued mutating and persisted later in the background.
+    const task = execute(company, nation, profile);
+    activeRuns.set(key, task);
+    try { return await task; } finally { activeRuns.delete(key); }
+  } finally { releaseIdentityWork(); }
 }
 
 export function getV1Run(runId: string): V1Run | null {

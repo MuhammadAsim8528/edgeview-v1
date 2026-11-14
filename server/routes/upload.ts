@@ -1,3 +1,4 @@
+import { identityWorkHandler } from '../company_identity_work';
 import express from 'express';
 import multer from 'multer';
 import { db } from '../db';
@@ -299,7 +300,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
 // Support all upload route variations regardless of mount point (/api, /files/upload, /upload, etc.)
 const UPLOAD_PATHS = ['/', '/upload', '/files/upload', '/api/upload', '/api/files/upload'];
 
-uploadRouter.post(UPLOAD_PATHS, uploadFileHandler, handleUpload);
+uploadRouter.post(UPLOAD_PATHS, uploadFileHandler, identityWorkHandler(handleUpload));
 
 // Handle non-POST methods on upload endpoints gracefully with JSON
 uploadRouter.all(UPLOAD_PATHS, (req, res, next) => {

@@ -31,7 +31,18 @@ async function until(check, message) {
 }
 try {
   await build({
-    entryPoints: ['server.ts'], outfile: path.join(root, 'server.cjs'), bundle: true,
+    stdin: { resolveDir: repo, loader: 'ts', contents: `
+      import './server.ts';
+      import {withCompanyIdentityChange} from './server/company_identity_work';
+      let release;
+      process.on('message', action => {
+        if (action === 'release') { release(); return; }
+        void withCompanyIdentityChange(() => new Promise(resolve => {
+          release = resolve;
+          process.send('exclusive');
+        })).then(() => process.send('released'), error => process.send(error.code));
+      });
+    ` }, outfile: path.join(root, 'server.cjs'), bundle: true,
     platform: 'node', format: 'cjs', packages: 'external', logLevel: 'silent',
     plugins: [{ name: 'isolated-enrichment-seams', setup(plugin) {
       plugin.onResolve({ filter: /^(?:\.\/server\/|\.\/)(v1_engine|job_manager)$/ }, args => {
@@ -91,7 +102,7 @@ try {
       EDGEVIEW_MONITORING_ENABLED:'0', SERPER_API_KEY:'fixture_not_real',
       FIXTURE_UNSERIALIZED:process.argv.includes('--unserialized-mutant')?'1':'0', FIXTURE_SECOND:path.join(state,'second-ready'), FIXTURE_READY:path.join(state,'ready'), FIXTURE_RELEASE:path.join(state,'release'), FIXTURE_FAIL:fail?'1':'0',
     });
-    const child = spawn(process.execPath, ['-r',noEgress,path.join(root,'server.cjs')], {cwd:repo,env,stdio:['ignore','pipe','pipe']});
+    const child = spawn(process.execPath, ['-r',noEgress,path.join(root,'server.cjs')], {cwd:repo,env,stdio:['ignore','pipe','pipe','ipc']});
     children.add(child);
     let output = '';
     const collect = chunk => { output = (output + chunk.toString()).slice(-3000); };
@@ -102,15 +113,40 @@ try {
         assert.equal(health.app?.pid,child.pid,'Refuse to mutate a different server'); return response.ok;
       } catch (error) { if (error.code === 'ERR_ASSERTION') throw error; return false; }
     }, 'owned server readiness timeout');
+    const exchange = action => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { child.off('message', receive); reject(new Error('identity fixture IPC timeout')); }, 5000);
+      function receive(message) { clearTimeout(timer); resolve(message); }
+      child.once('message', receive);
+      child.send(action);
+    });
     const form = new FormData();
     form.append('file',new Blob(['Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,Scopeanchor Medical,Kenya,Synthetic Supplier,Synthetic Product,10\n'],{type:'text/csv'}),'synthetic.csv');
+    assert.equal(await exchange('acquire'),'exclusive');
+    for (const [route, method, body] of [
+      ['/api/files/upload','POST',form], ['/api/files/unused','DELETE'],
+      ['/api/files/unused/save-to-history','POST'], ['/api/stats/save-to-history','POST'],
+      ['/api/sample-data/seed','POST'], ['/api/enrich/company','POST'],
+      ['/api/enrich/batch','POST'], ['/api/enrich/jobs','POST'], ['/api/enrich/job/unused/start','POST'],
+    ]) {
+      const response = await fetch(base + route, {method, body});
+      assert.equal(response.status,409,route);
+      assert.equal((await response.json()).code,'COMPANY_IDENTITY_BUSY',route);
+    }
+    assert.equal((await fetch(base + '/api/health')).status,200);
+    assert.equal(await exchange('release'),'released');
     assert.equal((await fetch(`${base}/api/files/upload`,{method:'POST',body:form})).status,201);
     const companies = () => fetch(`${base}/api/companies`).then(response => response.json());
     const before = (await companies()).find(company => company.company_name === 'Scopeanchor Medical');
     assert.ok(before,'synthetic uploaded company exists');
-    const pending = fetch(`${base}/api/enrich/company`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:before.id,company_name:before.company_name,country:'Kenya'})});
+    const abort = new AbortController();
+    const pending = fetch(`${base}/api/enrich/company`,{method:'POST',signal:abort.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({id:before.id,company_name:before.company_name,country:'Kenya'})});
     void pending.catch(() => {}); // Cleanup may terminate a request after a failed assertion.
     await until(() => fs.existsSync(env.FIXTURE_READY), 'route did not reach persistence barrier');
+    if (secondKind === 'interactive') {
+      abort.abort();
+      await assert.rejects(pending,{name:'AbortError'});
+    }
+    assert.equal(await exchange('acquire'),'COMPANY_IDENTITY_BUSY');
     let batchJobId;
     const second = secondKind === 'interactive'
       ? fetch(`${base}/api/enrich/company`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:before.id,company_name:before.company_name,country:'Kenya',forceFetch:true})})
@@ -132,6 +168,7 @@ try {
     if (secondKind === 'batch-stop') {
       const stopped = await fetch(`${base}/api/enrich/job/${batchJobId}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
       assert.equal(stopped.status,200);
+      assert.equal(await exchange('acquire'),'COMPANY_IDENTITY_BUSY');
       const restartedEarly = await fetch(`${base}/api/enrich/job/${batchJobId}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
       assert.equal(restartedEarly.status,409,'stop must not release worker ownership until the in-flight publication drains');
       assert.equal((await restartedEarly.json()).code,'JOB_DRAINING','refusal must explain the draining state');
@@ -140,7 +177,7 @@ try {
     // for the first save. Release after completion or a bounded observation.
     await Promise.race([second, sleep(300)]);
     fs.writeFileSync(env.FIXTURE_RELEASE,'release');
-    assert.equal((await pending).status,200);
+    if (secondKind !== 'interactive') assert.equal((await pending).status,200);
     assert.equal((await second).status,200);
     if (secondKind === 'batch-stop') {
       await until(async () => {
@@ -154,6 +191,13 @@ try {
         return body.job.status === 'COMPLETED';
       },'drained resume completion timeout');
     }
+    await until(async () => {
+      const status = await exchange('acquire');
+      if (status === 'COMPANY_IDENTITY_BUSY') return false;
+      assert.equal(status,'exclusive');
+      assert.equal(await exchange('release'),'released');
+      return true;
+    }, 'identity lease did not clear after publication');
     const after = (await companies()).find(company => company.id === before.id);
     assert.ok(JSON.stringify(after).includes('contact2@scopeanchor.test'),'late first publication must not erase newer completed evidence');
     assert.ok(JSON.stringify(after).includes('contact1@scopeanchor.test'),'both immutable captures remain projected');

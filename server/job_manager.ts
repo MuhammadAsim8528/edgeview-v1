@@ -1,3 +1,4 @@
+import { acquireCompanyIdentityWork } from './company_identity_work';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { getDb } from './sqlite';
 import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, assessV1FreshReuse, createV1ResearchContext, type V1ResearchContext, type V1Run } from './v1_engine';
@@ -582,27 +583,33 @@ export function projectHistoricalContactFields(run: V1Run) {
 // Different contacts retain their existing parallelism; failed saves release the queue.
 const contactPublications = new Map<string, Promise<void>>();
 export async function withContactPublication<T>(companyId: string, operation: () => Promise<T>): Promise<T> {
-  const previous = contactPublications.get(companyId) ?? Promise.resolve();
-  const result = previous.catch(() => {}).then(operation);
-  const settled = result.then(() => {}, () => {});
-  contactPublications.set(companyId, settled);
-  try { return await result; }
-  finally { if (contactPublications.get(companyId) === settled) contactPublications.delete(companyId); }
+  const releaseIdentityWork = acquireCompanyIdentityWork();
+  try {
+    const previous = contactPublications.get(companyId) ?? Promise.resolve();
+    const result = previous.catch(() => {}).then(operation);
+    const settled = result.then(() => {}, () => {});
+    contactPublications.set(companyId, settled);
+    try { return await result; }
+    finally { if (contactPublications.get(companyId) === settled) contactPublications.delete(companyId); }
+  } finally { releaseIdentityWork(); }
 }
 
 export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown, durable = false) {
-  const database = await getDb();
-  const canonicalOverlay = normalizeV1ContactOverlay(overlay);
-  if (durable) {
-    await database.saveContactOverlayDurably(companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString());
-    return;
-  }
-  await database.run(
-    `INSERT INTO v1_contact_enrichment (company_id, run_id, overlay_json, updated_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(company_id) DO UPDATE SET run_id = excluded.run_id, overlay_json = excluded.overlay_json, updated_at = excluded.updated_at`,
-    [companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString()]
-  );
+  const releaseIdentityWork = acquireCompanyIdentityWork();
+  try {
+    const database = await getDb();
+    const canonicalOverlay = normalizeV1ContactOverlay(overlay);
+    if (durable) {
+      await database.saveContactOverlayDurably(companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString());
+      return;
+    }
+    await database.run(
+      `INSERT INTO v1_contact_enrichment (company_id, run_id, overlay_json, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(company_id) DO UPDATE SET run_id = excluded.run_id, overlay_json = excluded.overlay_json, updated_at = excluded.updated_at`,
+      [companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString()]
+    );
+  } finally { releaseIdentityWork(); }
 }
 
 export async function hydrateV1ContactEnrichment(): Promise<number> {
@@ -724,76 +731,79 @@ export function isInternalId(name: string): boolean {
 }
 
 export async function createJob(companyIds: string[], mode: 'importer' | 'exporter', reuseOnly = false, forceLive = false): Promise<string> {
-  if (shuttingDown) throw new Error('EdgeView is shutting down');
-  if (reuseOnly && forceLive) throw new Error('Conflicting research modes');
-  const db = await getDb();
-  const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const releaseIdentityWork = acquireCompanyIdentityWork();
+  try {
+    if (shuttingDown) throw new Error('EdgeView is shutting down');
+    if (reuseOnly && forceLive) throw new Error('Conflicting research modes');
+    const db = await getDb();
+    const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   
-  // Fetch actual company names for the state map
-  const { db: pharmaDb } = await import('./db');
-  const companyStates: Record<string, CompanyResearchState> = {};
+    // Fetch actual company names for the state map
+    const { db: pharmaDb } = await import('./db');
+    const companyStates: Record<string, CompanyResearchState> = {};
   
-  for (const id of companyIds) {
-    const contact = pharmaDb.getContactById(id);
-    const companyName = contact ? contact.company_name : `ID ${id}`;
-    const isId = isInternalId(companyName);
-    const statusVal = isId ? 'failed' : 'pending';
-    const stageVal = isId ? 'UNRESOLVED_COMPANY' : 'Planner';
-    const errorVal = isId ? 'INVALID_INPUT / UNRESOLVED_COMPANY' : undefined;
+    for (const id of companyIds) {
+      const contact = pharmaDb.getContactById(id);
+      const companyName = contact ? contact.company_name : `ID ${id}`;
+      const isId = isInternalId(companyName);
+      const statusVal = isId ? 'failed' : 'pending';
+      const stageVal = isId ? 'UNRESOLVED_COMPANY' : 'Planner';
+      const errorVal = isId ? 'INVALID_INPUT / UNRESOLVED_COMPANY' : undefined;
 
-    companyStates[id] = {
-      id,
-      name: companyName,
-      status: statusVal,
-      stage: stageVal,
-      error: errorVal,
-      reuse_only: reuseOnly,
-      reuse_policy_version: 1,
-      force_live: forceLive,
-      resourceUsage: emptyProviderUsage(),
+      companyStates[id] = {
+        id,
+        name: companyName,
+        status: statusVal,
+        stage: stageVal,
+        error: errorVal,
+        reuse_only: reuseOnly,
+        reuse_policy_version: 1,
+        force_live: forceLive,
+        resourceUsage: emptyProviderUsage(),
+      };
+    }
+
+    const job: ResearchJob = {
+      id: jobId,
+      status: 'PENDING',
+      importer_exporter_mode: mode,
+      total_companies: companyIds.length,
+      completed_companies: 0,
+      current_company: '',
+      current_stage: '',
+      company_ids: companyIds,
+      company_states: companyStates,
+      resource_usage: emptyProviderUsage(),
+      is_pilot: false,
+      pilot_authorized: false,
     };
-  }
 
-  const job: ResearchJob = {
-    id: jobId,
-    status: 'PENDING',
-    importer_exporter_mode: mode,
-    total_companies: companyIds.length,
-    completed_companies: 0,
-    current_company: '',
-    current_stage: '',
-    company_ids: companyIds,
-    company_states: companyStates,
-    resource_usage: emptyProviderUsage(),
-    is_pilot: false,
-    pilot_authorized: false,
-  };
+    await db.run(
+      `INSERT INTO research_jobs (
+        id, status, importer_exporter_mode, total_companies, completed_companies,
+        current_company, current_stage, company_ids, company_states, resource_usage, error_message,
+        is_pilot, pilot_authorized
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        job.id,
+        job.status,
+        job.importer_exporter_mode,
+        job.total_companies,
+        job.completed_companies,
+        job.current_company,
+        job.current_stage,
+        JSON.stringify(job.company_ids),
+        JSON.stringify(job.company_states),
+        JSON.stringify(job.resource_usage),
+        '',
+        job.is_pilot ? 1 : 0,
+        job.pilot_authorized ? 1 : 0,
+      ]
+    );
+    await db.flush();
 
-  await db.run(
-    `INSERT INTO research_jobs (
-      id, status, importer_exporter_mode, total_companies, completed_companies, 
-      current_company, current_stage, company_ids, company_states, resource_usage, error_message,
-      is_pilot, pilot_authorized
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      job.id,
-      job.status,
-      job.importer_exporter_mode,
-      job.total_companies,
-      job.completed_companies,
-      job.current_company,
-      job.current_stage,
-      JSON.stringify(job.company_ids),
-      JSON.stringify(job.company_states),
-      JSON.stringify(job.resource_usage),
-      '',
-      job.is_pilot ? 1 : 0,
-      job.pilot_authorized ? 1 : 0,
-    ]
-  );
-  await db.flush();
-
-  return jobId;
+    return jobId;
+  } finally { releaseIdentityWork(); }
 }
 
 export async function getJob(jobId: string): Promise<ResearchJob | null> {
@@ -879,9 +889,10 @@ export function isJobActive(jobId: string): boolean {
 
 export async function runJobLoop(jobId: string, forceFetch = false, reviewRetainedOnly = false): Promise<boolean> {
   if (shuttingDown || ownedJobs.has(jobId)) return false;
+  const releaseIdentityWork = acquireCompanyIdentityWork();
   ownedJobs.add(jobId);
   activeJobs.add(jobId);
-  const releaseOwnership = () => { activeJobs.delete(jobId); ownedJobs.delete(jobId); };
+  const releaseOwnership = () => { activeJobs.delete(jobId); ownedJobs.delete(jobId); releaseIdentityWork(); };
   let job: ResearchJob | null;
   try {
     job = await getJob(jobId);
