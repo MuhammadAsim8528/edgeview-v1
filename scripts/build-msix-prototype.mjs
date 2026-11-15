@@ -53,7 +53,14 @@ async function boundedLicense(version) {
   if (!result.toString('utf8').includes('Permission is hereby granted')) throw new Error('MSIX_NODE_LICENSE_INVALID');
   return result;
 }
-export async function buildMsixPrototype(root) {
+export function prototypePackageVersion(revision = '2') {
+  if (!/^(?:[2-9]|[1-9][0-9]{1,4})$/.test(revision) || Number(revision) > 65535) {
+    throw new Error('MSIX_PROTOTYPE_INVALID_REVISION');
+  }
+  return '0.0.0.' + revision;
+}
+export async function buildMsixPrototype(root, revision) {
+  const manifestVersion = prototypePackageVersion(revision);
   if (process.platform !== 'win32') throw new Error('MSIX_PROTOTYPE_REQUIRES_WINDOWS');
   const { commit, identity } = prototypePreflight(root);
   const sdk = path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Windows Kits', '10', 'bin');
@@ -117,7 +124,7 @@ export async function buildMsixPrototype(root) {
     execute(compiler, ['/nologo', '/target:winexe', '/platform:x64', '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll',
       '/reference:System.Web.Extensions.dll', `/out:${path.join(app, 'EdgeView.exe')}`, path.join(root, 'packaging/windows/EdgeViewLauncher.cs')], root, 'launcher');
     let manifest = fs.readFileSync(path.join(root, 'packaging/prototype-msix/AppxManifest.xml'), 'utf8');
-    manifest = manifest.replace('Version="0.0.0.1"', 'Version="0.0.0.2"').replace('Executable="runtime\\node.exe"', 'Executable="EdgeView.exe"')
+    manifest = manifest.replace('Version="0.0.0.1"', 'Version="' + manifestVersion + '"').replace('Executable="runtime\\node.exe"', 'Executable="EdgeView.exe"')
       .replace(/\s+uap11:Parameters="[^"]*"/, '');
     fs.writeFileSync(path.join(app, 'AppxManifest.xml'), manifest);
     const files = [];
@@ -136,10 +143,10 @@ export async function buildMsixPrototype(root) {
     visit();
     const mapping = path.join(output, 'mapping.txt');
     fs.writeFileSync(mapping, '[Files]\r\n' + files.map(file => `"${path.join(app, file.path)}" "${file.path.replaceAll('/', '\\')}"`).join('\r\n') + '\r\n');
-    const name = `EdgeView-${identity.version}-${commit.slice(0, 7)}-UNSIGNED.msix`, archive = path.join(output, name);
+    const name = `EdgeView-${identity.version}-${commit.slice(0, 7)}-pkg-${manifestVersion}-UNSIGNED.msix`, archive = path.join(output, name);
     execute(makeappx, ['pack', '/f', mapping, '/p', archive, '/no', '/ml', '536870912'], root, 'makeappx');
     const report = { status: 'UNSIGNED_INTERNAL_NOT_RELEASE_READY', customerRuntimeReady: false, commit, build: identity,
-      manifestVersion: '0.0.0.2', runtimeInputs: { ...runtimeLockEvidence, runtimeLockSha256, excludedBuildRoots: inputs.excludedBuildRoots, sourceLockSha256: notices.sourceLockSha256, noticesSha256: notices.noticesSha256, noticeCapture: notices.capture }, runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
+      manifestVersion, runtimeInputs: { ...runtimeLockEvidence, runtimeLockSha256, excludedBuildRoots: inputs.excludedBuildRoots, sourceLockSha256: notices.sourceLockSha256, noticesSha256: notices.noticesSha256, noticeCapture: notices.capture }, runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
       package: { name, sha256: digest(archive), files: files.length }, files,
       blockers: ['Publisher/trusted signing absent', 'Native launcher not executed by this factory', 'Installed/clean-Windows/update/rollback acceptance absent',
         'Current Node release/security assessment required', 'Runtime dependency/test/source-map minimization and full OSS/security clearance pending',
@@ -153,6 +160,7 @@ export async function buildMsixPrototype(root) {
   }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 2) throw new Error('Prototype factory accepts no runtime path, destination or shell input.');
-  console.log(JSON.stringify(await buildMsixPrototype(process.cwd())));
+  const [flag, revision, ...extra] = process.argv.slice(2);
+  if (flag !== undefined && (flag !== '--revision' || revision === undefined || extra.length)) throw new Error('Usage: node scripts/build-msix-prototype.mjs [--revision 2..65535]');
+  console.log(JSON.stringify(await buildMsixPrototype(process.cwd(), revision)));
 }
