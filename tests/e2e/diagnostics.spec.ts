@@ -17,7 +17,10 @@ test('support diagnostics previews and downloads local safe metadata, with retry
   const preview=panel.getByLabel('Diagnostics preview',{exact:true}); await expect(preview).toBeVisible();
   const text=await preview.innerText(); const data=JSON.parse(text);
   expect(data.format).toBe('edgeview-support-v1'); expect(data.build.build_id).toMatch(/^[a-f0-9]{64}$/);
-  expect(data.monitoring.enabled).toBe(false); expect(data.database.schema_version).toBeNull();
+  expect(data.monitoring.enabled).toBe(false);
+  expect(data.database.status).toBe('ok');
+  expect(Number.isInteger(data.database.schema_version)).toBe(true);
+  expect(data.database.schema_version).toBeGreaterThan(0);
   expect(text).not.toContain('project_root');expect(text).not.toContain('C:\\\\Users');expect(text).not.toContain('PRIVATE_SUPPORT_ERROR');
   const downloadPromise=page.waitForEvent('download'); await panel.getByRole('button',{name:'Download diagnostics',exact:true}).click();
   const download=await downloadPromise;expect(download.suggestedFilename()).toBe('EdgeView-Diagnostics.json');
