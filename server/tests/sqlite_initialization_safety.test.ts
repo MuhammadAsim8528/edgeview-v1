@@ -12,16 +12,19 @@ async function scenario(name: string, sql: string | null, succeeds: boolean) {
   process.env.EDGEVIEW_SQLITE_DB = file;
   resetDbInstanceForTests();
   assert.equal(getOperationalDatabaseStatus().status, 'unknown');
+  assert.equal(getOperationalDatabaseStatus().schema_version, null);
   if (sql === null) fs.writeFileSync(file, name === 'empty' ? Buffer.alloc(0) : 'not a SQLite database');
   else { const db = new SQL.Database(); db.run(sql); fs.writeFileSync(file, db.export()); db.close(); }
   const before = fs.readFileSync(file);
   if (!succeeds) {
     await assert.rejects(getDb());
     assert.equal(getOperationalDatabaseStatus().status, 'degraded');
+    assert.equal(getOperationalDatabaseStatus().schema_version, null);
     assert.deepEqual(fs.readFileSync(file), before, `${name}: failed initialization must not rename/replace/partially overwrite the original`);
   } else {
     const db = await getDb();
     assert.equal(getOperationalDatabaseStatus().status, 'ok');
+    assert.equal(getOperationalDatabaseStatus().schema_version, (await db.get('PRAGMA user_version')).user_version);
     assert.equal((await db.get('SELECT email FROM contact_cache WHERE company_name = ?', ['Synthetic Legacy Company'])).email, 'fixture@example.invalid');
     const reopened = new SQL.Database(fs.readFileSync(file));
     assert.equal(reopened.exec('PRAGMA integrity_check')[0].values[0][0], 'ok');

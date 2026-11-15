@@ -32,8 +32,9 @@ export interface DatabaseWrapper {
 let dbInstance: DatabaseWrapper | null = null;
 let initPromise: Promise<DatabaseWrapper> | null = null;
 let operationalStatus: 'unknown' | 'initializing' | 'ok' | 'degraded' = 'unknown';
+let acceptedSchemaVersion: number | null = null;
 export function getOperationalDatabaseStatus() {
-  return { status: operationalStatus, code: operationalStatus === 'degraded' ? 'DATABASE_UNAVAILABLE' : null };
+  return { status: operationalStatus, schema_version: operationalStatus === 'ok' ? acceptedSchemaVersion : null, code: operationalStatus === 'degraded' ? 'DATABASE_UNAVAILABLE' : null };
 }
 /** Do not initialize/create a database merely because the process is closing. */
 export async function flushInitializedDatabase(): Promise<void> {
@@ -48,6 +49,7 @@ export function resetDbInstanceForTests(): void {
   dbInstance = null;
   initPromise = null;
   operationalStatus = 'unknown';
+  acceptedSchemaVersion = null;
 }
 
 export async function getDb(): Promise<DatabaseWrapper> {
@@ -539,6 +541,8 @@ export async function getDb(): Promise<DatabaseWrapper> {
       const retention = pruneMigrationBackups(DB_PATH, migrationBackup);
       if (retention.errors || retention.skipped) console.warn('Migration backup retention incomplete', retention);
     }
+    const acceptedVersion = db.exec('PRAGMA user_version;')[0]?.values?.[0]?.[0];
+    if (acceptedVersion === CURRENT_SCHEMA_VERSION) acceptedSchemaVersion = acceptedVersion;
     dbInstance = wrapper;
     return wrapper;
   })().catch(error => { operationalStatus = 'degraded'; throw error; });

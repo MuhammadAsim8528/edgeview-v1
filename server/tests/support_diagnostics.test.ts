@@ -8,6 +8,11 @@ assert.equal(result.resources.heapUsedBytes,null);assert.equal(result.resources.
 assert.equal(result.build.version,'1.0.0-rc.2');assert.equal(result.database.schema_version,null);
 assert.equal(result.monitoring.sentry.dashboard_verified,false);
 assert.ok(!JSON.stringify(result).includes(marker));
+assert.equal(supportDiagnostics({...input,database:{status:'ok',schema_version:3}}).database.schema_version,3);
+for (const schema of [-1, 1.5, Infinity, '3', marker]) {
+  assert.equal(supportDiagnostics({...input,database:{status:'ok',schema_version:schema}}).database.schema_version,null);
+}
+assert.equal(supportDiagnostics({...input,database:{status:'degraded',schema_version:3}}).database.schema_version,null);
 const bad=supportDiagnostics({...input,installationId:marker,node:marker,platform:marker,build:{version:marker,buildId:marker,gitCommit:marker},database:{status:marker},monitoring:{sentry:{state:marker}}});
 assert.ok(!JSON.stringify(bad).includes(marker));assert.equal(bad.installation_id,null);
 assert.equal(bad.runtime.platform,'unknown');assert.equal(bad.monitoring.sentry.state,'UNKNOWN');

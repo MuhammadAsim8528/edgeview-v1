@@ -101,6 +101,11 @@ try {
   const health = await healthResponse.json();
   assert.equal(fs.realpathSync(health.app.project_root), fs.realpathSync(process.cwd()), 'isolated server must resolve the installation being tested');
   assert.deepEqual(Object.keys(health.providers).sort(), ['groq', 'hunter', 'nvidia', 'serper']);
+  const diagnosticsResponse = await fetch(`${base}/api/diagnostics/support`);
+  assert.equal(diagnosticsResponse.status, 200);
+  const diagnostics = await diagnosticsResponse.json();
+  assert.equal(diagnostics.database.status, 'ok');
+  assert.ok(Number.isInteger(diagnostics.database.schema_version) && diagnostics.database.schema_version > 0, 'accepted SQLite schema is visible in support diagnostics');
   assert.equal(healthResponse.headers.get('x-content-type-options'), 'nosniff');
   assert.match(healthResponse.headers.get('content-security-policy') || '', /frame-ancestors 'none'/);
   assert.doesNotMatch(healthResponse.headers.get('content-security-policy') || '', /script-src[^;]*unsafe-inline/);

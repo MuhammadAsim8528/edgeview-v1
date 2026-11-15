@@ -11,6 +11,9 @@ export function supportDiagnostics(input: { build: unknown; installationId: unkn
     state: choice(value.state, states, 'UNKNOWN'),
     dashboard_verified: value.dashboard_verified === true,
   }; };
+  const schema = database.schema_version;
+  const schemaVersion = database.status === 'ok' && typeof schema === 'number'
+    && Number.isInteger(schema) && schema >= 0 && schema <= 2147483647 ? schema : null;
   return {
     format: 'edgeview-support-v1', generated_at: new Date().toISOString(),
     installation_id: match(input.installationId, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i),
@@ -18,10 +21,10 @@ export function supportDiagnostics(input: { build: unknown; installationId: unkn
       version: match(build.version, /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-(?:rc|beta|canary)\.\d{1,5})?$/),
       build_id: match(build.buildId, /^[a-f0-9]{64}$/), commit: match(build.gitCommit, /^[a-f0-9]{40,64}$/) },
     runtime: { node: match(input.node, /^v\d{1,3}\.\d{1,3}\.\d{1,3}$/), platform: choice(input.platform, ['win32','linux','darwin'], 'unknown') },
-    database: { status: choice(database.status, ['unknown','initializing','ok','degraded'], 'unknown'), schema_version: null },
+    database: { status: choice(database.status, ['unknown','initializing','ok','degraded'], 'unknown'), schema_version: schemaVersion },
     resources: Object.fromEntries(['cpuPercent','rssBytes','heapUsedBytes','systemTotalBytes','systemFreeBytes','diskAvailableBytes','uptimeSeconds'].map(key => [key,numeric(resources[key])])),
     monitoring: { enabled: monitoring.enabled === true, replay: 'OFF', sentry: vendor('sentry'), posthog: vendor('posthog') },
     excludes: ['credentials','configuration files','datasets','research evidence','raw logs','exception messages','user paths','hardware identifiers'],
-    limitations: ['Database schema version is not measured by this export.','Remote dashboard receipt is not inferred from transport status.','This file is downloaded locally; sharing is a separate user action.'],
+    limitations: ['Database schema is shown after successful initialization.','Remote dashboard receipt is not inferred from transport status.','This file is downloaded locally; sharing is a separate user action.'],
   };
 }
