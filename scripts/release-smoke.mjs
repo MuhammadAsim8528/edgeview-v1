@@ -250,6 +250,15 @@ try {
       }
     }
   }
+  const selectedColumns = [{ key: 'Exporter', header: 'Supplier label' }, { key: 'Item', header: 'Product label' }];
+  const custom = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...exportPayload, format: 'csv', source_columns: selectedColumns }) });
+  assert.equal(custom.status, 200);
+  assert.equal((await custom.text()).replace(/^\uFEFF/u, ''), '"Supplier label","Product label"\r\n"Exporter One","Product One"');
+  const unknownColumn = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...exportPayload, format: 'csv', source_columns: [{ key: 'nonexistent', header: 'Hidden field' }] }) });
+  assert.equal(unknownColumn.status, 400, 'unknown client columns cannot change the export');
+
   for (const patch of [{ selectedRows: ['missing'] }, { selectedRows: ['chosen','missing'] }, { format: 'exe' }, { records: {} }]) {
     const response = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ ...exportPayload, format: 'csv', ...patch }) });
     assert.equal(response.status, 400, 'invalid export or stale selection must not produce a wider download');

@@ -27,6 +27,8 @@ export interface GlobalExportPayload {
   sourceFileIds?: string[];
   sourceReportId?: string;
   sourceView?: Record<string, string>;
+  detectedSourceColumns?: string[];
+  sourceColumns?: { key: string; header: string }[];
   recordCount?: number;
   defaultReportType?: ExportReportType;
 }
@@ -44,6 +46,8 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({ isOpen, on
   isOpen && payload ? <ExportDialog key={`${payload.dataset}:${payload.title}:${payload.defaultReportType || 'importer'}`} onClose={onClose} payload={payload} /> : null;
 
 const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload }> = ({ onClose, payload }) => {
+  const [customColumns, setCustomColumns] = useState(false);
+  const [sourceColumns, setSourceColumns] = useState<{ key: string; header: string }[]>([]);
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('csv');
   const [reportType, setReportType] = useState<ExportReportType>(payload.defaultReportType || 'importer');
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -68,7 +72,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
       setExportProgress(40);
       setExportStep(`Processing ${effectiveCount} record${effectiveCount === 1 ? '' : 's'} for ${selectedFormat.toUpperCase()} export...`);
 
-      const request = buildExportRequest(payload, selectedFormat, reportType);
+      const request = buildExportRequest(customColumns ? { ...payload, sourceColumns } : payload, selectedFormat, reportType);
 
       setExportProgress(65);
       setExportStep(
@@ -235,6 +239,41 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
             </div>
           )}
 
+          {Boolean(payload.detectedSourceColumns?.length) && (
+            <fieldset disabled={isExporting} className="space-y-2">
+              <legend className="text-xs font-semibold text-[#e5e7eb]">Export columns</legend>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={customColumns} onChange={event => setCustomColumns(event.target.checked)} />
+                Choose and rename detected columns
+              </label>
+              {customColumns && (
+                <div className="max-h-44 space-y-2 overflow-y-auto rounded border border-[#333] p-2">
+                  {payload.detectedSourceColumns!.map(key => {
+                    const selection = sourceColumns.find(column => column.key === key);
+                    return (
+                      <div key={key} className="grid grid-cols-2 items-center gap-2 text-xs">
+                        <label className="flex min-w-0 items-center gap-2">
+                          <input type="checkbox" checked={Boolean(selection)}
+                            disabled={!selection && sourceColumns.length >= 64}
+                            onChange={event => setSourceColumns(columns => event.target.checked
+                              ? [...columns, { key, header: key.slice(0, 120) }]
+                              : columns.filter(column => column.key !== key))} />
+                          <span className="truncate" title={key}>{key}</span>
+                        </label>
+                        {selection && <input aria-label={'Export heading for ' + key} maxLength={120}
+                          className="min-w-0 rounded border border-[#444] bg-[#171717] px-2 py-1 text-white"
+                          value={selection.header} onChange={event => {
+                            const header = event.target.value;
+                            setSourceColumns(columns => columns.map(column => column.key === key ? { key, header } : column));
+                          }} />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </fieldset>
+          )}
+
           {/* Format Radio Selection Options */}
           <div>
             <label className="block text-[11px] font-semibold text-[#9ca3af] uppercase tracking-wider mb-1.5">
@@ -329,7 +368,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
           <button
             type="button"
             onClick={handleStartExport}
-            disabled={isExporting || effectiveCount === 0}
+            disabled={isExporting || effectiveCount === 0 || (customColumns && (sourceColumns.length === 0 || sourceColumns.some(column => !column.header.trim())))}
             className="inline-flex items-center space-x-1.5 px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
           >
             {isExporting ? (

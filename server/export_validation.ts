@@ -99,13 +99,13 @@ export function resolveStoredContactExport(input: unknown, contacts: Array<{ id:
 }
 
 /** Full-file export takes its rows exclusively from the authoritative store. */
-export function resolveStoredFileExport(input: unknown, rows: any[]) {
+export function resolveStoredFileExport(input: unknown, rows: any[], sourceColumns: readonly string[] = []) {
   if (!record(input)) throw new ExportValidationError('Export payload must be an object.');
   if (input.dataset !== undefined && input.dataset !== 'files') throw new ExportValidationError('Stored-file export requires the files dataset.');
-  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format', 'view'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
+  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format', 'view', 'source_columns'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
   let selected = rows;
   if (input.view !== undefined) {
-    try { selected = selectFileViewRows(rows, input.view); }
+    try { selected = selectFileViewRows(rows, input.view, false, input.source_columns !== undefined); }
     catch (error) { if (error instanceof FileViewValidationError) throw new ExportValidationError(error.message); throw error; }
     if (!selected.length) throw new ExportValidationError('No stored rows match this file view.');
     if (input.view.group_shipments === 'true' || input.view.group === 'true') {
@@ -116,7 +116,38 @@ export function resolveStoredFileExport(input: unknown, rows: any[]) {
         'Total FC (USD)': row['Total FC (USD)'] }));
     }
   }
-  const payload = { dataset: 'files', records: selected, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format };
+  let columns: Array<{ key: string; header: string }> | undefined;
+  if (input.source_columns !== undefined) {
+    const requested = input.source_columns;
+    if (!Array.isArray(requested) || requested.length === 0 || requested.length > 64) {
+      throw new ExportValidationError('Choose between 1 and 64 export columns.');
+    }
+    const available = new Set(sourceColumns);
+    const seenKeys = new Set<string>();
+    const seenHeaders = new Set<string>();
+    const selection = requested.map((entry, index) => {
+      if (!record(entry) || Object.keys(entry).some(key => key !== 'key' && key !== 'header')
+        || typeof entry.key !== 'string' || !available.has(entry.key) || seenKeys.has(entry.key)
+        || typeof entry.header !== 'string' || /[\u0000-\u001f\u007f]/u.test(entry.header)) {
+        throw new ExportValidationError('Choose unique detected source columns and valid headings.');
+      }
+      const header = entry.header.trim();
+      const label = header.toLowerCase();
+      if (!header || header.length > 120 || seenHeaders.has(label)) {
+        throw new ExportValidationError('Export headings must be unique and at most 120 characters.');
+      }
+      seenKeys.add(entry.key);
+      seenHeaders.add(label);
+      // Generators receive internal keys, so a source header cannot collide
+      // with a property on the output row or infer a value from another field.
+      return { source: entry.key, key: 'source_' + index, header };
+    });
+    columns = selection.map(({ key, header }) => ({ key, header }));
+    selected = selected.map(row => Object.fromEntries(selection.map(({ source, key }) => [
+      key, record(row) && Object.hasOwn(row, source) ? row[source] ?? '' : '',
+    ])));
+  }
+  const payload = { dataset: 'files', records: selected, title: input.title, filenamePrefix: input.filenamePrefix, format: input.format, columns };
   validateExportRequest(payload);
   return payload;
 }

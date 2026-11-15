@@ -864,6 +864,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
     onOpenExport({
       dataset: 'files', title: `${file.name} (Filtered)`, records: [],
       sourceFileId: file.id, recordCount: effectiveTotalCount,
+      detectedSourceColumns: isGrouped ? undefined : [...new Set(file.columns ?? [])],
       sourceView: { group_shipments: String(isGrouped), search: debouncedSearch,
         product: productFilter, country: countryFilter, importer: importerFilter,
         start_date: startDate, end_date: endDate,
@@ -1062,6 +1063,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                   title: `${file.name} (Full Dataset)`,
                   records: [],
                   sourceFileId: file.id,
+                  detectedSourceColumns: [...new Set(file.columns ?? [])],
                   recordCount: file.summary?.total_rows ?? file.rows?.length ?? 0,
                   filenamePrefix: `EdgeView_${baseName}_Full`,
                 });

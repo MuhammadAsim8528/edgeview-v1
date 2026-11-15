@@ -1897,7 +1897,7 @@ app.post('/api/export/file/:fileId', async (req, res) => {
     if (!file || !Array.isArray(file.rows) || !file.rows.length) {
       return res.status(404).json({ success: false, code: 'NO_EXPORT_DATA', error: 'No stored rows available for this file.' });
     }
-    const payload = resolveStoredFileExport(req.body, file.rows);
+    const payload = resolveStoredFileExport(req.body, file.rows, file.columns ?? []);
     const { buffer, contentType, filename, failedFormats } = await processExportRequest(payload);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', getSafeContentDisposition(filename || 'export'));

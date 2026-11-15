@@ -4,7 +4,7 @@ export class FileViewValidationError extends Error {}
 const viewKeys = ['search','sort_by','sort_dir','group_shipments','group','product','country','importer','start_date','end_date'];
 
 /** Shared derived view for paging and export; input never supplies row values. */
-export function selectFileViewRows(storedRows: Record<string, unknown>[], input: unknown, allowPaging = false) {
+export function selectFileViewRows(storedRows: Record<string, unknown>[], input: unknown, allowPaging = false, retainSourceValues = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new FileViewValidationError('File view must be an object.');
   const view = input as Record<string, string>;
   for (const [key, value] of Object.entries(view)) {
@@ -24,7 +24,13 @@ export function selectFileViewRows(storedRows: Record<string, unknown>[], input:
   const startDate = (view.start_date as string || '').trim();
   const endDate = (view.end_date as string || '').trim();
 
-  let rows = storedRows.map(normalizeRow);
+  if (retainSourceValues && isGrouped) throw new FileViewValidationError('Source columns require ungrouped rows.');
+  const sourceByView = retainSourceValues ? new WeakMap<Record<string, unknown>, Record<string, unknown>>() : null;
+  let rows = storedRows.map(row => {
+    const normalized = normalizeRow(row);
+    sourceByView?.set(normalized, row);
+    return normalized;
+  });
 
   if (isGrouped) {
     rows = groupShipmentRows(rows);
@@ -73,5 +79,5 @@ export function selectFileViewRows(storedRows: Record<string, unknown>[], input:
     });
   }
 
-  return rows;
+  return sourceByView ? rows.map(row => sourceByView.get(row)!) : rows;
 }

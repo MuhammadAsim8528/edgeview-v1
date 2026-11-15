@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { resolveStoredFileExport } from '../export_validation';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { GlobalExportModal } from '../../src/components/GlobalExportModal';
 import { loadFilePage } from '../../src/utils/filePage';
 import { loadCountryDetails, loadImporterDetails } from '../../src/utils/countryDetails';
+
+const sourceColumnProbe = resolveStoredFileExport({ format: 'csv', view: { country: 'Kenya' },
+  source_columns: [{ key: 'Item', header: 'Original product' }, { key: 'ITEM', header: 'Other product field' }] },
+  [{ Country: 'Kenya', Item: 'Original', ITEM: 'Alias' }, { Country: 'Pakistan', Item: 'Excluded' }], ['Item','ITEM']);
+assert.deepEqual(sourceColumnProbe.columns?.map(column => column.header), ['Original product','Other product field']);
+assert.deepEqual(sourceColumnProbe.records, [{ source_0: 'Original', source_1: 'Alias' }]);
+assert.throws(() => resolveStoredFileExport({ format: 'csv', view: { group: 'true' },
+  source_columns: [{ key: 'Item', header: 'Item' }] }, [{ Item: 'Original' }], ['Item']), /ungrouped/);
 
 const count = 17612;
 const sourcePayload = { dataset: 'files', title: 'Synthetic full file', records: [], sourceFileId: 'large-synthetic', recordCount: count };

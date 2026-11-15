@@ -1147,8 +1147,9 @@ export async function processFullDatasetExport(payload: NormalizedExportPayload)
 
   const savedReport = payload.dataset === 'reports';
   if (savedReport && !payload.columns?.length) throw new Error('Saved report columns unavailable.');
-  const targetRecords = savedReport ? rawRecords : transformFullDatasetRecords(rawRecords);
-  const columns = savedReport ? payload.columns! : FULL_DATASET_COLUMNS;
+  const useExplicitColumns = savedReport || (payload.dataset === 'files' && Boolean(payload.columns?.length));
+  const targetRecords = useExplicitColumns ? rawRecords : transformFullDatasetRecords(rawRecords);
+  const columns = useExplicitColumns ? payload.columns! : FULL_DATASET_COLUMNS;
 
   const currentDate = new Date().toISOString().split('T')[0];
   const safeTitle = (title || 'Dataset').replace(/[^a-zA-Z0-9_-]/g, '_');
