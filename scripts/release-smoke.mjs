@@ -267,6 +267,32 @@ try {
     assert.equal(response.status, positions === raw.row_positions ? 200 : 400);
     if (response.ok) assert.equal((await response.text()).replace(/^\uFEFF/u, ''), '"Supplier label","Product label"\r\n"Exporter One","Product One"');
   }
+  for (const format of ['xlsx', 'docx', 'pdf', 'all']) {
+    const response = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...selectionPayload, format, source_columns: selectedColumns, row_positions: raw.row_positions }) });
+    assert.equal(response.status, 200, `custom selected ${format}`);
+    assert.equal(response.headers.get('x-export-failed-formats'), null);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (format === 'pdf') {
+      assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+      assert.match(bytes.subarray(-64).toString(), /%%EOF/);
+      continue;
+    }
+    const archive = await JSZip.loadAsync(bytes);
+    if (format === 'all') {
+      for (const extension of ['csv', 'xlsx', 'docx', 'pdf']) {
+        assert.equal(Object.keys(archive.files).filter(name => name.endsWith(`.${extension}`)).length, 1);
+      }
+      const csv = archive.file(/\.csv$/u)[0];
+      assert.equal((await csv.async('string')).replace(/^\uFEFF/u, ''), '"Supplier label","Product label"\r\n"Exporter One","Product One"');
+    } else {
+      const member = format === 'docx' ? 'word/document.xml' : 'xl/sharedStrings.xml';
+      const xml = await archive.file(member).async('string');
+      for (const field of ['Supplier label', 'Product label', 'Exporter One', 'Product One']) assert.ok(xml.includes(field), `${format} includes ${field}`);
+      assert.doesNotMatch(xml, /Exporter Three|Unicode Pharma/);
+    }
+  }
+
   const unknownColumn = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...exportPayload, format: 'csv', source_columns: [{ key: 'nonexistent', header: 'Hidden field' }] }) });
   assert.equal(unknownColumn.status, 400, 'unknown client columns cannot change the export');
