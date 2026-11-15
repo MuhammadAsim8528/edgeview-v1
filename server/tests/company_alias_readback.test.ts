@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { prepareCompanyAliasAdmission, persistCompanyAliasAdmission, validateCompanyAliasRegistration,
-  readCompanyAliasRegistration } from '../company_alias_registry';
+  readCompanyAliasRegistration, resolveVerifiedCompanyAliasIds } from '../company_alias_registry';
 import { getDb, resetDbInstanceForTests, type CompanyAliasRow } from '../sqlite';
 import type { CompanyContact } from '../db';
 import type { V1Run } from '../v1_engine';
@@ -59,6 +59,14 @@ const tampered = structuredClone(run);
 tampered.raw_records[0].sha256 = crypto.createHash('sha256').update(JSON.stringify(tampered.raw_records[0].response)).digest('hex');
 assert.equal(validateCompanyAliasRegistration(row, contacts, [], () => tampered).status, 'invalid', 'valid-hash foreign proof cannot revive the mapping');
 assert.equal(JSON.stringify({ contacts, row, run }), original, 'read validation preserves source objects');
+
+assert.deepEqual([...resolveVerifiedCompanyAliasIds(contacts, [row], load)], [[alias.id, canonical.id]]);
+for (const conflicting of [[row, row], ...relatedCases.map(related => [row, related])]) {
+  assert.equal(resolveVerifiedCompanyAliasIds(contacts, conflicting, load).size, 0);
+}
+assert.equal(resolveVerifiedCompanyAliasIds([alias], [row], load).size, 0);
+assert.equal(resolveVerifiedCompanyAliasIds(contacts, [row], () => tampered).size, 0);
+assert.equal(JSON.stringify({ contacts, row, run }), original);
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-alias-readback-'));
 const oldPath = process.env.EDGEVIEW_SQLITE_DB, oldTest = process.env.EDGEVIEW_TEST_MODE;

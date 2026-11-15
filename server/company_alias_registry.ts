@@ -122,3 +122,39 @@ export async function readCompanyAliasRegistration(aliasId: string,
     return validateCompanyAliasRegistration(row, contacts(), related, loadRun);
   } catch { return { status: 'unavailable', code: 'ALIAS_REGISTRATION_UNAVAILABLE' }; }
 }
+
+/** Resolve group membership from current records and retained proof.
+ * Callers keep the original source records and their independent history. */
+export function resolveVerifiedCompanyAliasIds(contacts: readonly CompanyContact[], rows: readonly CompanyAliasRow[],
+  loadRun: (id: string) => V1Run | null): ReadonlyMap<string, string> {
+  const contactsById = new Map<string, CompanyContact[]>();
+  for (const contact of contacts) {
+    const matches = contactsById.get(contact.id) ?? [];
+    matches.push(contact);
+    contactsById.set(contact.id, matches);
+  }
+  const aliasIds = new Set<string>();
+  const aliasKeys = new Set<string>();
+  const duplicateIds = new Set<string>();
+  const duplicateKeys = new Set<string>();
+  const targetIds = new Set<string>();
+  const targetKeys = new Set<string>();
+  for (const row of rows) {
+    if (aliasIds.has(row.alias_id)) duplicateIds.add(row.alias_id);
+    if (aliasKeys.has(row.alias_key)) duplicateKeys.add(row.alias_key);
+    aliasIds.add(row.alias_id);
+    aliasKeys.add(row.alias_key);
+    targetIds.add(row.canonical_id);
+    targetKeys.add(row.canonical_key);
+  }
+  const canonicalIds = new Map<string, string>();
+  for (const row of rows) {
+    if (duplicateIds.has(row.alias_id) || duplicateKeys.has(row.alias_key)
+      || aliasIds.has(row.canonical_id) || aliasKeys.has(row.canonical_key)
+      || targetIds.has(row.alias_id) || targetKeys.has(row.alias_key)) continue;
+    const current = [...(contactsById.get(row.alias_id) ?? []), ...(contactsById.get(row.canonical_id) ?? [])];
+    const result = validateCompanyAliasRegistration(row, current, [], loadRun);
+    if (result.status === 'verified') canonicalIds.set(result.alias_id, result.canonical_id);
+  }
+  return canonicalIds;
+}
