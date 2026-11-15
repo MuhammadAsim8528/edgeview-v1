@@ -480,9 +480,11 @@ app.get('/api/files/:id/data', (req, res) => {
     const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
     if ((req.query.limit !== undefined && (typeof req.query.limit !== 'string' || !/^\d+$/.test(req.query.limit))) || !Number.isInteger(limit) || limit < 1 || limit > 1000
       || (req.query.offset !== undefined && (typeof req.query.offset !== 'string' || !/^\d+$/.test(req.query.offset))) || !Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ error: 'Pagination requires limit 1–1000 and a non-negative integer offset.' });
-    const rows = selectFileViewRows(file.rows || [], req.query, true);
+    const positions = new WeakMap<Record<string, unknown>, number>();
+    const rows = selectFileViewRows(file.rows || [], req.query, true, false, positions);
 
     const paginatedRows = rows.slice(offset, offset + limit);
+    const rowPositions = paginatedRows.map(row => positions.get(row));
 
     res.json({
       id: file.id,
@@ -494,6 +496,7 @@ app.get('/api/files/:id/data', (req, res) => {
       offset,
       columns: file.columns,
       rows: paginatedRows,
+      row_positions: rowPositions,
       data: paginatedRows,
       filter_options: {
         countries: file.summary?.countries_list || [],

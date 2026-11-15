@@ -10,7 +10,7 @@ export function buildExportRequest(payload: GlobalExportPayload, format: ExportF
   if (payload.sourceFileId !== undefined) {
     if (payload.dataset !== 'files' || !payload.sourceFileId) throw new Error('Invalid stored-file export source.');
     if (payload.selectedRows?.length || (payload.filters && Object.keys(payload.filters).length)) throw new Error('Full-file export cannot apply a selection or filters. Use filtered export instead.');
-    return { url: `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`, body: { ...common, ...(payload.sourceView ? { view: payload.sourceView } : {}), ...(payload.sourceColumns ? { source_columns: payload.sourceColumns } : {}) } };
+    return { url: `/api/export/file/${encodeURIComponent(payload.sourceFileId)}`, body: { ...common, ...(payload.sourceRowPositions ? { row_positions: payload.sourceRowPositions } : {}), ...(payload.sourceView ? { view: payload.sourceView } : {}), ...(payload.sourceColumns ? { source_columns: payload.sourceColumns } : {}) } };
   }
   if (payload.dataset === 'files') throw new Error('File exports require a stored file reference.');
   if (payload.dataset === 'reports') {

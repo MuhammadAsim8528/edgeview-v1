@@ -1,6 +1,6 @@
 import { safeFetchJson } from './safeFetch';
 
-export type FilePageResult = { ok: true; rows: any[]; total: number; filters: { countries: string[]; importers: string[] } } | { ok: false; error: string };
+export type FilePageResult = { ok: true; rows: any[]; rowPositions?: number[]; total: number; filters: { countries: string[]; importers: string[] } } | { ok: false; error: string };
 
 export async function loadFilePage(url: string, limit: number, offset: number, signal: AbortSignal, timeoutMs = 30_000): Promise<FilePageResult> {
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -16,5 +16,8 @@ export async function loadFilePage(url: string, limit: number, offset: number, s
     || !filters || !['countries', 'importers'].every(key => Array.isArray(filters[key]) && filters[key].every((value: unknown) => typeof value === 'string'))) {
     return { ok: false, error: 'EdgeView returned an incomplete or invalid page. Please retry.' };
   }
-  return { ok: true, rows, total, filters };
+  const positions: unknown = data.row_positions;
+  const rowPositions = Array.isArray(positions) && positions.length === rows.length
+    && positions.every(position => Number.isSafeInteger(position) && position >= 0) ? positions : undefined;
+  return { ok: true, rows, rowPositions, total, filters };
 }

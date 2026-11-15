@@ -40,6 +40,7 @@ export interface DisplayColumn {
   key: string;
   label: string;
   actualCol: string | null;
+  sourceValue?: boolean;
 }
 
 // Config for the 8 required columns in exact order with detection keywords
@@ -397,23 +398,28 @@ interface TableRowProps {
   row: Record<string, any>;
   displayColumns: DisplayColumn[];
   rowNum: number;
+  selection?: { checked: boolean; disabled: boolean; toggle: () => void };
   fileColumns: string[];
 }
 
-const TableRow = React.memo<TableRowProps>(({ row, displayColumns, rowNum, fileColumns }) => {
+const TableRow = React.memo<TableRowProps>(({ row, displayColumns, rowNum, fileColumns, selection }) => {
   const isGroupedRow = Boolean(row._isGroupedRow);
   const groupCount = row._groupCount || 1;
 
   return (
     <tr className="hover:bg-[#262626] transition-colors border-b border-[#262626]">
       <td className="px-3 py-2 font-mono text-[11px] text-center text-[#9ca3af] border-r border-[#262626] bg-[#1a1a1a]">
+        {selection && <input type="checkbox" className="mr-2" aria-label={'Select row ' + rowNum}
+          checked={selection.checked} disabled={selection.disabled} onChange={selection.toggle} />}
         {rowNum}
       </td>
       {displayColumns.map((col) => {
-        const val = getCellValue(row, col, fileColumns);
-        const isDateCol = col.key === 'date';
-        const isUsdCol = col.key === 'total_fc_usd';
-        const isItemCol = col.key === 'item';
+        const val = col.sourceValue && col.actualCol !== null
+          ? (Object.hasOwn(row, col.actualCol) ? row[col.actualCol] : '')
+          : getCellValue(row, col, fileColumns);
+        const isDateCol = !col.sourceValue && col.key === 'date';
+        const isUsdCol = !col.sourceValue && col.key === 'total_fc_usd';
+        const isItemCol = !col.sourceValue && col.key === 'item';
         let displayVal = val !== undefined && val !== null && val !== '' ? String(val) : '';
 
         if (isDateCol && displayVal !== '') {
@@ -510,11 +516,31 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   const [pageResult, setPageResult] = useState<{ key: string; result: FilePageResult } | null>(null);
   const [pageRetry, setPageRetry] = useState(0);
 
+  const [viewFieldsByFile, setViewFieldsByFile] = useState<Record<string, { key: string; header: string }[]>>({});
+  const selectedFields = file ? viewFieldsByFile[file.id] : undefined;
+  const sourceMode = !isGrouped && Boolean(selectedFields?.length);
+  const [selectedRowsByFile, setSelectedRowsByFile] = useState<Record<string, number[]>>({});
+  const selectedRows = file ? selectedRowsByFile[file.id] ?? [] : [];
+  const toggleSelectedRow = (fileId: string, position: number) => {
+    setSelectedRowsByFile(previous => {
+      const rows = previous[fileId] ?? [];
+      if (!rows.includes(position) && rows.length >= 1000) return previous;
+      return { ...previous, [fileId]: rows.includes(position) ? rows.filter(row => row !== position) : [...rows, position] };
+    });
+  };
+  const availableFields = [...new Set(file?.columns ?? [])];
+  const updateViewerFields = (change: (fields: { key: string; header: string }[]) => { key: string; header: string }[]) => {
+    if (file) setViewFieldsByFile(previous => ({ ...previous, [file.id]: change(previous[file.id] ?? []) }));
+    setSortColumn(null);
+    setCurrentPage(1);
+  };
+
   // Server-side paginated mode enforced for any file without rows or with > 50 rows
-  const isServerSide = !file?.rows || file.rows.length === 0 || file.rows.length > 50;
+  const isServerSide = !isGrouped || !file?.rows || file.rows.length === 0 || file.rows.length > 50;
   const pageParams = new URLSearchParams({ limit: String(pageSize), offset: String((currentPage - 1) * pageSize),
     group_shipments: String(isGrouped), search: debouncedSearch, product: productFilter, country: countryFilter,
     importer: importerFilter, start_date: startDate, end_date: endDate });
+  if (sourceMode) pageParams.set('source_values', 'true');
   if (sortColumn) { pageParams.set('sort_by', sortColumn); pageParams.set('sort_dir', sortDirection); }
   const pageUrl = file?.id && isServerSide ? `/api/files/${encodeURIComponent(file.id)}/data?${pageParams}` : '';
   const pageKey = `${pageUrl}#${pageRetry}`;
@@ -592,9 +618,12 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   }, [fileColumns]);
 
   const visibleDisplayColumns = useMemo(() => {
+    if (sourceMode && selectedFields) {
+      return selectedFields.map(({ key, header }) => ({ key, actualCol: key, label: header.trim() || key, sourceValue: true }));
+    }
     const allowedKeys = ['date', 'importer', 'country', 'exporter', 'item', 'total_fc_usd'];
     return displayColumns.filter((col) => allowedKeys.includes(col.key));
-  }, [displayColumns]);
+  }, [displayColumns, selectedFields, sourceMode]);
 
   // 1. Grouping Logic: Combine items & sum FC when isGrouped is true
   const processedData = useMemo(() => {
@@ -864,7 +893,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
     onOpenExport({
       dataset: 'files', title: `${file.name} (Filtered)`, records: [],
       sourceFileId: file.id, recordCount: effectiveTotalCount,
-      detectedSourceColumns: isGrouped ? undefined : [...new Set(file.columns ?? [])],
+      detectedSourceColumns: isGrouped ? undefined : availableFields,
+      sourceColumns: sourceMode ? selectedFields!.map(({ key, header }) => ({ key, header: header.trim() || key })) : undefined,
       sourceView: { group_shipments: String(isGrouped), search: debouncedSearch,
         product: productFilter, country: countryFilter, importer: importerFilter,
         start_date: startDate, end_date: endDate,
@@ -1053,6 +1083,53 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             <span>Export Filtered</span>
           </button>
 
+          {availableFields.length > 0 && (
+            <details className="relative text-xs">
+              <summary className="cursor-pointer rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-2">Display columns</summary>
+              <div className="absolute right-0 z-20 mt-1 max-h-64 w-80 space-y-2 overflow-y-auto rounded-lg border border-[#444] bg-[#1a1a1a] p-3 shadow-lg">
+                {isGrouped ? <p>Turn off shipment grouping to display source columns.</p> : (
+                  <>
+                    <p>Choose fields from this file. Clear the selection to use the standard view.</p>
+                    {availableFields.map(key => {
+                      const value = selectedFields?.find(field => field.key === key);
+                      return (
+                        <div className="grid grid-cols-2 items-center gap-2" key={key}>
+                          <label className="flex min-w-0 items-center gap-2">
+                            <input type="checkbox" checked={Boolean(value)} disabled={!value && (selectedFields?.length ?? 0) >= 64}
+                              onChange={event => updateViewerFields(fields => event.target.checked
+                                ? [...fields, { key, header: key.slice(0, 120) }] : fields.filter(field => field.key !== key))} />
+                            <span className="truncate" title={key}>{key}</span>
+                          </label>
+                          {value && <input aria-label={'Display heading for ' + key} maxLength={120}
+                            className="min-w-0 rounded border border-[#444] bg-[#171717] px-2 py-1"
+                            value={value.header} onChange={event => {
+                              const header = event.target.value;
+                              updateViewerFields(fields => fields.map(field => field.key === key ? { key, header } : field));
+                            }} />}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            </details>
+          )}
+
+          {!isGrouped && selectedRows.length > 0 && (
+            <div className="flex items-center gap-2 text-xs">
+              <button type="button" className="rounded border border-[#444] px-3 py-2" onClick={() => {
+                onOpenExport?.({
+                  dataset: 'files', title: file.name + ' (Selected Rows)', records: [],
+                  sourceFileId: file.id, recordCount: selectedRows.length, sourceRowPositions: selectedRows,
+                  detectedSourceColumns: availableFields,
+                  sourceColumns: sourceMode ? selectedFields!.map(({ key, header }) => ({ key, header: header.trim() || key })) : undefined,
+                });
+              }}>Export selected ({selectedRows.length} of 1,000 max)</button>
+              <button type="button" className="rounded border border-[#444] px-3 py-2"
+                onClick={() => setSelectedRowsByFile(previous => ({ ...previous, [file.id]: [] }))}>Clear selection</button>
+            </div>
+          )}
+
           {/* Export all stored rows through the server-owned report pipeline. */}
           <button
             onClick={() => {
@@ -1063,7 +1140,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                   title: `${file.name} (Full Dataset)`,
                   records: [],
                   sourceFileId: file.id,
-                  detectedSourceColumns: [...new Set(file.columns ?? [])],
+                  detectedSourceColumns: availableFields,
+                  sourceColumns: sourceMode ? selectedFields!.map(({ key, header }) => ({ key, header: header.trim() || key })) : undefined,
                   recordCount: file.summary?.total_rows ?? file.rows?.length ?? 0,
                   filenamePrefix: `EdgeView_${baseName}_Full`,
                 });
@@ -1372,7 +1450,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 {displayRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={displayColumns.length + 1}
+                      colSpan={visibleDisplayColumns.length + 1}
                       className="px-4 py-12 text-center text-[#9ca3af] bg-[#1a1a1a]"
                     >
                       <div className="max-w-xs mx-auto space-y-2">
@@ -1397,6 +1475,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                   </tr>
                 ) : (
                   displayRows.map((row, rIdx) => {
+                    const position = !isGrouped && activePage?.ok ? activePage.rowPositions?.[rIdx] : undefined;
                     const rowNum = (currentPage - 1) * pageSize + rIdx + 1;
                     return (
                       <TableRow
@@ -1404,6 +1483,11 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                         row={row}
                         displayColumns={visibleDisplayColumns}
                         rowNum={rowNum}
+                        selection={position === undefined ? undefined : {
+                          checked: selectedRows.includes(position),
+                          disabled: selectedRows.length >= 1000 && !selectedRows.includes(position),
+                          toggle: () => toggleSelectedRow(file.id, position),
+                        }}
                         fileColumns={fileColumns}
                       />
                     );

@@ -255,6 +255,18 @@ try {
     body: JSON.stringify({ ...exportPayload, format: 'csv', source_columns: selectedColumns }) });
   assert.equal(custom.status, 200);
   assert.equal((await custom.text()).replace(/^\uFEFF/u, ''), '"Supplier label","Product label"\r\n"Exporter One","Product One"');
+  const rawPage = await fetch(`${base}/api/files/${encodeURIComponent(uploadedId)}/data?source_values=true&country=Niger&importer=Alpha`);
+  assert.equal(rawPage.status, 200);
+  const raw = await rawPage.json();
+  assert.equal(raw.rows[0].Exporter, 'Exporter One');
+  assert.equal(raw.row_positions.length, 1);
+  const { view: _view, ...selectionPayload } = exportPayload;
+  for (const positions of [raw.row_positions, [999999], [raw.row_positions[0], raw.row_positions[0]]]) {
+    const response = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...selectionPayload, format: 'csv', source_columns: selectedColumns, row_positions: positions }) });
+    assert.equal(response.status, positions === raw.row_positions ? 200 : 400);
+    if (response.ok) assert.equal((await response.text()).replace(/^\uFEFF/u, ''), '"Supplier label","Product label"\r\n"Exporter One","Product One"');
+  }
   const unknownColumn = await fetch(exportUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...exportPayload, format: 'csv', source_columns: [{ key: 'nonexistent', header: 'Hidden field' }] }) });
   assert.equal(unknownColumn.status, 400, 'unknown client columns cannot change the export');

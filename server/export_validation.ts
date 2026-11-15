@@ -102,8 +102,17 @@ export function resolveStoredContactExport(input: unknown, contacts: Array<{ id:
 export function resolveStoredFileExport(input: unknown, rows: any[], sourceColumns: readonly string[] = []) {
   if (!record(input)) throw new ExportValidationError('Export payload must be an object.');
   if (input.dataset !== undefined && input.dataset !== 'files') throw new ExportValidationError('Stored-file export requires the files dataset.');
-  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format', 'view', 'source_columns'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
+  if (Object.keys(input).some(key => !['dataset', 'title', 'filenamePrefix', 'format', 'view', 'source_columns', 'row_positions'].includes(key))) throw new ExportValidationError('Full-file export does not accept client rows, selections, filters or other overrides.');
   let selected = rows;
+  if (input.row_positions !== undefined) {
+    const positions = input.row_positions;
+    if (input.view !== undefined || !Array.isArray(positions) || positions.length === 0 || positions.length > 1000
+      || positions.some(position => !Number.isInteger(position) || position < 0 || position >= rows.length)
+      || new Set(positions).size !== positions.length) {
+      throw new ExportValidationError('Choose up to 1,000 unique stored rows without view filters.');
+    }
+    selected = positions.map(position => rows[position]);
+  }
   if (input.view !== undefined) {
     try { selected = selectFileViewRows(rows, input.view, false, input.source_columns !== undefined); }
     catch (error) { if (error instanceof FileViewValidationError) throw new ExportValidationError(error.message); throw error; }

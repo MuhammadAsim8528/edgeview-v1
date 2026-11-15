@@ -62,3 +62,33 @@ test('filtered grouped export uses the stored file and server view, not browser 
     expect(noScope.status()).toBe(400); expect((await noScope.json()).code).toBe('INVALID_EXPORT_REQUEST');
   }
 });
+
+
+test('detected headings and selected rows carry through to a stored-file download', async ({ page, context, runtime }) => {
+  await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
+  await runtime.identity();
+  await page.goto('/');
+  const uploaded = page.waitForResponse(r => r.url().endsWith('/api/files/upload') && r.request().method() === 'POST');
+  const csv = 'Date,Importer,Country,Exporter,Item,TOT_FC\n2026-01-01,Buyer A,Kenya,Supplier,Selected item,10\n2026-01-02,Buyer B,Pakistan,Supplier,Excluded item,20';
+  await page.locator('#file-upload-input').setInputFiles({ name: 'column-options.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  expect((await uploaded).status()).toBe(201);
+  await page.getByRole('button', { name: 'Group Shipments ON' }).click();
+  await page.getByText('Display columns', { exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Item', exact: true }).check();
+  await page.getByRole('textbox', { name: 'Display heading for Item' }).fill('Product label');
+  await expect(page.getByRole('columnheader', { name: 'Product label' })).toBeVisible();
+  await page.getByText('Display columns', { exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'Selected item' }).getByRole('checkbox').check();
+  await page.getByRole('button', { name: /Export selected \(1/ }).click();
+  const submitted = page.waitForRequest(r => new URL(r.url()).pathname.startsWith('/api/export/file/') && r.method() === 'POST');
+  const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
+  await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
+  const body = (await submitted).postDataJSON();
+  expect(body.row_positions).toHaveLength(1);
+  expect(body.source_columns).toEqual([{ key: 'Item', header: 'Product label' }]);
+  expect(body).not.toHaveProperty('records');
+  const stream = await (await downloading).createReadStream();
+  const parts: Buffer[] = [];
+  for await (const part of stream!) parts.push(Buffer.from(part));
+  expect(Buffer.concat(parts).toString('utf8').replace(/^\uFEFF/u, '')).toBe('"Product label"\r\n"Selected item"');
+});

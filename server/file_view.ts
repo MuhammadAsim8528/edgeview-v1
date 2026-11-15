@@ -4,11 +4,12 @@ export class FileViewValidationError extends Error {}
 const viewKeys = ['search','sort_by','sort_dir','group_shipments','group','product','country','importer','start_date','end_date'];
 
 /** Shared derived view for paging and export; input never supplies row values. */
-export function selectFileViewRows(storedRows: Record<string, unknown>[], input: unknown, allowPaging = false, retainSourceValues = false) {
+export function selectFileViewRows(storedRows: Record<string, unknown>[], input: unknown, allowPaging = false, retainSourceValues = false, positions?: WeakMap<Record<string, unknown>, number>) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new FileViewValidationError('File view must be an object.');
   const view = input as Record<string, string>;
   for (const [key, value] of Object.entries(view)) {
     if (allowPaging && ['limit','offset'].includes(key)) continue;
+    if (allowPaging && key === 'source_values' && value === 'true') { retainSourceValues = true; continue; }
     if (!viewKeys.includes(key) || typeof value !== 'string' || value.length > 1000) throw new FileViewValidationError('Unsupported or invalid file view option.');
   }
   for (const key of ['group_shipments','group']) if (view[key] !== undefined && !['true','false'].includes(view[key])) throw new FileViewValidationError('Invalid shipment grouping option.');
@@ -26,8 +27,9 @@ export function selectFileViewRows(storedRows: Record<string, unknown>[], input:
 
   if (retainSourceValues && isGrouped) throw new FileViewValidationError('Source columns require ungrouped rows.');
   const sourceByView = retainSourceValues ? new WeakMap<Record<string, unknown>, Record<string, unknown>>() : null;
-  let rows = storedRows.map(row => {
+  let rows = storedRows.map((row, index) => {
     const normalized = normalizeRow(row);
+    if (!isGrouped) positions?.set(retainSourceValues ? row : normalized, index);
     sourceByView?.set(normalized, row);
     return normalized;
   });
@@ -66,8 +68,8 @@ export function selectFileViewRows(storedRows: Record<string, unknown>[], input:
 
   if (sortBy) {
     rows = [...rows].sort((a, b) => {
-      const valA = a[sortBy];
-      const valB = b[sortBy];
+      const valA = (sourceByView?.get(a) ?? a)[sortBy];
+      const valB = (sourceByView?.get(b) ?? b)[sortBy];
       if (typeof valA === 'number' && typeof valB === 'number') {
         return sortDir === 'asc' ? valA - valB : valB - valA;
       }

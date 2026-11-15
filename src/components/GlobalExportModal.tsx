@@ -28,6 +28,7 @@ export interface GlobalExportPayload {
   sourceReportId?: string;
   sourceView?: Record<string, string>;
   detectedSourceColumns?: string[];
+  sourceRowPositions?: number[];
   sourceColumns?: { key: string; header: string }[];
   recordCount?: number;
   defaultReportType?: ExportReportType;
@@ -46,8 +47,8 @@ export const GlobalExportModal: React.FC<GlobalExportModalProps> = ({ isOpen, on
   isOpen && payload ? <ExportDialog key={`${payload.dataset}:${payload.title}:${payload.defaultReportType || 'importer'}`} onClose={onClose} payload={payload} /> : null;
 
 const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload }> = ({ onClose, payload }) => {
-  const [customColumns, setCustomColumns] = useState(false);
-  const [sourceColumns, setSourceColumns] = useState<{ key: string; header: string }[]>([]);
+  const [customColumns, setCustomColumns] = useState(Boolean(payload.sourceColumns?.length));
+  const [sourceColumns, setSourceColumns] = useState<{ key: string; header: string }[]>(payload.sourceColumns ?? []);
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('csv');
   const [reportType, setReportType] = useState<ExportReportType>(payload.defaultReportType || 'importer');
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -72,7 +73,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
       setExportProgress(40);
       setExportStep(`Processing ${effectiveCount} record${effectiveCount === 1 ? '' : 's'} for ${selectedFormat.toUpperCase()} export...`);
 
-      const request = buildExportRequest(customColumns ? { ...payload, sourceColumns } : payload, selectedFormat, reportType);
+      const request = buildExportRequest({ ...payload, sourceColumns: customColumns ? sourceColumns : undefined }, selectedFormat, reportType);
 
       setExportProgress(65);
       setExportStep(
