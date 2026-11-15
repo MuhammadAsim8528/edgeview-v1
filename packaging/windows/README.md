@@ -26,3 +26,18 @@ Do not install a test certificate, weaken Application Control, wire this candida
 into a customer package, or mark GUI/clean-Windows acceptance from compilation.
 The normal application and the older internal MSIX prototype do not use this
 candidate yet. Keep it reviewable until trust and runtime acceptance are possible.
+
+## Disposable guest findings
+
+Windows Sandbox installed and launched the prototype after signing a separate
+copy with a guest-only test certificate. The upgrade from package 0.0.0.2 to
+0.0.0.3 retained the synthetic data and installation identity. Ordinary
+installation of the older package was refused. Uninstalling did remove the
+prototype's local state, so copy a verified stopped-state backup outside the
+package's data area before any uninstall or repair that removes the package.
+
+The current recovery procedure prepares a fresh data directory from a backup
+whose manifest digest and database schema are checked. The copy does not
+overwrite active data. Use the matching application build for that schema.
+Installed activation, compatible rollback and production signing remain
+release requirements.
