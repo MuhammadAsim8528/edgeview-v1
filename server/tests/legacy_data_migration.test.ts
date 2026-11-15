@@ -40,6 +40,8 @@ try {
   }
   assert.equal(fs.existsSync(path.join(success.destination, 'README.md')), false);
   assert.equal(resolveRuntimeDataRoot(success.source, { EDGEVIEW_DATA_DIR: success.destination }), success.destination);
+  assert.equal(resolveRuntimeDataRoot(success.source, { EDGEVIEW_DATA_DIR: success.destination, EDGEVIEW_REQUIRE_RECOVERY_COPY: '1' }), success.destination);
+  assert.throws(() => resolveRuntimeDataRoot(success.source, { EDGEVIEW_REQUIRE_RECOVERY_COPY: '1' }), /MIGRATION_INCOMPLETE/);
   assert.equal(fs.existsSync(path.join(success.source, 'edgeview.db.lock.maintenance')), false);
   assert.equal(fs.existsSync(path.join(success.destination, 'edgeview.db.lock.maintenance')), false);
   await assert.rejects(copyLegacyRuntimeData(success.source, success.destination), 'never overlay existing accepted or stale data');

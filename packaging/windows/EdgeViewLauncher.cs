@@ -18,7 +18,7 @@ internal sealed class RuntimeOwner {
     internal int Port { get; private set; }
     internal int Pid { get { return child.Id; } }
     internal string BuildId { get; private set; }
-    internal bool Start() {
+    internal bool Start(string recoveredData = null) {
         int port;
         string configured = Environment.GetEnvironmentVariable("PORT");
         if (String.IsNullOrEmpty(configured)) port = 3901;
@@ -45,7 +45,8 @@ internal sealed class RuntimeOwner {
         start.EnvironmentVariables["PORT"] = Port.ToString();
         // Prototype storage namespace only. The Node runtime remains the single
         // authority validating the chosen data path and its ancestors.
-        string data = Environment.GetEnvironmentVariable("EDGEVIEW_DATA_DIR");
+        string data = recoveredData ?? Environment.GetEnvironmentVariable("EDGEVIEW_DATA_DIR");
+        if (recoveredData != null) start.EnvironmentVariables["EDGEVIEW_REQUIRE_RECOVERY_COPY"] = "1";
         start.EnvironmentVariables["EDGEVIEW_DATA_DIR"] = String.IsNullOrEmpty(data)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EdgeViewPrototype", "state") : data;
         start.EnvironmentVariables["EDGEVIEW_MONITORING_ENABLED"] = "0";
@@ -68,7 +69,11 @@ internal sealed class RuntimeOwner {
                     var health = json.Deserialize<Dictionary<string, object>>(text.ToString());
                     var app = (Dictionary<string, object>)health["app"];
                     var build = (Dictionary<string, object>)app["build"];
-                    if (Convert.ToInt32(app["pid"]) == child.Id && Convert.ToString(build["buildId"]) == BuildId) return true;
+                    bool recoveryRootMatches = recoveredData == null || String.Equals(
+                        Path.GetFullPath(recoveredData).TrimEnd(Path.DirectorySeparatorChar),
+                        Convert.ToString(app["data_root"]).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+                    if (Convert.ToString(app["status"]) == "ok" && Convert.ToInt32(app["pid"]) == child.Id
+                        && Convert.ToString(build["buildId"]) == BuildId && recoveryRootMatches) return true;
                 }
             } catch { /* bounded readiness retry; never attach another listener */ }
             Thread.Sleep(100);
@@ -95,19 +100,29 @@ internal sealed class LauncherWindow : Form {
     private readonly Label status = new Label();
     private readonly Button open = new Button();
     private readonly Button close = new Button();
+    private readonly Button recover = new Button();
     private bool starting = true, stopping, allowClose;
     internal LauncherWindow() {
-        Text = "EdgeView — internal launcher candidate"; Width = 430; Height = 190;
+        Text = "EdgeView — internal launcher candidate"; Width = 430; Height = 230;
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         status.Text = "Starting EdgeView…"; status.SetBounds(20, 20, 375, 45);
         open.Text = "Open EdgeView"; open.SetBounds(20, 85, 160, 35); open.Enabled = false;
         close.Text = "Close EdgeView"; close.SetBounds(220, 85, 160, 35);
-        Controls.Add(status); Controls.Add(open); Controls.Add(close);
+        recover.Text = "Open prepared recovery folder"; recover.SetBounds(20, 130, 360, 35); recover.Enabled = false;
+        Controls.Add(status); Controls.Add(open); Controls.Add(close); Controls.Add(recover);
         open.Click += delegate { try { owner.OpenBrowser(); } catch { status.Text = "Could not open your browser. Try Open EdgeView again."; } };
         close.Click += delegate { Close(); };
+        recover.Click += async delegate {
+            using (var picker = new FolderBrowserDialog()) {
+                picker.Description = "Choose the prepared recovery folder, which EdgeView will open for this session.";
+                picker.ShowNewFolderButton = false;
+                if (picker.ShowDialog(this) != DialogResult.OK) return;
+                await StartRecovery(picker.SelectedPath);
+            }
+        };
         Shown += async delegate {
             bool ready = false; try { ready = await Task.Run(() => owner.Start()); } catch { }
-            starting = false; open.Enabled = ready;
+            starting = false; open.Enabled = ready; recover.Enabled = true;
             status.Text = ready ? "EdgeView is running. Use this window to close it safely." : "EdgeView could not start. Close another running instance and try again, or contact the owner.";
             if (ready) { try { owner.OpenBrowser(); } catch { status.Text = "EdgeView is ready. Select Open EdgeView to try your browser again."; } }
         };
@@ -115,13 +130,44 @@ internal sealed class LauncherWindow : Form {
             if (allowClose) return; e.Cancel = true;
             if (starting) { status.Text = "Please wait for startup to finish, then close EdgeView."; return; }
             if (stopping) return;
-            stopping = true; open.Enabled = false; close.Enabled = false; status.Text = "Saving and closing EdgeView…";
+            stopping = true; open.Enabled = false; close.Enabled = false; recover.Enabled = false; status.Text = "Saving and closing EdgeView…";
             int code = await Task.Run(() => owner.Stop());
             stopping = false;
             if (code == -1) { status.Text = "EdgeView is still closing. Retry Close, or contact the owner. Do not restart it yet."; close.Enabled = true; return; }
             if (code != 0) MessageBox.Show("EdgeView closed with a recovery warning. Some recent changes may not have been saved. Please contact the owner.", "EdgeView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             allowClose = true; Close();
         };
+    }
+
+    private async Task StartRecovery(string directory) {
+        starting = true;
+        open.Enabled = false; close.Enabled = false; recover.Enabled = false;
+        status.Text = "Closing the current session before opening recovery…";
+        try {
+            int code = await Task.Run(() => owner.Stop());
+            if (code == -1) {
+                status.Text = "EdgeView is still closing. Wait before trying recovery again.";
+                return;
+            }
+            if (code != 0 && MessageBox.Show("The previous session closed with a warning. Open the prepared recovery copy?",
+                "EdgeView", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            status.Text = "Opening the prepared recovery copy…";
+            bool ready = false;
+            try { ready = await Task.Run(() => owner.Start(directory)); } catch { }
+            if (!ready) {
+                await Task.Run(() => owner.Stop());
+                status.Text = "Recovery copy could not open. Check the prepared folder and matching app version.";
+                return;
+            }
+            open.Enabled = true;
+            status.Text = "Recovery copy is open for this session.";
+            try { owner.OpenBrowser(); } catch { status.Text = "Recovery copy is open. Select Open EdgeView to try your browser again."; }
+        } catch {
+            status.Text = "Recovery copy could not open. Check the prepared folder and matching app version.";
+        } finally {
+            starting = false;
+            close.Enabled = true; recover.Enabled = true;
+        }
     }
 }
 

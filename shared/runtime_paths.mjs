@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 // Legacy installations retain app-root state until explicitly migrated.
 export function resolveRuntimeDataRoot(appRoot, env = process.env) {
   const root = resolveRuntimeDataRootPath(appRoot, env.EDGEVIEW_DATA_DIR);
-  assertMigrationCopyReady(root);
+  assertMigrationCopyReady(root, env.EDGEVIEW_REQUIRE_RECOVERY_COPY === '1');
   return root;
 }
 
@@ -26,14 +26,14 @@ export function resolveRuntimeDataRootPath(appRoot, configured) {
   return root;
 }
 
-export function assertMigrationCopyReady(root) {
+export function assertMigrationCopyReady(root, required = false) {
   const present = file => {
     try { return fs.lstatSync(file); }
     catch (error) { if (error.code !== 'ENOENT') throw error; return null; }
   };
   const marker = present(path.join(root, 'migration.json'));
   const readyFile = path.join(root, 'migration.ready.json'), ready = present(readyFile);
-  if (!marker && !ready) return;
+  if (!required && !marker && !ready) return;
   const refused = () => new Error('LEGACY_MIGRATION_INCOMPLETE: This data copy has not passed preparation. Original storage was retained.');
   if (!marker || !ready || marker.isSymbolicLink() || ready.isSymbolicLink()
     || !marker.isFile() || marker.nlink !== 1 || marker.size > 16 * 1024 * 1024
