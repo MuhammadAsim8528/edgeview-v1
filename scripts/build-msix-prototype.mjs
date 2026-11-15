@@ -79,11 +79,12 @@ export async function buildMsixPrototype(root, revision) {
   const license = await boundedLicense(version);
   const output = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-msix-candidate-'));
   const app = path.join(output, 'app'); fs.mkdirSync(app);
-  const execute = (executable, args, cwd, label) => {
+  const execute = (executable, args, cwd, label, timeout = 600_000) => {
     const log = fs.openSync(path.join(output, `${label}.log`), 'wx');
     let result;
-    try { result = spawnSync(executable, args, { cwd, env, stdio: ['ignore', log, log], windowsHide: true, timeout: 600_000 }); }
+    try { result = spawnSync(executable, args, { cwd, env, stdio: ['ignore', log, log], windowsHide: true, timeout }); }
     finally { fs.closeSync(log); }
+    if (result.error?.code === 'ETIMEDOUT') throw new Error(`MSIX_PROTOTYPE_${label.toUpperCase()}_TIMEOUT`);
     if (result.status !== 0) throw new Error(`MSIX_PROTOTYPE_${label.toUpperCase()}_FAILED`);
   };
   try {
@@ -144,7 +145,8 @@ export async function buildMsixPrototype(root, revision) {
     const mapping = path.join(output, 'mapping.txt');
     fs.writeFileSync(mapping, '[Files]\r\n' + files.map(file => `"${path.join(app, file.path)}" "${file.path.replaceAll('/', '\\')}"`).join('\r\n') + '\r\n');
     const name = `EdgeView-${identity.version}-${commit.slice(0, 7)}-pkg-${manifestVersion}-UNSIGNED.msix`, archive = path.join(output, name);
-    execute(makeappx, ['pack', '/f', mapping, '/p', archive, '/no', '/ml', '536870912'], root, 'makeappx');
+    // On slower Windows disks, full SDK validation can outlast dependency staging.
+    execute(makeappx, ['pack', '/f', mapping, '/p', archive, '/no', '/ml', '536870912'], root, 'makeappx', 1_200_000);
     const report = { status: 'UNSIGNED_INTERNAL_NOT_RELEASE_READY', customerRuntimeReady: false, commit, build: identity,
       manifestVersion, runtimeInputs: { ...runtimeLockEvidence, runtimeLockSha256, excludedBuildRoots: inputs.excludedBuildRoots, sourceLockSha256: notices.sourceLockSha256, noticesSha256: notices.noticesSha256, noticeCapture: notices.capture }, runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
       package: { name, sha256: digest(archive), files: files.length }, files,
