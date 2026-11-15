@@ -1,4 +1,5 @@
 import { test, expect, EXPORT_ARTIFACT_TIMEOUT_MS } from './fixtures';
+import { extractPdfText, pdfTextContains } from '../../server/tests/pdf_inspect';
 
 test('filtered grouped export uses the stored file and server view, not browser rows', async ({ page, context, runtime, request }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
@@ -64,7 +65,7 @@ test('filtered grouped export uses the stored file and server view, not browser 
 });
 
 
-test('detected headings and selected rows carry through to a stored-file download', async ({ page, context, runtime }) => {
+test('detected headings and selected rows carry through to a stored-file download', async ({ page, context, runtime, request }) => {
   await context.route('**/*', route => new URL(route.request().url()).origin === runtime.baseURL ? route.continue() : route.abort('blockedbyclient'));
   await runtime.identity();
   await page.goto('/');
@@ -83,7 +84,8 @@ test('detected headings and selected rows carry through to a stored-file downloa
   const submitted = page.waitForRequest(r => new URL(r.url()).pathname.startsWith('/api/export/file/') && r.method() === 'POST');
   const downloading = page.waitForEvent('download', { timeout: EXPORT_ARTIFACT_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Proceed / Export', exact: true }).click();
-  const body = (await submitted).postDataJSON();
+  const sent = await submitted;
+  const body = sent.postDataJSON();
   expect(body.row_positions).toHaveLength(1);
   expect(body.source_columns).toEqual([{ key: 'Item', header: 'Product label' }]);
   expect(body).not.toHaveProperty('records');
@@ -91,4 +93,10 @@ test('detected headings and selected rows carry through to a stored-file downloa
   const parts: Buffer[] = [];
   for await (const part of stream!) parts.push(Buffer.from(part));
   expect(Buffer.concat(parts).toString('utf8').replace(/^\uFEFF/u, '')).toBe('"Product label"\r\n"Selected item"');
+  const pdf = await request.post(new URL(sent.url()).pathname, { data: { ...body, format: 'pdf' } });
+  expect(pdf.status()).toBe(200);
+  const text = extractPdfText(await pdf.body());
+  expect(pdfTextContains(text, 'Product label')).toBe(true);
+  expect(pdfTextContains(text, 'Selected item')).toBe(true);
+  expect(pdfTextContains(text, 'Excluded item')).toBe(false);
 });
