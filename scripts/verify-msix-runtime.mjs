@@ -133,6 +133,19 @@ try {
     else if(format==='pdf')assert.equal(bytes.subarray(0,5).toString(),'%PDF-');
     else {const zip=await JSZip.loadAsync(bytes);if(format==='xlsx'||format==='docx')assert.ok((await zip.file(format==='xlsx'?'xl/sharedStrings.xml':'word/document.xml').async('string')).includes('Synthetic Package Buyer'));else for(const extension of ['csv','xlsx','docx','pdf'])assert.ok(Object.keys(zip.files).some(name=>name.endsWith('.'+extension)));}
   }
+  const page = await fetch(`${base}/api/files/${encodeURIComponent(fileId)}/data?source_values=true&country=Kenya`);
+  assert.equal(page.status, 200);
+  const selected = await page.json();
+  assert.equal(selected.rows.length, 1);
+  assert.equal(selected.row_positions.length, 1);
+  assert.equal(selected.rows[0].Country, 'Kenya');
+  const selectedCsv = await fetch(`${base}/api/export/file/${encodeURIComponent(fileId)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataset: 'files', format: 'csv', title: 'Selected Package Fixture',
+      row_positions: selected.row_positions, source_columns: [{ key: 'Country', header: 'Buyer country' }] }),
+  });
+  assert.equal(selectedCsv.status, 200);
+  assert.equal((await selectedCsv.text()).replace(/^\uFEFF/u, ''), '"Buyer country"\r\n"Kenya"');
   const matching = (await companies()).filter(contact => contact.company_name === 'Synthetic Package Buyer');
   assert.equal(matching.length, 2); assert.notEqual(matching[0].id, matching[1].id);
   const buyer = matching.find(contact => contact.country === 'Kenya'); assert.ok(buyer);
@@ -149,7 +162,7 @@ try {
   assert.ok((await companies()).some(contact => contact.id === buyer.id)); await stop();
   for (const name of ['config.json', 'edgeview.db', 'edgeview_db.json', 'data', 'logs', 'uploads']) assert.equal(fs.existsSync(path.join(app, name)), false);
   const result = { status: 'EXTRACTED_RUNTIME_SCOPED_PASS', commit: report.commit, build: report.build.buildId, packageSha256: report.package.sha256,
-    bundledNodeUsed: true, runtimeDependencyRoots: Object.keys(inputs.manifest.dependencies).length, buildPackagesOmitted: true, frontendNoticesRetained: true, fiveFormats: true, staticModeDespiteHostDevFlag: true, globalNodeOnPath: false, NODE_PATH: '', firstLaunchEmpty: true, syntheticCountryIdentityUploadExport: true,
+    bundledNodeUsed: true, runtimeDependencyRoots: Object.keys(inputs.manifest.dependencies).length, buildPackagesOmitted: true, frontendNoticesRetained: true, fiveFormats: true, selectedStoredRowAndRenamedHeading: true, staticModeDespiteHostDevFlag: true, globalNodeOnPath: false, NODE_PATH: '', firstLaunchEmpty: true, syntheticCountryIdentityUploadExport: true,
     missingProvider503: true, durableOwnerPipeClose: true, restartIdentityData: true, diagnosticPrivateMarkersAbsent: true, appRootWrites: false,
     nativeLauncher: 'NOT EXECUTED', installedActivation: 'NOT VERIFIED', cleanWindows: 'NOT VERIFIED', updatesRollback: 'NOT VERIFIED',
     realCompanyResearch: 'NOT VERIFIED BY THIS PROBE', monitoring: 'DISABLED IN PROTOTYPE', finalVerdict: 'NOT READY' };
