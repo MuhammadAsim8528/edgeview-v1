@@ -149,7 +149,7 @@ This is the full owner acceptance view, not a replacement for the goal/evidence 
 - [~] SEC02/CI01: **Dependencies and secret scanning** Resolve dependency findings and verify final secret/history/package scans, licenses and SBOM.
 - [ ] SEC02: **Exposed key rotation** Owner plans to revoke previously exposed keys later. Track the account action separately from local engineering and verify it when completed.
 - [~] MON01/MON02: **Monitoring delivery and privacy** Current compiled-build controlled Sentry/PostHog and render-error API receipts verified in authenticated dashboards; actual crash, alert/retention and final installed-build acceptance remain open.
-- [~] DIAG01: **Diagnostics and support** Finish diagnostics, redaction, retention and support instructions/acceptance.
+- [~] DIAG01: **Diagnostics and support** Finish diagnostics, redaction, retention and support instructions/acceptance. Isolated Chromium on the compiled 6f2c19f application verified preview error/retry, redaction, accepted schema and exact download content after correcting the stale schema expectation in 0003514. Synthetic frontend boundary recovery, disabled monitoring and log retry also passed. Installed acceptance remains open.
 - [~] PRIV01/UX01: **Privacy and license notices** Finish truthful privacy, external-provider disclosures, About and third-party notices.
 - [x] ID01: **Installation identity recovery** Creation, persistence, corruption recovery, reset and test isolation passed. The verified backup, migrated desktop identity and live health response agree after restart. Deferred licensing design remains in EDGEVIEW_LICENSING_DESIGN.md.
 
