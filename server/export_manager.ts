@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
@@ -309,6 +308,7 @@ export function generateCsvData(columns: ColumnDef[], records: any[]): string {
 
 // 2. XLSX Workbook Generator
 export async function generateXlsxWorkbook(title: string, columns: ColumnDef[], records: any[]): Promise<Buffer> {
+  const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'EdgeView';
   workbook.created = new Date();

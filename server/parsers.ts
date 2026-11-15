@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import mammoth from 'mammoth';
 import { checkTextColumnCount, TextParseBudget, TextParseLimitError, TEXT_PARSE_LIMITS } from './text_parse_budget';
 
@@ -725,6 +724,7 @@ export async function parseFile(
       if (ext === 'xls') {
         return { file_type: 'Excel', columns: [], rows: [], error: 'Legacy .xls files are not accepted. Save the workbook as .xlsx and upload it again.' };
       }
+      const { default: ExcelJS } = await import('exceljs');
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer as any);
       const sheet = workbook.worksheets[0];

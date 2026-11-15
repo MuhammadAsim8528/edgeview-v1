@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
-import ExcelJS from 'exceljs';
+import { createRequire } from 'node:module';
 import { parseFile } from '../parsers';
 import { generateXlsxWorkbook } from '../export_manager';
 
+const require = createRequire(import.meta.url);
+const excelEntry = require.resolve('exceljs');
+assert.equal(require.cache[excelEntry], undefined, 'loading parser/export routes must not load ExcelJS');
+const csv = await parseFile('fixture.csv', Buffer.from('Company,Country\nSynthetic Medical,Kenya\n'));
+assert.equal(csv.rows.length, 1);
+assert.equal(require.cache[excelEntry], undefined, 'CSV does not load ExcelJS');
+
+const { default: ExcelJS } = await import('exceljs');
 const workbook = new ExcelJS.Workbook();
 const sheet = workbook.addWorksheet('Input');
 sheet.addRow(['Company', 'Country', 'Amount']);
