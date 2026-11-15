@@ -122,8 +122,9 @@ internal sealed class LauncherWindow : Form {
         };
         Shown += async delegate {
             bool ready = false; try { ready = await Task.Run(() => owner.Start()); } catch { }
-            starting = false; open.Enabled = ready; recover.Enabled = true;
-            status.Text = ready ? "EdgeView is running. Use this window to close it safely." : "EdgeView could not start. Close another running instance and try again, or contact the owner.";
+            bool stopped = ready || await ReportFailedStart("EdgeView could not start. Close another running instance and try again, or contact the owner.");
+            starting = false; open.Enabled = ready; recover.Enabled = stopped;
+            if (ready) status.Text = "EdgeView is running. Use this window to close it safely.";
             if (ready) { try { owner.OpenBrowser(); } catch { status.Text = "EdgeView is ready. Select Open EdgeView to try your browser again."; } }
         };
         FormClosing += async delegate(object sender, FormClosingEventArgs e) {
@@ -139,14 +140,27 @@ internal sealed class LauncherWindow : Form {
         };
     }
 
+    private async Task<bool> ReportFailedStart(string message) {
+        status.Text = "Stopping the session that did not become ready…";
+        int code;
+        try { code = await Task.Run(() => owner.Stop()); }
+        catch { code = -1; }
+        status.Text = code == -1
+            ? "EdgeView is still closing. Use Close EdgeView to check again."
+            : message;
+        return code != -1;
+    }
+
     private async Task StartRecovery(string directory) {
         starting = true;
+        bool canRecover = true;
         open.Enabled = false; close.Enabled = false; recover.Enabled = false;
         status.Text = "Closing the current session before opening recovery…";
         try {
             int code = await Task.Run(() => owner.Stop());
             if (code == -1) {
-                status.Text = "EdgeView is still closing. Wait before trying recovery again.";
+                status.Text = "EdgeView is still closing. Use Close EdgeView to check again.";
+                canRecover = false;
                 return;
             }
             if (code != 0 && MessageBox.Show("The previous session closed with a warning. Open the prepared recovery copy?",
@@ -155,8 +169,7 @@ internal sealed class LauncherWindow : Form {
             bool ready = false;
             try { ready = await Task.Run(() => owner.Start(directory)); } catch { }
             if (!ready) {
-                await Task.Run(() => owner.Stop());
-                status.Text = "Recovery copy could not open. Check the prepared folder and matching app version.";
+                canRecover = await ReportFailedStart("Recovery copy could not open. Check the prepared folder and matching app version.");
                 return;
             }
             open.Enabled = true;
@@ -166,7 +179,7 @@ internal sealed class LauncherWindow : Form {
             status.Text = "Recovery copy could not open. Check the prepared folder and matching app version.";
         } finally {
             starting = false;
-            close.Enabled = true; recover.Enabled = true;
+            close.Enabled = true; recover.Enabled = canRecover;
         }
     }
 }
