@@ -2,12 +2,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
+import { resolveRuntimeDataRoot, resolveRuntimeDataRootPath } from '../shared/runtime_paths.mjs';
 import { acquireRuntimeMaintenance } from '../shared/runtime_maintenance.mjs';
 const appRoot = process.cwd();
 const args = process.argv.slice(2);
 const stalePid = args.length === 2 && args[0] === '--expect-stale-lock' && /^[1-9]\d{0,9}$/.test(args[1]) ? Number(args[1]) : null;
-if (args.length && (stalePid === null || stalePid > 2147483647)) throw new Error('Usage: node scripts/backup-runtime.mjs [--expect-stale-lock <pid>]');
+const externalParent = args.length === 2 && args[0] === '--destination-parent' && args[1] ? args[1] : null;
+if (args.length && externalParent === null && (stalePid === null || stalePid > 2147483647)) {
+  throw new Error('Usage: node scripts/backup-runtime.mjs [--destination-parent <absolute-folder> | --expect-stale-lock <pid>]');
+}
 if (JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')).name !== 'edgeview') throw new Error('Expected EdgeView installation.');
 const root = resolveRuntimeDataRoot(appRoot);
 // A completed fixed-layout snapshot must never imply that externally located
@@ -52,9 +55,23 @@ function requireStopped() {
   } finally { fs.closeSync(fd); }
 }
 requireStopped();
+function inspectExternalParent() {
+  const directory = resolveRuntimeDataRootPath(root, externalParent);
+  resolveRuntimeDataRootPath(appRoot, directory);
+  const info = fs.lstatSync(directory, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('External backup destination must be an existing ordinary directory.');
+  return { directory, dev: info.dev, ino: info.ino };
+}
+const external = externalParent === null ? null : inspectExternalParent();
+const backupParent = external?.directory ?? path.join(root, 'backups');
+function requireSameExternalParent() {
+  if (!external) return;
+  const current = inspectExternalParent();
+  if (current.dev !== external.dev || current.ino !== external.ino) throw new Error('External backup destination changed.');
+}
 const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}`;
-const destination = path.join(root, 'backups', `EdgeView-${stamp}`);
-const staging = path.join(root, 'backups', `INCOMPLETE-EdgeView-${stamp}`);
+const destination = path.join(backupParent, `EdgeView-${stamp}`);
+const staging = path.join(backupParent, `INCOMPLETE-EdgeView-${stamp}`);
 const included = ['edgeview.db', 'edgeview_db.json', 'pharma_db.json', 'config.json', 'config.prev.json', 'data', 'uploads'];
 const manifest = { format: 1, created_at: new Date().toISOString(), files: [] };
 
@@ -85,7 +102,8 @@ const releaseMaintenance = acquireRuntimeMaintenance(lock);
 try {
   requireStopped();
   if (fs.existsSync(parent) && fs.lstatSync(parent).isSymbolicLink()) throw new Error('Backup destination links are not supported.');
-  fs.mkdirSync(parent, { recursive: true });
+  if (external) requireSameExternalParent();
+  else fs.mkdirSync(parent, { recursive: true });
   fs.mkdirSync(staging, { recursive: false });
   for (const item of included) {
     const source = path.join(root, item);
@@ -95,6 +113,7 @@ try {
   requireStopped();
   fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
   requireStopped();
+  requireSameExternalParent();
   fs.renameSync(staging, destination);
   console.log(JSON.stringify({ backup: destination, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0) }));
 } finally {

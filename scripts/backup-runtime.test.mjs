@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import initSqlJs from 'sql.js';
 import { verifyRuntimeBackup } from './verify-runtime-backup.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-backup-'));
+const external = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-backup-external-'));
 const script = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(new URL('./backup-runtime.mjs', import.meta.url));
 const run = (...args) => spawnSync(process.execPath, [...args, script], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '' }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
 const withEnv = (overrides, args = [], preload = []) => spawnSync(process.execPath, [...preload, script, ...args], { cwd: root, env: { ...process.env, EDGEVIEW_DATA_DIR: '', ...overrides }, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
@@ -68,6 +69,20 @@ try {
   const concurrent = run('--import', new URL('./test-fixtures/backup-concurrent-attempt.mjs', import.meta.url).href);
   assert.equal(concurrent.status, 0, `outer backup must complete while a competing attempt is refused: ${concurrent.stderr}`);
   assert.equal(fs.existsSync(path.join(root, 'edgeview.db.lock.maintenance')), false, 'successful backup releases maintenance gate');
+  const externalArgs = parent => ['--destination-parent', parent];
+  const externalLink = path.join(external, 'link');
+  const linkedTarget = path.join(external, 'actual');
+  fs.mkdirSync(linkedTarget);
+  fs.symlinkSync(linkedTarget, externalLink, 'junction');
+  for (const parent of [root, path.join(root, 'backups'), path.dirname(root), 'relative', externalLink, path.join(external, 'missing')]) {
+    assert.notEqual(withEnv({}, externalArgs(parent)).status, 0, 'unsafe destination must refuse backup');
+  }
+  assert.deepEqual(fs.readdirSync(linkedTarget), [], 'junction refusal must precede writing');
+  const externalCompleted = withEnv({}, externalArgs(external));
+  assert.equal(externalCompleted.status, 0, externalCompleted.stderr);
+  const externalResult = JSON.parse(externalCompleted.stdout);
+  assert.equal(path.dirname(externalResult.backup), external);
+  assert.equal((await verifyRuntimeBackup(externalResult.backup)).files, externalResult.files);
   const completed = run(); assert.equal(completed.status, 0, completed.stderr);
   const ordinaryOverrides = withEnv({ EDGEVIEW_CONFIG: path.join(root, 'config.json'),
     EDGEVIEW_V1_DATA_DIR: path.join(root, 'data', 'v1-runs'),
@@ -128,4 +143,11 @@ try {
   assert.notEqual(linked.status, 0); assert.match(linked.stderr, /links are not supported/);
   assert.deepEqual(fs.readFileSync(path.join(result.backup, 'manifest.json')), priorManifest, 'later failure must not alter a completed backup');
   console.log('PASS override/test-layout refusal before staging, canonical overrides, previous config/legacy state, lock/incomplete/hash controls and isolated SQLite/JSON/evidence recovery');
-} finally { fs.rmSync(root, { recursive: true, force: true }); }
+} finally {
+  const temp = fs.realpathSync(os.tmpdir());
+  for (const target of [root, external]) {
+    assert.equal(path.dirname(fs.realpathSync(target)), temp);
+    assert.match(path.basename(target), /^edgeview-backup-/);
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+}

@@ -36,6 +36,17 @@ installation of the older package was refused. Uninstalling did remove the
 prototype's local state, so copy a verified stopped-state backup outside the
 package's data area before any uninstall or repair that removes the package.
 
+From the operator tool directory, point EDGEVIEW_DATA_DIR at the verified
+stopped instance and run the following command. Choose an existing private
+folder outside the package’s entire storage area and outside any shared or
+synced folder unless you intend to share the backup.
+
+```powershell
+node scripts/backup-runtime.mjs --destination-parent "D:\PrivateBackups"
+```
+
+Run verify-runtime-backup.mjs on the returned snapshot before uninstalling.
+
 The current recovery procedure prepares a fresh data directory from a backup
 whose manifest digest and database schema are checked. The copy does not
 overwrite active data. Use the matching application build for that schema.
