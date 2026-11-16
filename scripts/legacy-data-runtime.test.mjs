@@ -94,6 +94,18 @@ try {
     assert.match(mismatch.stderr, /RECOVERY_COPY_REFUSED/);
     assert.equal(fs.existsSync(recoveredData), false);
   }
+  // A same-length change leaves the recorded file size and manifest hash intact.
+  const backupDb = path.join(snapshot, 'edgeview.db');
+  const checkpointBytes = fs.readFileSync(backupDb);
+  const damagedBytes = Buffer.from(checkpointBytes);
+  damagedBytes[damagedBytes.length - 1] ^= 1;
+  fs.writeFileSync(backupDb, damagedBytes);
+  const damaged = prepare(recoveredData, manifestSha256, '3');
+  assert.equal(damaged.error, undefined);
+  assert.equal(damaged.status, 1);
+  assert.match(damaged.stderr, /RECOVERY_COPY_REFUSED/);
+  assert.equal(fs.existsSync(recoveredData), false);
+  fs.writeFileSync(backupDb, checkpointBytes);
   const refusal = prepare(data, manifestSha256, '3');
   assert.equal(refusal.status, 1); assert.match(refusal.stderr, /RECOVERY_COPY_REFUSED/);
   await start();
