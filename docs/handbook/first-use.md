@@ -36,3 +36,13 @@ Saved Evidence. This does not discover new information from the Internet.
 Some Google search links now require Serper's separate zero-credit resolution
 step, which can add about30seconds. EdgeView bounds that wait. Unresolved links
 are recorded as incomplete; they do not prove that a company has no public data.
+
+
+## Choose rows and headings after upload
+
+1. Open the uploaded file and turn **Group Shipments** off to see individual rows.
+2. Open **Display columns**. Tick the detected headers you want to see and edit their display names. Clear the column selection to return to the standard view.
+3. Tick individual rows, then choose **Export selected**. The selection can span pages and filters within the current file view. The limit is 1,000 selected rows. Use **Clear selection** to start again.
+4. To download all rows matching the current filters, use **Export Filtered**. For the whole file, use the full dataset export. In the export dialog, review the format and headings before proceeding.
+
+Choose up to 64 source columns. Give each export heading a unique name of up to 120 characters. Renaming a heading affects presentation. The stored upload keeps its original column names and values.
