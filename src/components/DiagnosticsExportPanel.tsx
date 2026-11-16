@@ -30,6 +30,7 @@ export function DiagnosticsExportPanel() {
     <p className="text-xs text-gray-400">Preview version, installation ID, health and resource measurements before downloading. Credentials, company data, raw logs and file paths are excluded. Nothing is sent to support automatically.</p>
     <button onClick={prepare} disabled={loading} className="px-3 py-2 border border-gray-600 rounded text-xs text-white disabled:opacity-40">{loading?'Preparing diagnostics...':'Preview diagnostics'}</button>
     {error && <p role="alert" className="text-xs text-rose-300">{error}</p>}
+    <p className="text-xs text-gray-300"><strong>Before uninstalling EdgeView on Windows</strong>, ask the application owner to verify a private backup outside the app storage folder. Uninstalling can remove saved records and research. A diagnostics download cannot restore them.</p>
     {preview && <><pre aria-label="Diagnostics preview" className="max-h-72 overflow-auto text-xs text-gray-300 whitespace-pre-wrap">{preview}</pre><button onClick={download} className="px-3 py-2 border border-gray-600 rounded text-xs text-white">Download diagnostics</button></>}
   </section>;
 }
