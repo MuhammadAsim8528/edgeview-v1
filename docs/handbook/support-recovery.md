@@ -22,12 +22,37 @@ silently omitted. Do not unset an override to make backup appear successful; tha
 would protect different state. Backups contain private information and must stay
 separate from source snapshots and installers.
 
-Protected credentials remain bound to their Windows protection context. Tests
-prove isolated file/hash/database reconstruction, not a complete customer restore
-workflow. Transactional legacy migration, interrupted restore, matched app/schema
-rollback and installed restart acceptance remain open. Previously rejected restore
-tooling must not be used as though those gates passed. Preserve the original state
-and seek an owner-reviewed recovery procedure rather than overlaying directories.
+## Before uninstalling or repairing the Windows package
+
+The Windows Sandbox prototype lost its local state on uninstall. Stop EdgeView
+normally and ask the operator to make and verify a backup **outside the package
+storage area** before uninstalling. Keep it in a private location. Support can
+start with the diagnostics preview described above.
+
+## Preparing a recovery copy (operator)
+
+Use the matching development checkout and its installed dependencies. Confirm
+the stopped instance's data root first. Retain the manifest SHA-256 recorded
+when the backup was verified, the checkpoint database schema, and the matching
+application version. The following PowerShell commands assume these values
+and a fresh destination path have already been assigned to the named variables.
+
+```powershell
+node scripts/verify-runtime-backup.mjs "$snapshot" "$expectedManifestSha256"
+if ($LASTEXITCODE -ne 0) { throw "Backup verification failed" }
+node --import tsx scripts/prepare-runtime-recovery.ts "$snapshot" "$freshDestination" "$expectedManifestSha256" "$expectedSchema"
+```
+
+Proceed only if the second command exits successfully and returns
+`COPIED_NOT_ACTIVATED`. This prepares files for a separate recovery rehearsal.
+A refusal requires checking the original digest, schema, destination and free
+space. Preserve the active data and the snapshot. In particular, keep any
+records created after the snapshot available for reconciliation.
+
+The compiled-runtime rehearsal verified two restarts with the checkpoint
+dataset and original installation identity. Installed application downgrade,
+activation of a recovered directory by the customer installer, and recovery
+after an interrupted package update still require Windows acceptance.
 
 ## Retention and interrupted operations
 
