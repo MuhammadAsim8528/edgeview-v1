@@ -165,7 +165,7 @@ try {
     bundledNodeUsed: true, runtimeDependencyRoots: Object.keys(inputs.manifest.dependencies).length, buildPackagesOmitted: true, frontendNoticesRetained: true, fiveFormats: true, selectedStoredRowAndRenamedHeading: true, staticModeDespiteHostDevFlag: true, globalNodeOnPath: false, NODE_PATH: '', firstLaunchEmpty: true, syntheticCountryIdentityUploadExport: true,
     missingProvider503: true, durableOwnerPipeClose: true, restartIdentityData: true, diagnosticPrivateMarkersAbsent: true, appRootWrites: false,
     nativeLauncher: 'NOT EXECUTED', installedActivation: 'NOT VERIFIED', cleanWindows: 'NOT VERIFIED', updatesRollback: 'NOT VERIFIED',
-    realCompanyResearch: 'NOT VERIFIED BY THIS PROBE', monitoring: 'DISABLED IN PROTOTYPE', finalVerdict: 'NOT READY' };
+    realCompanyResearch: 'NOT VERIFIED BY THIS PROBE', monitoring: 'DISABLED FOR THIS ISOLATED PROBE', finalVerdict: 'NOT READY' };
   fs.writeFileSync(path.join(state, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ ...result, evidence: path.join(state, 'result.json') }));
 } finally { await stop(); }

@@ -152,7 +152,7 @@ export async function buildMsixPrototype(root, revision) {
       package: { name, sha256: digest(archive), files: files.length }, files,
       blockers: ['Publisher/trusted signing absent', 'Native launcher not executed by this factory', 'Installed/clean-Windows/update/rollback acceptance absent',
         'Current Node release/security assessment required', 'Runtime dependency/test/source-map minimization and full OSS/security clearance pending',
-        'Company truthsets, migration/recovery and final visual acceptance incomplete', 'Prototype monitoring deliberately disabled'] };
+        'Company truthsets, migration/recovery and final visual acceptance incomplete', 'Installed monitoring provisioning and dashboard receipt pending'] };
     fs.writeFileSync(path.join(output, 'release-info.json'), JSON.stringify(report, null, 2));
     fs.writeFileSync(path.join(output, 'SHA256SUMS.txt'), `${report.package.sha256}  ${name}\n`);
     return { output, archive, sha256: report.package.sha256, files: files.length, status: report.status };

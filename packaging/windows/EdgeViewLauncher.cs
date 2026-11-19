@@ -49,7 +49,17 @@ internal sealed class RuntimeOwner {
         if (recoveredData != null) start.EnvironmentVariables["EDGEVIEW_REQUIRE_RECOVERY_COPY"] = "1";
         start.EnvironmentVariables["EDGEVIEW_DATA_DIR"] = String.IsNullOrEmpty(data)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EdgeViewPrototype", "state") : data;
-        start.EnvironmentVariables["EDGEVIEW_MONITORING_ENABLED"] = "0";
+        // Only public ingestion identifiers may cross the native launch boundary.
+        // Per-vendor preferences are enforced by the existing backend.
+        if (Environment.GetEnvironmentVariable("EDGEVIEW_MONITORING_ENABLED") == "1") {
+            string dsn = Environment.GetEnvironmentVariable("EDGEVIEW_SENTRY_DSN") ?? "";
+            string projectKey = Environment.GetEnvironmentVariable("EDGEVIEW_POSTHOG_KEY") ?? "";
+            start.EnvironmentVariables["EDGEVIEW_MONITORING_ENABLED"] = "1";
+            if (System.Text.RegularExpressions.Regex.IsMatch(dsn, @"\Ahttps://[a-fA-F0-9]{32}@o[0-9]+\.ingest(?:\.(?:us|de))?\.sentry\.io/4512304043065344\z"))
+                start.EnvironmentVariables["EDGEVIEW_SENTRY_DSN"] = dsn;
+            if (System.Text.RegularExpressions.Regex.IsMatch(projectKey, @"\Aphc_[A-Za-z0-9]{16,128}\z"))
+                start.EnvironmentVariables["EDGEVIEW_POSTHOG_KEY"] = projectKey;
+        }
         child = new Process(); child.StartInfo = start;
         // Drain without retaining or displaying raw backend paths/errors/data.
         child.OutputDataReceived += delegate { }; child.ErrorDataReceived += delegate { };

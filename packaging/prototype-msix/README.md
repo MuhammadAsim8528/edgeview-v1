@@ -54,6 +54,6 @@ This is not the clean final Desktop release copy. The report explicitly keeps
 customerRuntimeReady=false: runtime payload/source-map/test minimization, full
 OSS/security clearance, supported Node security review, true installed/clean
 Windows/update/rollback, correct company truthsets and final visual acceptance
-remain gates. Prototype monitoring stays disabled. No publisher identity is
+remain gates. Native launcher monitoring requires explicit operator configuration. No publisher identity is
 invented. Native launcher execution on the owner's laptop still requires proper
 trusted signing under Application Control; compilation is not execution proof.

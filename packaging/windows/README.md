@@ -10,7 +10,7 @@ Windows launcher, not another product/backend architecture. It starts a bundled
 runtime/node.exe, waits for its own PID and matching build over bounded loopback
 health requests, opens the system browser, and requests durable close via stdin.
 It drains raw backend output without displaying it. Prototype state is separate
-from installed code and monitoring is disabled for this candidate. Final channel,
+from installed code. To enable monitoring for the native launcher, set EDGEVIEW_MONITORING_ENABLED=1 and supply the public EDGEVIEW_SENTRY_DSN for the EdgeView backend and/or EDGEVIEW_POSTHOG_KEY for its US project in the launcher environment. Saved error and analytics preferences still apply. Privileged tokens do not belong in these settings. Final channel,
 storage migration, monitoring distribution configuration and UX are not adopted.
 
 Compilation with the installed .NET Framework64 C# compiler succeeded. Execution
