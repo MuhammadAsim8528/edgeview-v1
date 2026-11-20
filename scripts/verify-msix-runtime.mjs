@@ -12,7 +12,8 @@ import JSZip from 'jszip';
 // Factory acceptance, not an installer/updater or a test of the owner's live app.
 const root = path.resolve(process.argv[2] || '');
 const expectedSha256 = process.argv[3];
-if (process.platform !== 'win32' || process.argv.length !== 4 || fs.lstatSync(root).isSymbolicLink()) throw new Error('Specify the internal candidate directory and independently recorded factory SHA256 on Windows.');
+const sendReal = process.argv.length === 5 && process.argv[4] === '--send-real';
+if (process.platform !== 'win32' || (!sendReal && process.argv.length !== 4) || fs.lstatSync(root).isSymbolicLink()) throw new Error('Specify the internal candidate directory and independently recorded factory SHA256 on Windows.');
 assert.match(expectedSha256 || '', /^[a-f0-9]{64}$/);
 const reportFile = path.join(root, 'release-info.json');
 inspectAncestors(reportFile);
@@ -115,6 +116,18 @@ async function stop() {
   child = null;
 }
 try {
+  if (sendReal) {
+    assert.equal(report.monitoringProvisioned, true, 'public monitoring routes must be provisioned by the factory');
+    delete env.EDGEVIEW_MONITORING_ENABLED;
+    await start();
+    const response = await fetch(base + '/api/monitoring/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(15000) });
+    const result = await response.json();
+    assert.ok(response.ok && result.delivery?.projected === true && result.delivery?.sentry === true && result.delivery?.posthog === true, 'packaged synthetic monitoring delivery failed');
+    assert.equal(result.monitoring?.sentry?.state, 'TRANSPORT_OK');
+    assert.equal(result.monitoring?.posthog?.state, 'TRANSPORT_OK');
+    await stop();
+    env.EDGEVIEW_MONITORING_ENABLED = '0';
+  }
   const first = await start();
   const companies = () => fetch(`${base}/api/companies`).then(response => response.json());
   assert.equal((await companies()).length, 0); assert.match(first.app.installation_id, /^[a-f0-9-]{36}$/i);
@@ -165,7 +178,7 @@ try {
     bundledNodeUsed: true, runtimeDependencyRoots: Object.keys(inputs.manifest.dependencies).length, buildPackagesOmitted: true, frontendNoticesRetained: true, fiveFormats: true, selectedStoredRowAndRenamedHeading: true, staticModeDespiteHostDevFlag: true, globalNodeOnPath: false, NODE_PATH: '', firstLaunchEmpty: true, syntheticCountryIdentityUploadExport: true,
     missingProvider503: true, durableOwnerPipeClose: true, restartIdentityData: true, diagnosticPrivateMarkersAbsent: true, appRootWrites: false,
     nativeLauncher: 'NOT EXECUTED', installedActivation: 'NOT VERIFIED', cleanWindows: 'NOT VERIFIED', updatesRollback: 'NOT VERIFIED',
-    realCompanyResearch: 'NOT VERIFIED BY THIS PROBE', monitoring: 'DISABLED FOR THIS ISOLATED PROBE', finalVerdict: 'NOT READY' };
+    realCompanyResearch: 'NOT VERIFIED BY THIS PROBE', monitoring: sendReal ? 'BOTH TRANSPORTS CONFIRMED; DASHBOARD RECEIPT UNVERIFIED' : 'DISABLED FOR THIS ISOLATED PROBE', finalVerdict: 'NOT READY' };
   fs.writeFileSync(path.join(state, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ ...result, evidence: path.join(state, 'result.json') }));
 } finally { await stop(); }
