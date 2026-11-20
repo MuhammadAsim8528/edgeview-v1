@@ -1,3 +1,4 @@
+import { provisionPilotMonitoring } from './provision-pilot-monitoring.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -107,6 +108,7 @@ export async function buildMsixPrototype(root, revision) {
       } else copyRegular(path.join(root, 'dist', name), path.join(app, 'dist', name));
     }
     copyRegular(path.join(root, 'packaging/windows/runtime-bootstrap.cjs'), path.join(app, 'runtime-bootstrap.cjs'));
+    const monitoringProvisioned = provisionPilotMonitoring(path.join(app, 'runtime-bootstrap.cjs'), process.env);
     copyRegular(node, path.join(app, 'runtime/node.exe'));
     fs.writeFileSync(path.join(app, 'runtime/NODE_LICENSE.txt'), license);
     copyRegular(path.join(root, 'public/edgeview-mark.png'), path.join(app, 'Assets/PrototypeLogo.png'));
@@ -148,7 +150,7 @@ export async function buildMsixPrototype(root, revision) {
     // On slower Windows disks, full SDK validation can outlast dependency staging.
     execute(makeappx, ['pack', '/f', mapping, '/p', archive, '/no', '/ml', '536870912'], root, 'makeappx', 1_200_000);
     const report = { status: 'UNSIGNED_INTERNAL_NOT_RELEASE_READY', customerRuntimeReady: false, commit, build: identity,
-      manifestVersion, runtimeInputs: { ...runtimeLockEvidence, runtimeLockSha256, excludedBuildRoots: inputs.excludedBuildRoots, sourceLockSha256: notices.sourceLockSha256, noticesSha256: notices.noticesSha256, noticeCapture: notices.capture }, runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
+      manifestVersion, monitoringProvisioned, runtimeInputs: { ...runtimeLockEvidence, runtimeLockSha256, excludedBuildRoots: inputs.excludedBuildRoots, sourceLockSha256: notices.sourceLockSha256, noticesSha256: notices.noticesSha256, noticeCapture: notices.capture }, runtime: { version, sha256: digest(node), authenticode: 'VALID_VENDOR_SIGNATURE', licenseSha256: crypto.createHash('sha256').update(license).digest('hex') },
       package: { name, sha256: digest(archive), files: files.length }, files,
       blockers: ['Publisher/trusted signing absent', 'Native launcher not executed by this factory', 'Installed/clean-Windows/update/rollback acceptance absent',
         'Current Node release/security assessment required', 'Runtime dependency/test/source-map minimization and full OSS/security clearance pending',

@@ -51,6 +51,7 @@ internal sealed class RuntimeOwner {
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EdgeViewPrototype", "state") : data;
         // Only public ingestion identifiers may cross the native launch boundary.
         // Per-vendor preferences are enforced by the existing backend.
+        if (Environment.GetEnvironmentVariable("EDGEVIEW_MONITORING_ENABLED") == "0") start.EnvironmentVariables["EDGEVIEW_MONITORING_ENABLED"] = "0";
         if (Environment.GetEnvironmentVariable("EDGEVIEW_MONITORING_ENABLED") == "1") {
             string dsn = Environment.GetEnvironmentVariable("EDGEVIEW_SENTRY_DSN") ?? "";
             string projectKey = Environment.GetEnvironmentVariable("EDGEVIEW_POSTHOG_KEY") ?? "";

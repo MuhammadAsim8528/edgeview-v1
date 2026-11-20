@@ -1,3 +1,5 @@
+import vm from 'node:vm';
+import { provisionPilotMonitoring } from './provision-pilot-monitoring.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -22,6 +24,25 @@ const git = args => {
   return result.stdout.trim();
 };
 try {
+  const bootstrap = path.join(root, 'monitoring.cjs');
+  fs.writeFileSync(bootstrap, "'use strict';");
+  const fixture = { EDGEVIEW_PACKAGE_MONITORING: '1', EDGEVIEW_SENTRY_DSN: 'https://' + 'a'.repeat(32) + '@o42.ingest.us.sentry.io/4512304043065344', EDGEVIEW_POSTHOG_KEY: 'phc_' + 'b'.repeat(32), PRIVATE_TEST_TOKEN: 'synthetic-private-marker' };
+  assert.equal(provisionPilotMonitoring(bootstrap, {}), false);
+  for (const override of [{ EDGEVIEW_PACKAGE_MONITORING: 'yes' }, { EDGEVIEW_POSTHOG_KEY: 'phx_private' }, { EDGEVIEW_SENTRY_DSN: fixture.EDGEVIEW_SENTRY_DSN + '?secret=1' }, { EDGEVIEW_POSTHOG_HOST: 'https://example.invalid' }]) {
+    assert.throws(() => provisionPilotMonitoring(bootstrap, { ...fixture, ...override }), /CONFIGURATION_INVALID/);
+    assert.equal(fs.readFileSync(bootstrap, 'utf8'), "'use strict';");
+  }
+  assert.equal(provisionPilotMonitoring(bootstrap, fixture), true);
+  const generated = fs.readFileSync(bootstrap, 'utf8');
+  assert.ok(!generated.includes(fixture.PRIVATE_TEST_TOKEN));
+  for (const explicitOff of [false, true]) {
+    const process = { env: explicitOff ? { EDGEVIEW_MONITORING_ENABLED: '0' } : {} };
+    vm.runInNewContext(generated, { process });
+    assert.equal(process.env.EDGEVIEW_MONITORING_ENABLED, explicitOff ? '0' : '1');
+    assert.equal(process.env.EDGEVIEW_POSTHOG_KEY, fixture.EDGEVIEW_POSTHOG_KEY);
+    assert.equal(process.env.EDGEVIEW_SENTRY_DSN, fixture.EDGEVIEW_SENTRY_DSN);
+  }
+  fs.unlinkSync(bootstrap);
   fs.mkdirSync(path.join(root, 'dist'));
   fs.writeFileSync(path.join(root, 'package.json'), '{"name":"edgeview","version":"1.0.0-rc.2"}');
   fs.writeFileSync(path.join(root, '.gitignore'), 'dist/\n');

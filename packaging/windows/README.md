@@ -13,6 +13,8 @@ It drains raw backend output without displaying it. Prototype state is separate
 from installed code. To enable monitoring for the native launcher, set EDGEVIEW_MONITORING_ENABLED=1 and supply the public EDGEVIEW_SENTRY_DSN for the EdgeView backend and/or EDGEVIEW_POSTHOG_KEY for its US project in the launcher environment. Saved error and analytics preferences still apply. Privileged tokens do not belong in these settings. Final channel,
 storage migration, monitoring distribution configuration and UX are not adopted.
 
+For a preconfigured private pilot, set EDGEVIEW_PACKAGE_MONITORING=1 in the factory process and supply the reviewed public backend DSN and US PostHog project key. The factory embeds these two ingestion identifiers in the staged bootstrap and records monitoringProvisioned in release-info.json. Invalid configuration stops packaging. EDGEVIEW_MONITORING_ENABLED=0 at launch disables both transports. The two saved monitoring preferences still apply independently.
+
 Compilation with the installed .NET Framework64 C# compiler succeeded. Execution
 did not: Windows explicitly reported **An Application Control policy has blocked
 this file**. The headless regression scripts/windows-launcher.test.mjs therefore
