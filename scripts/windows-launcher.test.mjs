@@ -25,12 +25,12 @@ try {
     const state = path.join(root, mode); fs.mkdirSync(state);
     const port = await unusedTestPort();
     if (mode === 'foreign') {
-      foreign = http.createServer((_req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ app: { pid: process.pid, build: { buildId: hash } } })); });
+      foreign = http.createServer((_req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ app: { status: 'ok', pid: process.pid, build: { buildId: hash } } })); });
       await new Promise(resolve => foreign.listen(port, '127.0.0.1', resolve));
     }
     fs.writeFileSync(path.join(app, 'dist/server.cjs'), `
       const fs = require('node:fs'), http = require('node:http');
-      const server = http.createServer((_req,res) => { res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({app:{pid:process.pid,build:{buildId:${JSON.stringify(hash)}}}})); });
+      const server = http.createServer((_req,res) => { res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({app:{status:'ok',pid:process.pid,build:{buildId:${JSON.stringify(hash)}}}})); });
       server.on('error', () => process.exit(1));
       process.once('SIGTERM', () => { fs.writeFileSync(${JSON.stringify(path.join(state, 'saved'))},'saved'); server.close(() => process.exit(${mode === 'failure' ? 1 : 0})); });
       server.listen(Number(process.env.PORT),'127.0.0.1');
