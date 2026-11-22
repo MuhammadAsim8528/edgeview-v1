@@ -20,4 +20,11 @@ const global = resolveOfficialDomain('ACME BIOLOGICS LIMITED', 'Kenya', [
   { url: 'https://acmebiologics.com/about', title: 'ACME Biologics Limited', snippet: 'About our company', provider: 'serper', rank: 1 },
 ]);
 assert.equal(global.official_domain, 'acmebiologics.com', 'neutral global-domain discovery remains available; it is not local contact proof');
+const collision = { url: 'https://slim.lk/', title: 'Sri Lanka Institute of Marketing | SLIM', snippet: 'Sri Lanka marketing awards with Slim Pharmaceuticals', rank: 1 };
+const pharma = { url: 'https://slimpharma.com/', title: 'Slim Pharmaceuticals (Pvt) Ltd', snippet: 'Sri Lanka', rank: 2 };
+assert.equal(resolveOfficialDomain('Slim Pharmaceuticals Pvt Ltd', 'Sri Lanka', [collision]).official_domain, '');
+assert.equal(resolveOfficialDomain('Slim Pharmaceuticals Pvt Ltd', 'Sri Lanka', [collision, pharma]).official_domain, 'slimpharma.com');
+assert.equal(resolveOfficialDomain('Slim Pharmaceuticals Pvt Ltd', 'Sri Lanka', [
+  { ...collision, title: 'Slim Pharmaceuticals | Contact' },
+]).official_domain, 'slim.lk');
 console.log('v1_country_domain_boundary.test.ts: PASS');

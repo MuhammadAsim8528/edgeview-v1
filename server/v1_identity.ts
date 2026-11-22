@@ -202,7 +202,15 @@ export function resolveOfficialDomain(companyName: string, country: string, evid
       && label === `${brandTokens[0]}${industryWord}`;
     if (exactShortIndustryBrand) { score += 25; reasons.push('domain exactly matches short brand plus industry identity'); }
     if (shortExactAcronym) { score += 35; reasons.push('country-code domain exactly matches the company acronym'); }
-    const sufficientlySpecificDomain = compactMatch || coreCompactMatch || singleBrandMatch || multiBrandMatch || shortExactAcronym || exactShortIndustryBrand;
+    // A short bare host can be a different local organisation's acronym.
+    // A sponsor mention in its snippets cannot establish ownership.
+    const bareIndustryBrand = industryWord && brandTokens.length === 1 && label === brandTokens[0] && label.length <= 4;
+    const homepageNamesCompany = !bareIndustryBrand || items.some(item => {
+      const url = new URL(item.url, 'https://' + domain);
+      const heading = (item.title || '').split(/\s*[|–—]\s*|\s+-\s+/)[0];
+      return url.pathname === '/' && words(heading).filter(word => !LEGAL_WORDS.has(word)).join('') === compactCompany;
+    });
+    const sufficientlySpecificDomain = homepageNamesCompany && (compactMatch || coreCompactMatch || singleBrandMatch || multiBrandMatch || shortExactAcronym || exactShortIndustryBrand);
     if (!sufficientlySpecificDomain) reasons.push('domain matches too little of the exact company identity');
     // A globally-used .com often omits the country from both its domain and
     // search snippet. Do not reject an otherwise exact, top-ranked identity
