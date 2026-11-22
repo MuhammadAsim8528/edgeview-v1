@@ -79,7 +79,7 @@ export function productionLockIntegrityGaps(lock) {
 
 export function installedEsbuildBinariesMatch(root, lock, closure, execute = file => spawnSync(file, ['--version'], { encoding: 'utf8', timeout: 10_000, windowsHide: true })) {
   for (const [location, item] of closure) {
-    if (location.split('/node_modules/').pop() !== 'esbuild') continue;
+    if (location !== 'node_modules/esbuild' && !location.endsWith('/node_modules/esbuild')) continue;
     const nativeName = Object.keys(item.optionalDependencies || {}).find(name => {
       const resolved = resolveLocked(lock, location, name);
       return resolved && compatible(lock.packages[resolved], process.platform, process.arch);

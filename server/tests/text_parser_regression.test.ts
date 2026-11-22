@@ -13,6 +13,15 @@ assert.deepEqual(
   ['Acme, Ltd', 'Kenya', 'First line\r\nSecond "quoted" line'],
 );
 
+// Semicolons inside quoted fields must not be detected as the record delimiter
+const csvSemicolon = await parseFile('semicolon_quoted.csv', Buffer.from([
+  'Importer,Country,Item',
+  'Acme Ltd,Kenya,"First; Second; Third"',
+].join('\r\n')));
+assert.deepEqual(csvSemicolon.columns, ['Importer', 'Country', 'Item'], 'CSV must retain comma delimiter');
+assert.equal(csvSemicolon.rows.length, 1);
+assert.equal(csvSemicolon.rows[0].Item, 'First; Second; Third');
+
 // This is the key-value NVL format documented by the parser, not a table.
 const nvl = parseNVL([
   'BE_DATE = "20260101"',

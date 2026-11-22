@@ -1113,6 +1113,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
           // company again. Force Fetch is the explicit refresh override.
           let reuseNeedsChoice = false;
           const liveRequested = forceFetch || companyState.force_live === true;
+          if (liveRequested) companyState.reuse_only = false;
           if (!liveRequested && contact?.edgeview_v1_run_id) {
             const reuseStarted = performance.now();
             const cachedRun = await reusableContactRun(contact);

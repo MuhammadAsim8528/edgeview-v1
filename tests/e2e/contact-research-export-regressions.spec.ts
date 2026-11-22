@@ -230,7 +230,7 @@ test('L07 backend loss replaces the running claim with truthful offline status',
   }, { state });
   await page.goto('/');
   await expect(page.getByText('Company Research Running', { exact: true })).toBeVisible();
-  await page.clock.fastForward(20_100);
+  await page.clock.runFor(20_100);
   await expect(page.getByText('Research Status Unavailable', { exact: true })).toBeVisible();
   await expect(page.getByText('Company Research Running', { exact: true })).toHaveCount(0);
   await expect(page.getByText('OFFLINE', { exact: true })).toBeVisible();

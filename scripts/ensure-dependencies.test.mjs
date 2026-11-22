@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { ensureDependencies, nodeVersionSupported, assertSupportedNode, NODE_RANGE, lockedDependencyClosure, productionLockIntegrityGaps } from './ensure-dependencies.mjs';
+import { ensureDependencies, nodeVersionSupported, assertSupportedNode, NODE_RANGE, lockedDependencyClosure, productionLockIntegrityGaps, installedProductionDependenciesMatch } from './ensure-dependencies.mjs';
 
 // These cases include versions accepted by the old Vite-only guard but rejected
 // by the actual locked monitoring/development toolchain. Prereleases abstain.
@@ -91,6 +91,31 @@ try {
   assert.equal(installs, 8, 'a wrong transitive version is repaired');
   console.log('PASS dependency closure, nested resolution, integrity reporting and installation recovery controls');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
+
+const nativeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-native-closure-'));
+try {
+  const nativeName = `@esbuild/${process.platform}-${process.arch}`, version = '1.2.3';
+  const nativeLocation = `node_modules/${nativeName}`;
+  fs.writeFileSync(path.join(nativeRoot, 'package.json'), JSON.stringify({ dependencies: { esbuild: version } }));
+  fs.writeFileSync(path.join(nativeRoot, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: {
+    '': { dependencies: { esbuild: version } },
+    'node_modules/esbuild': { version, optionalDependencies: { [nativeName]: version } },
+    [nativeLocation]: { version, optional: true, os: [process.platform], cpu: [process.arch] },
+  } }));
+  for (const location of ['node_modules/esbuild', nativeLocation]) {
+    fs.mkdirSync(path.join(nativeRoot, location), { recursive: true });
+    fs.writeFileSync(path.join(nativeRoot, location, 'package.json'), JSON.stringify({ version }));
+  }
+  const executable = path.join(nativeRoot, nativeLocation, process.platform === 'win32' ? 'esbuild.exe' : 'bin/esbuild');
+  fs.mkdirSync(path.dirname(executable), { recursive: true }); fs.writeFileSync(executable, 'synthetic executable placeholder');
+  assert.equal(installedProductionDependenciesMatch(nativeRoot, {}, file => {
+    assert.equal(file, executable); return { status: 0, stdout: `${version}\n` };
+  }), true, 'matching native binary is accepted without ESBUILD_BINARY_PATH');
+  assert.equal(installedProductionDependenciesMatch(nativeRoot, {}, () => ({ status: 0, stdout: '9.9.9\n' })), false, 'a native binary from another esbuild release invalidates the closure');
+  fs.unlinkSync(executable);
+  assert.equal(installedProductionDependenciesMatch(nativeRoot), false, 'a missing native binary invalidates the closure');
+  console.log('PASS native esbuild package/binary version closure requires no manual binary override');
+} finally { fs.rmSync(nativeRoot, { recursive: true, force: true }); }
 
 // End-to-end: an unsupported runtime must be refused before npm is spawned, not after it fails.
 // process.versions.node is overridden in a preload so the real CLI path runs on this machine's Node.
