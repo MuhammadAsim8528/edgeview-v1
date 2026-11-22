@@ -141,7 +141,7 @@ try {
   assert.ok(upstreamFailures.every(record => record.failure && (record.response as any).status === 503 && (record.response as any).body.includes('Controlled upstream failure')));
   assert.ok(run.results.some(item => item.snippet === 'Retain this search evidence despite downstream failure' && item.status === 'success'), 'failed page retrieval cannot erase search evidence');
   assert.ok(run.results.filter(item => item.provider === 'direct-http').length <= run.limits.max_scrapes, 'official crawl page-count bound unchanged');
-  const persisted = getV1Run(run.id);
+  const persisted = await getV1Run(run.id);
   assert.ok(persisted);
   assert.equal(persisted.raw_records.length, run.raw_records.length);
   for (const page of officialPages) assert.equal(persisted.results.find(item => item.id === page.id)?.html, largeHtml, 'full large HTML survives immutable storage');

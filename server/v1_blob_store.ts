@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { gzipSync, gunzipSync } from 'node:zlib';
+import { gzipSync, createGunzip } from 'node:zlib';
+import { Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+export const V1_BLOB_MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
+export const V1_BLOB_MAX_COMPRESSED_BYTES = 16 * 1024 * 1024;
 
 export const V1_BLOB_THRESHOLD_BYTES = 4 * 1024;
 const BLOB_FORMAT = 1;
@@ -106,18 +111,28 @@ export function isV1BlobRef(value: unknown): value is BlobRef {
   );
 }
 
-function readRef(dataDir: string, ref: BlobRef): unknown {
+async function readRef(dataDir: string, ref: BlobRef): Promise<unknown> {
   const metadata = ref.__edgeview_blob_ref__;
   const target = blobPath(dataDir, metadata.sha256);
-  if (!fs.existsSync(target)) throw storageError('V1_BLOB_MISSING', `Evidence blob ${metadata.sha256} is missing.`);
+  if (!Number.isSafeInteger(metadata.uncompressed_bytes) || metadata.uncompressed_bytes < 0 || metadata.uncompressed_bytes > V1_BLOB_MAX_UNCOMPRESSED_BYTES) {
+    throw storageError('V1_BLOB_REFERENCE_INVALID', 'Evidence blob exceeds the safe decompression limit.');
+  }
+  const stat = fs.lstatSync(target);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > V1_BLOB_MAX_COMPRESSED_BYTES) throw storageError('V1_BLOB_MISSING', 'Evidence blob is missing or exceeds the safe compressed-size limit.');
   try {
-    const compressed = fs.readFileSync(target);
-    const bytes = gunzipSync(compressed);
-    if (bytes.length !== metadata.uncompressed_bytes) {
-      throw storageError('V1_BLOB_INTEGRITY_ERROR', `Evidence blob ${metadata.sha256} has an unexpected length.`);
-    }
-    if (digest(bytes) !== metadata.sha256) {
-      throw storageError('V1_BLOB_INTEGRITY_ERROR', `Evidence blob ${metadata.sha256} failed its SHA-256 integrity check.`);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const collector = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        size += chunk.length;
+        if (size > metadata.uncompressed_bytes) callback(storageError('V1_BLOB_INTEGRITY_ERROR', 'Evidence blob exceeds its declared size.'));
+        else { chunks.push(chunk); callback(); }
+      },
+    });
+    await pipeline(fs.createReadStream(target), createGunzip(), collector);
+    const bytes = Buffer.concat(chunks);
+    if (bytes.length !== metadata.uncompressed_bytes || digest(bytes) !== metadata.sha256) {
+      throw storageError('V1_BLOB_INTEGRITY_ERROR', 'Evidence blob failed its size or SHA-256 integrity check.');
     }
     return JSON.parse(bytes.toString('utf8'));
   } catch (cause: any) {
@@ -183,29 +198,29 @@ export function externalizeV1RunForStorage<T extends PersistedEnvelope>(run: T, 
 }
 
 /** Transparently reconstructs the original in-memory V1Run shape. */
-export function hydrateV1RunFromStorage<T extends PersistedEnvelope>(persisted: T, dataDir: string): T {
+export async function hydrateV1RunFromStorage<T extends PersistedEnvelope>(persisted: T, dataDir: string): Promise<T> {
   if (persisted?._edgeview_storage?.format !== STORAGE_FORMAT) return persisted;
   const hydrate = (value: unknown) => isV1BlobRef(value) ? readRef(dataDir, value) : value;
 
-  const rawRecords = Array.isArray(persisted.raw_records) ? persisted.raw_records.map((record: any) => (
-    Object.prototype.hasOwnProperty.call(record, 'response') ? { ...record, response: hydrate(record.response) } : record
-  )) : persisted.raw_records;
+  const rawRecords = Array.isArray(persisted.raw_records) ? await Promise.all(persisted.raw_records.map(async (record: any) => (
+    Object.prototype.hasOwnProperty.call(record, 'response') ? { ...record, response: await hydrate(record.response) } : record
+  ))) : persisted.raw_records;
 
-  const results = Array.isArray(persisted.results) ? persisted.results.map((result: any) => {
+  const results = Array.isArray(persisted.results) ? await Promise.all(persisted.results.map(async (result: any) => {
     const next = { ...result };
     for (const field of ['text', 'markdown', 'html'] as const) {
-      if (Object.prototype.hasOwnProperty.call(result, field)) next[field] = hydrate(result[field]);
+      if (Object.prototype.hasOwnProperty.call(result, field)) next[field] = await hydrate(result[field]);
     }
     return next;
-  }) : persisted.results;
+  })) : persisted.results;
 
   let evidenceWorkspace = persisted.evidence_workspace;
   if (evidenceWorkspace && Array.isArray(evidenceWorkspace.chunks)) {
     evidenceWorkspace = {
       ...evidenceWorkspace,
-      chunks: evidenceWorkspace.chunks.map((chunk: any) => (
-        Object.prototype.hasOwnProperty.call(chunk, 'text') ? { ...chunk, text: hydrate(chunk.text) } : chunk
-      )),
+      chunks: await Promise.all(evidenceWorkspace.chunks.map(async (chunk: any) => (
+        Object.prototype.hasOwnProperty.call(chunk, 'text') ? { ...chunk, text: await hydrate(chunk.text) } : chunk
+      ))),
     };
   }
 

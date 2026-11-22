@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import crypto from 'node:crypto';
 import { collectLicenseTexts } from './collect-license-texts.mjs';
 import { renderThirdPartyNotices } from './generate-third-party-notices.mjs';
+import { lockedDependencyClosure } from './ensure-dependencies.mjs';
 
 const builtins = new Set(builtinModules.map(name => name.replace(/^node:/, '')));
 const packageName = specifier => specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
@@ -49,6 +50,8 @@ export function verifyRuntimeLock(inputs, generated) {
   for (const [name, version] of Object.entries(actual)) {
     if (generated.packages[`node_modules/${name}`]?.version !== version) throw new Error('RUNTIME_DIRECT_PACKAGE_MISSING');
   }
+  try { lockedDependencyClosure(generated, Object.keys(actual)); }
+  catch { throw new Error('RUNTIME_LOCK_INCOMPLETE'); }
   const allowed = new Set(Object.entries(inputs.canonicalLock.packages).filter(([location]) => location).map(([location, item]) => identity(lockedName(location, item), item)));
   let count = 0;
   for (const [location, item] of Object.entries(generated.packages)) {

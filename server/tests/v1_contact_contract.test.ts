@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeV1ContactOverlay } from '../../shared/v1_contact_contract';
+import { normalizeV1ContactOverlay, normalizeV1ContactPeople } from '../../shared/v1_contact_contract';
 
 const legacy = normalizeV1ContactOverlay({
   schema_version: 16,
@@ -54,3 +54,22 @@ const unscoped = normalizeV1ContactOverlay({ emails_list: [], unscoped_facts: [{
   scope: 'unknown', reason: 'COUNTRY_SCOPE_UNPROVEN', target_country: 'Kenya' }] });
 assert.deepEqual(unscoped.emails_list, [], 'retaining unscoped evidence cannot promote it to local contacts');
 assert.deepEqual(normalizeV1ContactOverlay(JSON.parse(JSON.stringify(unscoped))), unscoped, 'withheld facts survive canonical JSON round-trip');
+
+// M02: identical records deduplicate, but a name alone never merges profiles.
+const ambiguousPeople = normalizeV1ContactPeople([
+  { name: 'Alex Shared', designation: 'Director', email: 'director@example.test' },
+  { name: 'Alex Shared', designation: 'Manager', email: 'manager@example.test' },
+  { name: 'Alex Shared', designation: 'Director', email: 'director@example.test' },
+]);
+assert.equal(ambiguousPeople.length, 2, 'ambiguous same-name people remain separate; exact duplicates do not multiply');
+assert.deepEqual(ambiguousPeople.map(person => person.email), ['director@example.test', 'manager@example.test']);
+assert.equal(normalizeV1ContactPeople([{ name: 'Name Only' }, { name: 'Name Only' }]).length, 1);
+assert.equal(normalizeV1ContactPeople([{ name: 'Name Only' }, { name: 'Name Only', designation: 'CEO' }]).length, 2,
+  'a richer same-name profile is not silently merged into a name-only record');
+
+// M21: Unicode letters and numbers are valid person-name identity characters.
+const unicodeNames = ['张伟', 'محمد علي', 'Анна Иванова'];
+assert.deepEqual(normalizeV1ContactOverlay({ contact_persons: unicodeNames.map(name => ({ name })) })
+  .contact_persons.map(person => person.name), unicodeNames);
+assert.deepEqual(normalizeV1ContactPeople([{ name: '张伟' }, { name: '张伟' }]), [{ name: '张伟' }],
+  'Unicode exact duplicates still deduplicate');

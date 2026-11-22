@@ -9,7 +9,7 @@ const latest = new Map<string, any>();
 let unreadable = 0;
 for (const name of fs.existsSync(runDir) ? fs.readdirSync(runDir).filter(file => /^run-.*\.json$/i.test(file)) : []) {
   try {
-    const run = getV1Run(name.replace(/\.json$/i, ''));
+    const run = await getV1Run(name.replace(/\.json$/i, ''));
     if (!run) { unreadable += 1; continue; }
     const key = `${String(run.company_name).toLowerCase()}\u0000${String(run.country).toLowerCase()}`;
     if (!latest.has(key) || String(latest.get(key).started_at) < String(run.started_at)) {

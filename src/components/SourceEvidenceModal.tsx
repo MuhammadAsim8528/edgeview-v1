@@ -62,19 +62,56 @@ export const SourceEvidenceModal: React.FC<SourceEvidenceModalProps> = ({
   const [capturedRun, setCapturedRun] = React.useState<CapturedRun | null>(null);
   const [capturedLoading, setCapturedLoading] = React.useState(false);
   const [expandedResult, setExpandedResult] = React.useState('');
+  const capturedGenerationRef = React.useRef(0);
+  const capturedRequestRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => {
+    capturedGenerationRef.current += 1;
+    capturedRequestRef.current?.abort();
+    capturedRequestRef.current = null;
     setActiveTab('profile');
     setCapturedRun(null);
+    setCapturedLoading(false);
     setExpandedResult('');
-  }, [contact?.id]);
+  }, [contact?.id, contact?.edgeview_v1_run_id]);
 
   React.useEffect(() => {
-    if (!isOpen || activeTab !== 'captured' || !contact?.edgeview_v1_run_id || capturedRun?.id === contact.edgeview_v1_run_id) return;
+    const runId = contact?.edgeview_v1_run_id;
+    if (!isOpen || activeTab !== 'captured' || !runId || capturedRun?.id === runId) {
+      setCapturedLoading(false);
+      return;
+    }
+    const generation = ++capturedGenerationRef.current;
+    const controller = new AbortController();
+    capturedRequestRef.current?.abort();
+    capturedRequestRef.current = controller;
+    const timeout = setTimeout(() => {
+      if (capturedGenerationRef.current !== generation) return;
+      controller.abort();
+      if (capturedRequestRef.current === controller) capturedRequestRef.current = null;
+      // Do not leave a spinner owned by a transport that ignores abort.
+      setCapturedRun(null);
+      setCapturedLoading(false);
+    }, 30_000);
     setCapturedLoading(true);
-    void safeFetchJson<{ run: CapturedRun }>(`/api/v1/runs/${encodeURIComponent(contact.edgeview_v1_run_id)}`)
-      .then(({ ok, data }) => setCapturedRun(ok && data?.run ? data.run : null))
-      .finally(() => setCapturedLoading(false));
+    void safeFetchJson<{ run: CapturedRun }>(`/api/v1/runs/${encodeURIComponent(runId)}`, { signal: controller.signal, timeoutMs: 30_000 })
+      .then(({ ok, data }) => {
+        if (controller.signal.aborted || capturedGenerationRef.current !== generation) return;
+        // A late run A response must never be rendered under contact/run B.
+        setCapturedRun(ok && data?.run?.id === runId ? data.run : null);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (capturedGenerationRef.current !== generation) return;
+        if (capturedRequestRef.current === controller) capturedRequestRef.current = null;
+        setCapturedLoading(false);
+      });
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+      if (capturedGenerationRef.current === generation) capturedGenerationRef.current += 1;
+      if (capturedRequestRef.current === controller) capturedRequestRef.current = null;
+    };
   }, [activeTab, capturedRun?.id, contact?.edgeview_v1_run_id, isOpen]);
 
   if (!isOpen || !contact) return null;
@@ -490,7 +527,7 @@ export const SourceEvidenceModal: React.FC<SourceEvidenceModalProps> = ({
                 <div className="rounded-lg border border-[#333] bg-[#222] p-5 text-center text-xs text-gray-400">This company has not been researched yet.</div>
               ) : capturedLoading ? (
                 <div className="rounded-lg border border-[#333] bg-[#222] p-5 text-center text-xs text-gray-400">Loading the complete retained run…</div>
-              ) : !capturedRun ? (
+              ) : !capturedRun || capturedRun.id !== contact.edgeview_v1_run_id ? (
                 <div className="rounded-lg border border-red-900 bg-red-950/20 p-5 text-center text-xs text-red-300">The retained run could not be loaded.</div>
               ) : (
                 <>

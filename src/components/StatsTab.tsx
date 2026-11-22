@@ -41,6 +41,7 @@ import {
 } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 import { formatNumber, formatCurrency, formatFullCurrency } from '../utils/formatters';
+import { compareTradeDates } from './FileViewer';
 
 interface StatsTabProps {
   files: ParsedFile[];
@@ -51,6 +52,32 @@ interface StatsTabProps {
 
 type PeriodMode = 'full' | 'yearly' | 'monthly' | 'custom';
 type SortField = 'date' | 'invoice_no' | 'product' | 'quantity' | 'total_value' | 'exporter';
+
+export interface StatsExportScope {
+  fileIds: string[];
+  country: string;
+  importer: string;
+  startDate: string;
+  endDate: string;
+}
+
+export function monthDateRange(now: Date): { startDate: string; endDate: string } {
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const prefix = `${year}-${String(month).padStart(2, '0')}`;
+  const lastDay = new Date(year, month, 0).getDate();
+  return { startDate: `${prefix}-01`, endDate: `${prefix}-${String(lastDay).padStart(2, '0')}` };
+}
+
+export function buildStatsExportQuery(scope: StatsExportScope): string {
+  const params = new URLSearchParams();
+  if (scope.fileIds.length === 1) params.set('file_id', scope.fileIds[0]);
+  if (scope.country !== 'ALL') params.set('country', scope.country);
+  if (scope.startDate) params.set('start', scope.startDate);
+  if (scope.endDate) params.set('end', scope.endDate);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
 
 export const StatsTab: React.FC<StatsTabProps> = props => {
   const [scope, setScope] = useState(props.selectedFileId ?? '');
@@ -91,7 +118,7 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
   const [isLoadingStats, setIsLoadingStats] = useState<boolean>(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const statsRequest = useRef<AbortController | null>(null);
-  const [appliedExportScope, setAppliedExportScope] = useState<{ fileIds: string[]; country: string; importer: string; startDate: string; endDate: string } | null>(null);
+  const [appliedExportScope, setAppliedExportScope] = useState<StatsExportScope | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [productSearch, setProductSearch] = useState<string>('');
   const [exporterSearch, setExporterSearch] = useState<string>('');
@@ -145,6 +172,13 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
       });
       if (ok && data && data.success) {
         setDeleteNotice({ type: 'success', text: data.message || `File "${fileToDelete.file_name}" permanently deleted.` });
+        if (fileToDelete.id === selectedFileId || appliedExportScope?.fileIds.includes(fileToDelete.id)) {
+          setSelectedImporter('');
+          setImporterSummary(null);
+          setProducts([]); setExporters([]); setShipments([]);
+          setAppliedExportScope(null);
+          setSelectedRawRecord(null);
+        }
         setFileToDelete(null);
         setDeleteConfirmText('');
         await Promise.all([fetchHistoryFiles(), fetchGlobalData()]);
@@ -360,17 +394,17 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
   };
 
   const handleExportCSV = async () => {
-    if (!selectedImporter) return;
+    if (!selectedImporter || !appliedExportScope) return;
+    const scope = appliedExportScope;
 
     if (onOpenExport) {
-      if (!appliedExportScope) return;
-      const cleanName = selectedImporter.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanName = scope.importer.replace(/[^a-zA-Z0-9_-]/g, '_');
       onOpenExport({
         dataset: 'stats',
-        title: `Importer Intelligence: ${selectedImporter}`,
-        records: [], sourceFileIds: appliedExportScope.fileIds, recordCount: shipments.length,
-        filters: { country: appliedExportScope.country, importer: appliedExportScope.importer,
-          startDate: appliedExportScope.startDate, endDate: appliedExportScope.endDate },
+        title: `Importer Intelligence: ${scope.importer}`,
+        records: [], sourceFileIds: scope.fileIds, recordCount: shipments.length,
+        filters: { country: scope.country, importer: scope.importer,
+          startDate: scope.startDate, endDate: scope.endDate },
         filenamePrefix: `EdgeView_Stats_${cleanName}`,
       });
       return;
@@ -378,19 +412,13 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
 
     setIsExporting(true);
     try {
-      const fileParam = selectedFileId ? `&file_id=${selectedFileId}` : '';
-      const cParam = selectedCountry !== 'ALL' ? `&country=${encodeURIComponent(selectedCountry)}` : '';
-      const startParam = startDate ? `&start=${encodeURIComponent(startDate)}` : '';
-      const endParam = endDate ? `&end=${encodeURIComponent(endDate)}` : '';
-      const queryStr = `?${fileParam}${cParam}${startParam}${endParam}`.replace('?&', '?');
-
-      const url = `/api/stats/importers/${encodeURIComponent(selectedImporter)}/export${queryStr}`;
+      const url = `/api/stats/importers/${encodeURIComponent(scope.importer)}/export${buildStatsExportQuery(scope)}`;
       const response = await fetch(url);
       const { blob, filename } = await processAndValidateExportResponse(response, 'csv');
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      const cleanName = selectedImporter.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanName = scope.importer.replace(/[^a-zA-Z0-9_-]/g, '_');
       a.download = filename || `Pharma_Stats_${cleanName}.csv`;
       document.body.appendChild(a);
       a.click();
@@ -441,6 +469,11 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
     return [...list].sort((a, b) => {
       let valA: any = a[sortField] || '';
       let valB: any = b[sortField] || '';
+
+      if (sortField === 'date') {
+        const comparison = compareTradeDates(valA, valB);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      }
 
       if (sortField === 'total_value' || sortField === 'quantity') {
         valA = Number(valA) || 0;
@@ -848,11 +881,9 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
                         setStartDate(`${curYear}-01-01`);
                         setEndDate(`${curYear}-12-31`);
                       } else if (mode === 'monthly') {
-                        const now = new Date();
-                        const y = now.getFullYear();
-                        const m = String(now.getMonth() + 1).padStart(2, '0');
-                        setStartDate(`${y}-${m}-01`);
-                        setEndDate(`${y}-${m}-31`);
+                        const range = monthDateRange(new Date());
+                        setStartDate(range.startDate);
+                        setEndDate(range.endDate);
                       }
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -890,13 +921,16 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
                 className="w-full bg-[#242424] border border-[#333333] rounded-md px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#10b981]"
               />
             </div>
-            <div className="flex items-end">
+            <div className="flex flex-col justify-end gap-1">
               <button
                 onClick={loadImporterStats}
                 className="w-full bg-[#10b981] hover:bg-[#0d9668] text-white text-xs font-semibold py-1.5 px-4 rounded-md transition-colors flex items-center justify-center space-x-1.5"
               >
                 <span>Apply Range</span>
               </button>
+              {appliedExportScope && (appliedExportScope.startDate !== startDate || appliedExportScope.endDate !== endDate) && (
+                <span className="text-[10px] text-amber-300">Date edits are not applied yet.</span>
+              )}
             </div>
           </div>
         )}
@@ -924,18 +958,20 @@ const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFi
                   <span className="text-[#10b981] font-semibold">{importerSummary?.country || selectedCountry}</span>
                   <span>•</span>
                   <span>
-                    Range: {startDate || endDate ? `${startDate || 'Beginning'} to ${endDate || 'Present'}` : 'Full History'}
+                    Applied range: {appliedExportScope ? (appliedExportScope.startDate || appliedExportScope.endDate
+                      ? `${appliedExportScope.startDate || 'Beginning'} to ${appliedExportScope.endDate || 'Present'}`
+                      : 'Full History') : 'Not applied'}
                   </span>
                 </div>
               </div>
 
               <button
                 onClick={handleExportCSV}
-                disabled={isExporting}
+                disabled={isExporting || isLoadingStats || !appliedExportScope || Boolean(statsError)}
                 className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-[#10b981] hover:bg-[#0d9668] text-white text-xs font-semibold shadow-xs transition-colors shrink-0 disabled:opacity-50"
               >
                 <Download className="w-4 h-4" />
-                <span>{isExporting ? 'Exporting...' : 'Export Full History & Invoices'}</span>
+                <span>{isExporting ? 'Exporting...' : appliedExportScope?.startDate || appliedExportScope?.endDate ? 'Export Applied Range & Invoices' : 'Export Full History & Invoices'}</span>
               </button>
             </div>
 

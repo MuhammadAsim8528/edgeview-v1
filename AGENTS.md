@@ -1,5 +1,30 @@
 # EdgeView V1 — Engineering Contract
 
+> [!IMPORTANT]
+> **ACTIVE MULTI-AI COLLABORATIVE SWARM NOTICE & DIVISION OF LABOR**
+> Three primary AI engines are operating concurrently under Antigravity coordination with EXCLUSIVE department ownership:
+> 
+> 1. **Claude Code CLI — Department 2 (Backend Core, APIs & Gatekeeper)**:
+>    - **Exclusive Domain**: server.ts, server/db.ts, server/trade_relationship_resolver.ts, server/export_manager.ts, server/v1_engine.ts, .github/.
+>    - **Responsibility**: Enforce file-scoped database isolation, prevent SSRF, guarantee SQLite transactional integrity, and maintain backend test suites (
+pm run test:v1).
+>    - **Constraint**: DO NOT touch frontend components (src/) or document generators (server/docx_*.ts, server/pdf_*.ts).
+> 
+> 2. **Kimi Code CLI — Department 3 (Frontend UI, Exporters & Document Generators)**:
+>    - **Exclusive Domain**: src/, server/parsers.ts, server/docx_report.ts, server/pdf_report.ts, server/docx_stream.ts, src/utils/.
+>    - **Responsibility**: Eliminate UI race conditions in batch enrichment/modals, guarantee clean XML/binary formatting for DOCX/PDF exports, and robust CSV/Excel cell parsing.
+>    - **Constraint**: DO NOT touch backend core server.ts or database persistence layers (server/db.ts, server/sqlite.ts).
+> 
+> 3. **Hermes Agent — Department 5 & 6 (QA Verification, Live Health & Task Dispatch)**:
+>    - **Exclusive Domain**: 	ests/e2e/, scripts/, .ai-brain/03_LIVE_FEED.md, .ai-brain/04_BUG_MEMORY.md.
+>    - **Responsibility**: Execute Playwright E2E test runs against http://127.0.0.1:3901, monitor API responsiveness, and log single-line heartbeats to .ai-brain/03_LIVE_FEED.md.
+>    - **Constraint**: Read-only on production source files; focus on test runners and audit logs.
+> 
+> 4. **Central Arbiter (Antigravity)**:
+>    - Arbitrates file locks in .ai-brain/02_TASK_BOARD.md, auto-approves daemon execution, and executes final Git merges and GitHub releases.
+> 
+> **Collaboration Invariant**: Before modifying any file, check .ai-brain/02_TASK_BOARD.md to ensure it is not locked by another agent. Never overwrite a teammate's edits.
+
 This file is the authoritative orientation document for coding agents working on the current EdgeView repository.
 
 ## 1. Current product boundary

@@ -19,7 +19,7 @@ export function validateProviderEnvelope(body: unknown, kind: 'serper' | 'hunter
   }
 }
 
-export async function readProviderResponse(response: Response, maxBytes = 8 * 1024 * 1024, timeoutMs = 20_000, allowArray = false): Promise<{ body: unknown; failure?: { name: string; message: string; status: number } }> {
+export async function readProviderResponse(response: Response, maxBytes = 8 * 1024 * 1024, timeoutMs = 20_000, allowArray = false, signal?: AbortSignal): Promise<{ body: unknown; failure?: { name: string; message: string; status: number } }> {
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 32 * 1024 * 1024 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid provider response bounds');
   const reader = response.body?.getReader();
   // One bounded allocation avoids millions of tiny chunks and race callbacks
@@ -30,6 +30,8 @@ export async function readProviderResponse(response: Response, maxBytes = 8 * 10
   const fail = (name: string, message: string) => Object.assign(new Error(message), { name, status: response.status });
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(fail('ProviderBodyTimeout', 'Provider response body timeout')), timeoutMs);
+    signal?.addEventListener('abort', () => reject(signal.reason instanceof Error ? signal.reason : fail('ProviderBodyTimeout', 'Provider response cancelled')), { once: true });
+    if (signal?.aborted) reject(signal.reason);
   });
   try {
     await Promise.race([(async () => {

@@ -333,10 +333,38 @@ const SPELLINGS: Record<string, string> = {
   unknown: 'Unknown',
   'n/a': 'Unknown',
   'na': 'Unknown',
+  null: 'Unknown',
+  nan: 'Unknown',
+  none: 'Unknown',
+  nil: 'Unknown',
+  'not available': 'Unknown',
+  'not applicable': 'Unknown',
+  kazakistan: 'Kazakhstan',
+  turkemanistan: 'Turkmenistan',
+  kampuchea: 'Cambodia',
+  'upper volta': 'Burkina Faso',
+  'british virgin islands': 'British Virgin Islands',
 };
+
+// The historical SPELLINGS table uses human-readable keys. Index the collapsed
+// form as well so punctuation/spacing variants and multi-word aliases actually
+// follow the same exact-match path as their documented representation.
+const SPELLING_KEY_TO_NAME: Record<string, string> = {};
+for (const [spelling, name] of Object.entries(SPELLINGS)) SPELLING_KEY_TO_NAME[collapse(spelling)] = name;
+const COLLAPSED_SPELLING_FRAGMENTS = Object.keys(SPELLING_KEY_TO_NAME)
+  .filter(key => key.length >= 4)
+  .sort((a, b) => b.length - a.length);
+const MISSING_COUNTRY_KEYS = new Set(['na', 'unknown', 'notspecified', 'unspecified', 'null', 'nan', 'none', 'nil',
+  'notavailable', 'notapplicable']);
 
 function collapse(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9']/g, '');
+}
+
+function missingCountryValue(raw: string): string {
+  const key = collapse(raw);
+  if (!MISSING_COUNTRY_KEYS.has(key)) return '';
+  return key === 'notspecified' || key === 'unspecified' ? 'Not Specified' : 'Unknown';
 }
 
 /**
@@ -345,6 +373,9 @@ function collapse(raw: string): string {
 export function interpretExplicitCountryCode(code: string | null | undefined): string | '' {
   if (!code) return '';
   const upper = String(code).trim().toUpperCase();
+  // NA is overwhelmingly a missing-data marker in trade files. Namibia remains
+  // unambiguous through NAM or its full name; never guess from this collision.
+  if (upper === 'NA') return '';
   if (upper.length >= 2 && upper.length <= 3 && CODE_TO_NAME[upper]) {
     return CODE_TO_NAME[upper];
   }
@@ -358,6 +389,8 @@ export function normalizeCountryExact(raw: string | null | undefined): string {
   if (!raw) return '';
   const s = String(raw).trim();
   if (!s) return '';
+  const missing = missingCountryValue(s);
+  if (missing) return missing;
 
   // 1. If it is exactly a 2-3 letter code:
   if (s.length >= 2 && s.length <= 3) {
@@ -367,7 +400,7 @@ export function normalizeCountryExact(raw: string | null | undefined): string {
 
   // 2. Common spelling / exact alias match
   const key = collapse(s);
-  if (SPELLINGS[key]) return SPELLINGS[key];
+  if (SPELLING_KEY_TO_NAME[key]) return SPELLING_KEY_TO_NAME[key];
   if (NAME_KEY_TO_NAME[key]) return NAME_KEY_TO_NAME[key];
 
   return s;
@@ -382,6 +415,8 @@ export function normalizeCountryName(raw: string | null | undefined): string {
   if (raw === null || raw === undefined) return '';
   const s = String(raw).trim();
   if (!s) return '';
+  const missing = missingCountryValue(s);
+  if (missing) return missing;
 
   // 1. Exact ISO alpha-2 / alpha-3 code match (when input is short).
   if (s.length >= 2 && s.length <= 3) {
@@ -389,24 +424,34 @@ export function normalizeCountryName(raw: string | null | undefined): string {
     if (explicit) return explicit;
   }
 
-  // 2. Common spelling / compound match.
+  // 2. Common spelling / compound match, followed by all exact ISO names.
   const key = collapse(s);
-  if (SPELLINGS[key]) return SPELLINGS[key];
-
-  // 3. Collapsed official ISO name (covers all 249 countries exactly).
+  if (SPELLING_KEY_TO_NAME[key]) return SPELLING_KEY_TO_NAME[key];
   if (NAME_KEY_TO_NAME[key]) return NAME_KEY_TO_NAME[key];
 
-  // 4. Check for explicit trailing parenthetical ISO code (e.g. "Afghanistan (AFG)" or "Pakistan (PK)")
-  const trailingIso = s.match(/\(\s*([A-Z]{2,3})\s*\)$/);
-  if (trailingIso && CODE_TO_NAME[trailingIso[1]]) {
-    return CODE_TO_NAME[trailingIso[1]];
+  // A sentence containing several countries, a conflicting country/code pair,
+  // or a negated country is not a country value. Preserve the unresolved input
+  // verbatim; strict identity callers convert that ambiguity to unknown.
+  const mentioned = detectExplicitCountryNames(s);
+  if (mentioned.length > 1 || detectNegatedCountryNames(s).length
+    || (mentioned.length && /\b(?:n\/?a|unknown|not[\s-]+specified|not[\s-]+available)\b/i.test(s))) return s;
+
+  // 3. Check for an explicit trailing parenthetical ISO code. A contradictory
+  // name and code must not silently select whichever happened to come last.
+  const trailingIso = s.match(/\(\s*([A-Za-z]{2,3})\s*\)$/);
+  if (trailingIso) {
+    const coded = interpretExplicitCountryCode(trailingIso[1]);
+    if (coded && mentioned.length && mentioned[0].toLowerCase() !== coded.toLowerCase()) return s;
+    if (coded) return coded;
   }
 
-  // 5. Fall back to longest spelling fragment when the value is a sentence (e.g. "Country: Pakistan")
-  const fragmentKeys = Object.keys(SPELLINGS).sort((a, b) => b.length - a.length);
-  for (const frag of fragmentKeys) {
-    if (frag.length < 4) continue;
-    if (key.includes(frag)) return SPELLINGS[frag];
+  // 4. One affirmed country mention in a labelled sentence is unambiguous.
+  if (mentioned.length === 1) return mentioned[0];
+
+  // 5. Retain support for common misspellings in free text without substring-
+  // matching one real country inside another (Niger/Nigeria, Sudan/South Sudan).
+  for (const fragment of COLLAPSED_SPELLING_FRAGMENTS) {
+    if (key.includes(fragment)) return SPELLING_KEY_TO_NAME[fragment];
   }
 
   return s;
@@ -416,32 +461,21 @@ export function normalizeCountryName(raw: string | null | undefined): string {
  * Conservative country mentions for validating country-scoped address merges.
  */
 export function detectCountriesInFreeText(raw: string | null | undefined): string[] {
-  const text = String(raw || '').toLowerCase();
+  const text = String(raw || '');
   if (!text.trim()) return [];
-  const found = new Set<string>();
+  const found = new Set(detectExplicitCountryNames(text));
 
-  for (const [, , name] of ISO_3166_1) {
-    const candidate = name.toLowerCase();
-    if (candidate.length >= 4 && new RegExp(`\\b${candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text)) {
-      found.add(name);
-    }
-  }
-
-  // Also match ISO alpha-2 codes (e.g., "US" -> United States)
+  // Uppercase ISO codes remain explicit; lowercase prose such as "us" or
+  // "in" is never reinterpreted as a country code.
   for (const [alpha2, , name] of ISO_3166_1) {
-    if (alpha2.length === 2) {
-      const code = alpha2.toLowerCase();
-      if (new RegExp(`\\b${code}\\b`, 'i').test(text)) {
-        found.add(name);
-      }
-    }
+    if (new RegExp(`\\b${alpha2}\\b`).test(text)) found.add(name);
   }
 
   const safeAliases: Array<[RegExp, string]> = [
     [/\b(?:u\.?s\.?a\b|united states of america)\b/i, 'United States'],
     [/\b(?:united kingdom|great britain|england|scotland|wales)\b/i, 'United Kingdom'],
     [/\b(?:united arab emirates|u\.?a\.?e\b)\b/i, 'United Arab Emirates'],
-    [/\b(?:czech republic|czechia)\b/i, 'Czech Republic'],
+    [/\b(?:czech republic|czechia)\b/i, 'Czechia'],
     [/\b(?:ivory coast|cote d'ivoire)\b/i, "Côte d'Ivoire"],
     [/\b(?:democratic republic of the congo|drc|congo-kinshasa)\b/i, 'Congo (Democratic Republic of the)'],
     [/\b(?:republic of the congo|congo-brazzaville)\b/i, 'Congo'],
@@ -464,7 +498,16 @@ export const detectCountryNamesInText = detectCountriesInFreeText;
 // "made in" as ISO codes. Longest non-overlapping names also keep South Sudan
 // distinct from Sudan (and Papua New Guinea distinct from Guinea).
 const explicitCountryNames = new Map(ISO_3166_1.map(([, , name]) => [name.toLowerCase(), name]));
-const explicitCountryPattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${[...explicitCountryNames.values()]
+for (const [alias, name] of [
+  ['united states of america', 'United States'], ['great britain', 'United Kingdom'],
+  ['england', 'United Kingdom'], ['scotland', 'United Kingdom'], ['wales', 'United Kingdom'],
+  ['united arab emirates', 'United Arab Emirates'], ['czech republic', 'Czechia'],
+  ['ivory coast', "Côte d'Ivoire"], ["cote d'ivoire", "Côte d'Ivoire"], ['cote divoire', "Côte d'Ivoire"],
+  ['democratic republic of the congo', 'Congo (Democratic Republic of the)'],
+  ['congo-kinshasa', 'Congo (Democratic Republic of the)'], ['republic of the congo', 'Congo'],
+  ['congo-brazzaville', 'Congo'], ['russian federation', 'Russia'],
+] as const) explicitCountryNames.set(alias, name);
+const explicitCountryPattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${[...explicitCountryNames.keys()]
   .sort((a, b) => b.length - a.length).map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![\\p{L}\\p{N}])`, 'giu');
 // These uppercase office abbreviations are explicit labels, not arbitrary ISO
 // codes. Preserve case: "us", "in" and the Spanish verb "usa" are prose.
@@ -472,24 +515,68 @@ const explicitCountryAbbreviations = new Map([
   ['UAE', 'United Arab Emirates'], ['UK', 'United Kingdom'], ['USA', 'United States'],
 ]);
 const explicitAbbreviationPattern = /(?<![\p{L}\p{N}])(?:UAE|UK|USA|U\.A\.E\.?|U\.K\.?|U\.S\.A\.?)(?![\p{L}\p{N}])/gu;
-export function detectExplicitCountryNames(raw: string): string[] {
+type CountryMention = { at: number; name: string; negated: boolean };
+function countryMentionIsNegated(text: string, at: number): boolean {
+  const prefix = text.slice(Math.max(0, at - 140), at);
+  // Limit negation to its own clause. "Not only Kenya" is affirmative; a new
+  // sentence or contrast starts a new claim and must not inherit the negation.
+  const clause = prefix.split(/[.!?;:\r\n]|\b(?:but|however|yet)\b/iu).at(-1) || '';
+  return /(?:\bnot\s+(?!only\b|just\b)|\b(?:no|never|without|outside|excluding|except|non)\b)[\s\S]{0,120}$/iu.test(clause);
+}
+function explicitCountryMentions(raw: string): CountryMention[] {
   const text = String(raw || '');
-  const matches = [
+  return [
     ...[...text.matchAll(explicitCountryPattern)].map(match => ({ at: match.index!, name: explicitCountryNames.get(match[0].toLowerCase())! })),
     ...[...text.matchAll(explicitAbbreviationPattern)].map(match => ({ at: match.index!, name: explicitCountryAbbreviations.get(match[0].replace(/\./g, ''))! })),
-  ].sort((a, b) => a.at - b.at);
-  return [...new Set(matches.map(match => match.name).filter(Boolean))];
+  ].filter(match => Boolean(match.name)).sort((a, b) => a.at - b.at)
+    .map(match => ({ ...match, negated: countryMentionIsNegated(text, match.at) }));
+}
+export function detectExplicitCountryNames(raw: string): string[] {
+  return [...new Set(explicitCountryMentions(raw).map(match => match.name))];
+}
+/** Only affirmative statements are positive country-scope evidence. */
+export function detectAffirmedCountryNames(raw: string): string[] {
+  return [...new Set(explicitCountryMentions(raw).filter(match => !match.negated).map(match => match.name))];
+}
+/** Explicit denials are contradiction evidence, never positive location proof. */
+export function detectNegatedCountryNames(raw: string): string[] {
+  return [...new Set(explicitCountryMentions(raw).filter(match => match.negated).map(match => match.name))];
+}
+
+/** A canonical country only when the entire value is one affirmed known country.
+ * Missing markers, negation, mixtures and unresolved labels all abstain. */
+export function normalizeCountryNameStrict(raw: string | null | undefined): string {
+  const normalized = normalizeCountryName(raw);
+  if (!normalized || normalized === 'Unknown' || normalized === 'Not Specified') return '';
+  const mentions = explicitCountryMentions(normalized);
+  const countries = [...new Set(mentions.map(match => match.name))];
+  return countries.length === 1 && countries[0].toLowerCase() === normalized.toLowerCase()
+    && mentions.every(match => !match.negated) ? countries[0] : '';
+}
+
+const COUNTRY_NAME_TO_ALPHA2 = new Map(ISO_3166_1.map(([alpha2, , name]) => [name.toLowerCase(), alpha2]));
+/** ISO alpha-2 for a fully resolved country, never for mixed/unknown text. */
+export function countryAlpha2Code(raw: string | null | undefined): string {
+  const canonical = normalizeCountryNameStrict(raw);
+  return canonical ? COUNTRY_NAME_TO_ALPHA2.get(canonical.toLowerCase()) || '' : '';
+}
+
+/** Country-code top-level domains associated with a resolved country. GB/UK are
+ * both recognized for the United Kingdom; XK is retained for existing Kosovo data. */
+export function countryCcTlds(raw: string | null | undefined): string[] {
+  const alpha2 = countryAlpha2Code(raw).toLowerCase();
+  if (!alpha2) return [];
+  return alpha2 === 'gb' ? ['gb', 'uk'] : [alpha2];
 }
 
 /** Compares two country names for semantic equivalence */
 export function compareCountryOwnership(countryA?: string, countryB?: string): boolean {
-  if (!countryA || !countryB) return false;
-  const normA = normalizeCountryName(countryA).toLowerCase();
-  const normB = normalizeCountryName(countryB).toLowerCase();
+  const normA = normalizeCountryNameStrict(countryA).toLowerCase();
+  const normB = normalizeCountryNameStrict(countryB).toLowerCase();
   return normA.length > 0 && normA === normB;
 }
 
 /** True when the given raw value normalizes to Pakistan. */
 export function isPakistanCountry(raw: string | null | undefined): boolean {
-  return normalizeCountryName(raw).toLowerCase() === 'pakistan';
+  return normalizeCountryNameStrict(raw).toLowerCase() === 'pakistan';
 }

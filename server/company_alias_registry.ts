@@ -50,7 +50,7 @@ export async function confirmCompanyAliasAdmission(
   selection: Readonly<{ aliasId: string; canonicalId: string; runId: string; rawRecordId: string; confirmation: string }>,
   sources: {
     getContact: (id: string) => CompanyContact | undefined;
-    getRun: (id: string) => V1Run | null;
+    getRun: (id: string) => V1Run | null | Promise<V1Run | null>;
   },
 ): Promise<CompanyAliasRow> {
   const { aliasId, canonicalId, runId, rawRecordId, confirmation } = selection;
@@ -62,7 +62,7 @@ export async function confirmCompanyAliasAdmission(
     const canonical = sources.getContact(canonicalId);
     if (!alias || !canonical || alias.id !== aliasId || canonical.id !== canonicalId) return refuse('ALIAS_RECORD_NOT_FOUND');
     let run: V1Run | null;
-    try { run = sources.getRun(runId); }
+    try { run = await sources.getRun(runId); }
     catch { return refuse('ALIAS_EVIDENCE_UNREADABLE'); }
     if (!run || run.id !== runId) return refuse('ALIAS_RUN_NOT_FOUND');
     const plan = prepareCompanyAliasAdmission(alias, canonical, run, rawRecordId);
@@ -80,8 +80,8 @@ export type CompanyAliasRegistration =
  * current source records, policy and immutable proof again before consumption.
  * Related rows exclude this row and identify either direction of a chain.
  * The synchronous snapshot does not authorize concurrent mutation/publication. */
-export function validateCompanyAliasRegistration(row: CompanyAliasRow, contacts: ReadonlyArray<CompanyContact>,
-  related: ReadonlyArray<CompanyAliasRow>, loadRun: (id: string) => V1Run | null): CompanyAliasRegistration {
+export async function validateCompanyAliasRegistration(row: CompanyAliasRow, contacts: ReadonlyArray<CompanyContact>,
+  related: ReadonlyArray<CompanyAliasRow>, loadRun: (id: string) => V1Run | null | Promise<V1Run | null>): Promise<CompanyAliasRegistration> {
   const invalid = (): CompanyAliasRegistration => ({ status: 'invalid', code: 'ALIAS_REGISTRATION_INVALID' });
   if (!row || typeof row.proof_json !== 'string' || Buffer.byteLength(row.proof_json, 'utf8') > 8192
     || ![row.alias_id, row.canonical_id].every(id => typeof id === 'string' && /^[a-z0-9-]{1,100}$/i.test(id))
@@ -97,7 +97,7 @@ export function validateCompanyAliasRegistration(row: CompanyAliasRow, contacts:
   if (!proof || proof.policy_version !== COMPANY_ALIAS_PROOF_POLICY
     || ![proof.run_id, proof.raw_record_id].every(id => typeof id === 'string' && /^[a-z0-9-]{1,100}$/i.test(id))) return invalid();
   let run: V1Run | null;
-  try { run = loadRun(String(proof.run_id)); }
+  try { run = await loadRun(String(proof.run_id)); }
   catch { return { status: 'unavailable', code: 'ALIAS_REGISTRATION_UNAVAILABLE' }; }
   if (!run) return { status: 'unavailable', code: 'ALIAS_REGISTRATION_UNAVAILABLE' };
   try {
@@ -110,7 +110,7 @@ export function validateCompanyAliasRegistration(row: CompanyAliasRow, contacts:
 /** Read-only registry consumer. An unavailable operational store never becomes
  * an empty/approved registry, and this read must not initialize/migrate it. */
 export async function readCompanyAliasRegistration(aliasId: string,
-  contacts: () => ReadonlyArray<CompanyContact>, loadRun: (id: string) => V1Run | null): Promise<CompanyAliasRegistration> {
+  contacts: () => ReadonlyArray<CompanyContact>, loadRun: (id: string) => V1Run | null | Promise<V1Run | null>): Promise<CompanyAliasRegistration> {
   if (getOperationalDatabaseStatus().status !== 'ok') return { status: 'unavailable', code: 'ALIAS_REGISTRATION_UNAVAILABLE' };
   try {
     const database = await getDb();
@@ -119,14 +119,14 @@ export async function readCompanyAliasRegistration(aliasId: string,
     const related = await database.all(`SELECT * FROM company_aliases
       WHERE alias_id = ? OR alias_key = ? OR canonical_id = ? OR canonical_key = ?`,
     [row.canonical_id, row.canonical_key, row.alias_id, row.alias_key]) as CompanyAliasRow[];
-    return validateCompanyAliasRegistration(row, contacts(), related, loadRun);
+    return await validateCompanyAliasRegistration(row, contacts(), related, loadRun);
   } catch { return { status: 'unavailable', code: 'ALIAS_REGISTRATION_UNAVAILABLE' }; }
 }
 
 /** Resolve group membership from current records and retained proof.
  * Callers keep the original source records and their independent history. */
-export function resolveVerifiedCompanyAliasIds(contacts: readonly CompanyContact[], rows: readonly CompanyAliasRow[],
-  loadRun: (id: string) => V1Run | null): ReadonlyMap<string, string> {
+export async function resolveVerifiedCompanyAliasIds(contacts: readonly CompanyContact[], rows: readonly CompanyAliasRow[],
+  loadRun: (id: string) => V1Run | null | Promise<V1Run | null>): Promise<ReadonlyMap<string, string>> {
   const contactsById = new Map<string, CompanyContact[]>();
   for (const contact of contacts) {
     const matches = contactsById.get(contact.id) ?? [];
@@ -153,7 +153,7 @@ export function resolveVerifiedCompanyAliasIds(contacts: readonly CompanyContact
       || aliasIds.has(row.canonical_id) || aliasKeys.has(row.canonical_key)
       || targetIds.has(row.alias_id) || targetKeys.has(row.alias_key)) continue;
     const current = [...(contactsById.get(row.alias_id) ?? []), ...(contactsById.get(row.canonical_id) ?? [])];
-    const result = validateCompanyAliasRegistration(row, current, [], loadRun);
+    const result = await validateCompanyAliasRegistration(row, current, [], loadRun);
     if (result.status === 'verified') canonicalIds.set(result.alias_id, result.canonical_id);
   }
   return canonicalIds;

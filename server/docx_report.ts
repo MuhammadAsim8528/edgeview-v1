@@ -40,11 +40,21 @@ export interface ReportCompanyContact {
   evidence?: Array<{ field: string; value: string; source_url: string; confidence?: number; evidence_text?: string }>;
 }
 
+import { protectSpreadsheetText } from './spreadsheet_cells';
+
 export function cleanMarkdown(text: string | null | undefined): string {
   // Compatibility name: report inputs are structured business facts, not
   // Markdown prose. Removing markers changes product codes, names and URLs.
   // Office/PDF/CSV renderers retain their own escaping and formula protection.
-  return text == null ? '' : String(text).trim();
+  return text == null ? '' : protectSpreadsheetText(String(text).trim());
+}
+
+export function formatReportSource(source: { url: string; title?: string }): string {
+  const url = cleanMarkdown(source.url);
+  const title = cleanMarkdown(source.title);
+  if (!title) return url;
+  if (!url || title === url) return title;
+  return `${title} (${url})`;
 }
 
 const thinBorder = {
@@ -191,7 +201,7 @@ function buildContactCell(imp: NormalizedImporterReport): TableCell {
   if (ci.sources.length > 0) {
     paragraphs.push(...cellParagraphs([
       new TextRun({ text: 'Sources: ', font: 'Arial', size: 14, bold: true, color: '475569' }),
-      cellText(ci.sources.map((s) => s.url).join('; '), { size: 13, color: '64748B' }),
+      cellText(ci.sources.map(formatReportSource).join('; '), { size: 13, color: '64748B' }),
     ]));
   }
 
@@ -211,7 +221,7 @@ function buildTradeCell(imp: NormalizedImporterReport): TableCell {
   } else {
     imp.tradeHistory.forEach((r, rIdx) => {
       const runs: TextRun[] = [
-        new TextRun({ text: `â€¢ ${cleanMarkdown(r.partnerName)}`, font: 'Arial', size: 14, bold: true, color: '334155' }),
+        new TextRun({ text: `• ${cleanMarkdown(r.partnerName)}`, font: 'Arial', size: 14, bold: true, color: '334155' }),
         new TextRun({ text: ` (${cleanMarkdown(r.country || 'Unknown')})`, font: 'Arial', size: 12, color: '64748B' }),
         new TextRun({ text: ` [${r.shipmentCount || 0} shp]`, font: 'Arial', size: 12, italics: true, color: '0284C7' }),
       ];

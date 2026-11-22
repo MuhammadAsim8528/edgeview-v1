@@ -186,8 +186,7 @@ async function validatePdf(buf: Buffer) {
 }
 
 async function measurePeakDuringExport(promise: Promise<any>): Promise<{ peak: any; result: any }> {
-  let peak = { rss: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
-  let done = false;
+  const peak = { rss: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
   const poll = setInterval(() => {
     const m = process.memoryUsage();
     if (m.rss > peak.rss) peak.rss = m.rss;
@@ -195,9 +194,13 @@ async function measurePeakDuringExport(promise: Promise<any>): Promise<{ peak: a
     if (m.external > peak.external) peak.external = m.external;
     if ((m.arrayBuffers || 0) > peak.arrayBuffers) peak.arrayBuffers = m.arrayBuffers || 0;
   }, 20);
-  const result = await promise;
-  clearInterval(poll);
-  return { peak, result };
+  poll.unref();
+  try {
+    const result = await promise;
+    return { peak, result };
+  } finally {
+    clearInterval(poll);
+  }
 }
 
 async function main() {

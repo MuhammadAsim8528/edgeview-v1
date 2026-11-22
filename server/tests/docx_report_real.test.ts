@@ -1,5 +1,6 @@
 import { generateDocxReport, ReportCompanyContact } from '../docx_report';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 
 function assert(condition: boolean, msg: string) {
@@ -9,6 +10,8 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function runDocxReportRealTest() {
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-docx-report-'));
+  try {
   console.log('--- RUNNING REAL DOCX DIRECTORY REPORT GENERATION TEST ---');
 
   const sampleContacts: ReportCompanyContact[] = [
@@ -80,19 +83,18 @@ async function runDocxReportRealTest() {
   console.log(`   Generated DOCX Buffer size: ${docxBuffer.length} bytes`);
   assert(docxBuffer.length > 5000, `DOCX buffer size must be >5KB (got ${docxBuffer.length} bytes)`);
 
-  const outputPath = path.join(process.cwd(), '.agent', 'scratch', 'test_edgeview_contact_directory.docx');
-  const scratchDir = path.join(process.cwd(), '.agent', 'scratch');
-  if (!fs.existsSync(scratchDir)) {
-    fs.mkdirSync(scratchDir, { recursive: true });
-  }
+  const outputPath = path.join(scratchDir, 'test_edgeview_contact_directory.docx');
   fs.writeFileSync(outputPath, docxBuffer);
-  console.log(`   Saved generated DOCX report to: ${outputPath}`);
 
   console.log('\n[Step 2] Generating Exporter Contact Directory DOCX...');
   const expBuffer = await generateDocxReport(sampleContacts, 'exporter');
   assert(expBuffer.length > 5000, 'Exporter DOCX buffer must be >5KB');
 
-  console.log('   ✅ REAL DOCX DIRECTORY REPORT GENERATION VERIFIED PASSED 100%.');
+  console.log('   ✅ REAL DOCX DIRECTORY REPORT GENERATION VERIFIED; temporary artifact isolated and removed.');
+  } finally {
+    assert(path.dirname(fs.realpathSync(scratchDir)) === fs.realpathSync(os.tmpdir()), 'refuse cleanup outside owned temporary root');
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+  }
 }
 
 runDocxReportRealTest().catch(err => {

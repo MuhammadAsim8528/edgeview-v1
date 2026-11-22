@@ -55,7 +55,7 @@ try {
     assert.ok(run.raw_records.some(record => record.provider === provider && /private IPv4/.test(record.failure?.message || '')), `${provider}: structured blocked-request failure retained`);
   }
   assert.ok(run.results.some(result => result.status === 'success'), 'failed AI extraction must not erase captured search results');
-  const retained = getV1Run(run.id);
+  const retained = await getV1Run(run.id);
   assert.ok(retained?.raw_records.some(record => record.provider === 'nvidia-extraction' && record.failure));
   const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'runs', `${run.id}.json`), 'utf8'));
   assert.ok(onDisk.raw_records.some((record: any) => record.provider === 'nvidia-extraction' && record.failure), 'structured failure must be durable, not merely cached');

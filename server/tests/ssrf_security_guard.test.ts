@@ -100,9 +100,9 @@ async function run() {
   // so the suite stays green on an offline machine.
   let allowed = true;
   try {
-    await assertSafeOutboundUrl('https://203.0.113.10/');
+    await assertSafeOutboundUrl('https://8.8.8.8/');
   } catch { allowed = false; }
-  assert(allowed, 'the permitted documentation-address literal must pass without DNS');
+  assert(allowed, 'the permitted public-address literal must pass without DNS');
   console.log('   [7] Async literal controls passed; DNS binding is a separate acceptance scope.');
 
   // Test 8: fetchProviderModels choke point rejects SSRF baseUrl BEFORE sending the key.

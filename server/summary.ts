@@ -15,6 +15,14 @@ const EXPORTER_KEYWORDS = ['exporter', 'export', 'seller', 'supplier', 'vendor',
 const IMPORTER_KEYWORDS = ['importer', 'import', 'buyer', 'customer', 'consignee', 'receiver', 'dest_company', 'recipient'];
 const COST_KEYWORDS = ['total value', 'total cost', 'total fc', 'tot_fc', 'val_usd', 'total_cost_usd', 'usd', 'amount', 'value', 'total'];
 
+function tradePartyKeywordMatches(column: string, keyword: string): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  const columnName = normalize(column), alias = normalize(keyword);
+  if (columnName === alias) return true;
+  const suffixes = new Set(['name', 'company', 'company name', 'legal name', 'entity', 'entity name']);
+  return Boolean(alias) && columnName.startsWith(`${alias} `) && suffixes.has(columnName.slice(alias.length + 1));
+}
+
 export function computeSummary(
   columns: string[],
   rows: Record<string, any>[]
@@ -54,11 +62,11 @@ export function computeSummary(
   for (const col of columns) {
     const colLower = col.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    if (!detected_exporter_col && EXPORTER_KEYWORDS.some((kw) => colLower.includes(kw))) {
+    if (!detected_exporter_col && EXPORTER_KEYWORDS.some((kw) => tradePartyKeywordMatches(col, kw))) {
       detected_exporter_col = col;
     }
 
-    if (!detected_importer_col && IMPORTER_KEYWORDS.some((kw) => colLower.includes(kw))) {
+    if (!detected_importer_col && IMPORTER_KEYWORDS.some((kw) => tradePartyKeywordMatches(col, kw))) {
       detected_importer_col = col;
     }
 

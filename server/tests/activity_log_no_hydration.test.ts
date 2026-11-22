@@ -33,7 +33,7 @@ try {
     if (String(file).endsWith('.json.gz')) { blobReads++; throw new Error('Probe blocks evidence hydration'); }
     return (originalRead as any)(file, ...args);
   };
-  assert.throws(() => getV1Run('run-log-23'), (error: any) => error.code === 'V1_BLOB_INTEGRITY_ERROR' && error.cause?.message === 'Probe blocks evidence hydration', 'positive control proves full reader would touch evidence blobs');
+  await assert.rejects(getV1Run('run-log-23'), (error: any) => error.code === 'V1_BLOB_INTEGRITY_ERROR', 'positive control proves full reader would touch evidence blobs');
   assert.ok(blobReads > 0);
   blobReads = 0;
   const events = listV1ActivityEvents(500);

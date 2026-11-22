@@ -21,6 +21,7 @@ import { ResearchWorkspace } from './components/ResearchWorkspace';
 export default function App() {
   const store = useAppStore();
   const tradeCompatible = store.selectedFile && hasTradeParties(store.selectedFile.columns ?? []);
+  const [combinedContacts, setCombinedContacts] = React.useState(false);
   const [uploadedId, setUploadedId] = React.useState<string>();
   const mainRef = React.useRef<HTMLElement>(null);
 
@@ -183,7 +184,11 @@ export default function App() {
             {store.activeTab === 'contacts' && (
               <div className="max-w-7xl mx-auto">
                 <ErrorBoundary fallbackTitle="Contacts Tab Error" onReset={store.refreshData}>
-                  <Contacts
+                  <label className="block pb-2">Company scope <select value={combinedContacts || !store.selectedFileId ? 'all' : 'file'} onChange={event => setCombinedContacts(event.target.value === 'all')}>
+                    {store.selectedFileId && <option value="file">{store.selectedFile?.name || 'Selected file'}</option>}
+                    <option value="all">Combined companies</option>
+                  </select></label>
+                  <Contacts key={combinedContacts ? 'combined' : store.selectedFileId} fileId={combinedContacts ? undefined : store.selectedFileId ?? undefined}
                     contacts={store.contacts || []}
                     onFetchDetailsAutomated={store.enrichCompanyAutomated}
                     onOpenExport={store.openGlobalExport}

@@ -52,6 +52,14 @@ interface ExporterDetail {
   total_value: number;
 }
 
+export function escapeCountryCsvCell(value: unknown): string {
+  let text = String(value ?? '');
+  // Quoting alone does not stop spreadsheet formula execution. Prefix formula-
+  // like text (including control/whitespace disguises) before CSV quoting.
+  if (/^(?:\s*[=+\-@]|[\t\r\n])/u.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export const CountryView: React.FC<CountryViewProps> = (props) =>
   <CountryViewContent key={props.selectedFile?.id || `all:${(props.files || []).map(file => file.id).sort().join(',')}`} {...props} />;
 
@@ -347,9 +355,8 @@ const CountryViewContent: React.FC<CountryViewProps> = ({ files = EMPTY_FILES, s
     csvRows.push('Country,Importer Name,Exporter Name,Product Description,Quantity,Unit,Total Value (USD)');
 
     clientRows.forEach((r) => {
-      const esc = (s: string) => `"${String(s || '').replace(/"/g, '""')}"`;
       csvRows.push(
-        `${esc(r.country)},${esc(r.importer)},${esc(r.exporter)},${esc(r.product)},${r.quantity},${esc(r.unit)},${r.total_value}`
+        `${escapeCountryCsvCell(r.country)},${escapeCountryCsvCell(r.importer)},${escapeCountryCsvCell(r.exporter)},${escapeCountryCsvCell(r.product)},${r.quantity},${escapeCountryCsvCell(r.unit)},${r.total_value}`
       );
     });
 

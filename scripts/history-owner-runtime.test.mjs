@@ -20,7 +20,8 @@ buildSync({ entryPoints: [path.join(source, 'server/tests/history_repair_transac
   platform: 'node', format: 'cjs', packages: 'external', outfile: repairTool, logLevel: 'silent' });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));
 const port = await unusedTestPort(), base = `http://127.0.0.1:${port}`;
-Object.assign(env, { NODE_ENV: 'production', NODE_PATH: path.join(source, 'node_modules'), EDGEVIEW_DATA_DIR: state, PORT: String(port), EDGEVIEW_MONITORING_ENABLED: '0' });
+const outboundAudit = path.join(root, 'outbound-attempts.txt');
+Object.assign(env, { NODE_ENV: 'production', NODE_PATH: path.join(source, 'node_modules'), EDGEVIEW_DATA_DIR: state, PORT: String(port), EDGEVIEW_MONITORING_ENABLED: '0', EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit });
 let child;
 async function stop() {
   if (child && child.exitCode === null && child.signalCode === null) {
@@ -29,7 +30,7 @@ async function stop() {
   }
 }
 async function start() {
-  child = spawn(process.execPath, [path.join(app, 'runtime-bootstrap.cjs')], { cwd: app, env, stdio: ['pipe', 'ignore', 'ignore'] });
+  child = spawn(process.execPath, ['--require', path.join(source, 'scripts/test-no-egress.cjs'), path.join(app, 'runtime-bootstrap.cjs')], { cwd: app, env, stdio: ['pipe', 'ignore', 'ignore'] });
   child.stdin.on('error', () => {});
   for (const deadline = Date.now() + 45000; Date.now() < deadline;) {
     assert.equal(child.exitCode, null, 'owned runtime must remain alive');
@@ -78,7 +79,7 @@ try {
   assert.equal(fs.readFileSync(path.join(state, 'test-termination-stage'), 'utf8'), 'kill-after');
   if (process.platform === 'win32') assert.equal(interrupted.status, 1, interrupted.stderr);
   else assert.equal(interrupted.signal, 'SIGKILL', interrupted.stderr);
-  const blockedStart = spawn(process.execPath, [path.join(app, 'runtime-bootstrap.cjs')],
+  const blockedStart = spawn(process.execPath, ['--require', path.join(source, 'scripts/test-no-egress.cjs'), path.join(app, 'runtime-bootstrap.cjs')],
     { cwd: app, env, stdio: ['pipe', 'ignore', 'ignore'] });
   blockedStart.stdin.on('error', () => {});
   const blockedExit = await once(blockedStart, 'exit', { signal: AbortSignal.timeout(20000) });
@@ -105,7 +106,8 @@ try {
     assert.deepEqual(fs.readFileSync(path.join(state, 'edgeview_db.json')), retained);
   }
   await stop(); assert.deepEqual(history(), [['Synthetic C', c], ['Synthetic Legacy', null]]);
-  console.log('PASS compiled production same-name upload, both delete aliases, durable sibling history, interrupted repair startup refusal, exact rollback, repair/restart and pre-mutation legacy refusal');
+  assert.equal(fs.existsSync(outboundAudit), false, 'history runtime attempted provider, monitoring or other outbound transport');
+  console.log('PASS compiled production same-name upload, both delete aliases, durable sibling history, interrupted repair startup refusal, exact rollback, repair/restart and pre-mutation legacy refusal; outbound transport denied and unused');
 } finally {
   await stop();
   assert.equal(path.dirname(fs.realpathSync(root)), fs.realpathSync(os.tmpdir()));

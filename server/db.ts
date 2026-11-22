@@ -83,10 +83,10 @@ class PharmaDatabase {
   public fileIdIndex: Map<string, FileRecord> = new Map();
   public lastUpdatedIndex: Map<string, string> = new Map(); // id -> timestamp
 
-  constructor() {
+  constructor(seedDemo = true) {
     // Empty customer storage is authoritative. Demonstration data is an explicit
     // developer opt-in, never a side effect of a new installation.
-    if (process.env.EDGEVIEW_ENABLE_SAMPLE_DATA === '1') this.seedInitialData();
+    if (seedDemo && process.env.EDGEVIEW_ENABLE_SAMPLE_DATA === '1') this.seedInitialData();
     this.rebuildIndexes();
   }
 
@@ -125,25 +125,22 @@ class PharmaDatabase {
     const strId = String(id).trim();
     const lowerId = strId.toLowerCase();
 
-    // 1. Direct Map lookup
+    // 1. Direct Map lookup (exact match)
     if (this.files.has(strId)) {
       return this.files.get(strId);
     }
 
+    // 2. Case-insensitive ID lookup only (no name matching to avoid ambiguity)
     const filesList = Array.from(this.files.values());
-
-    // 2. Case-insensitive ID or name lookup
     for (const file of filesList) {
-      if (file.id.toLowerCase() === lowerId || file.name.toLowerCase() === lowerId) {
+      if (file.id.toLowerCase() === lowerId) {
         return file;
       }
     }
 
     // No match — return undefined so callers can return a proper 404.
-    // NOTE: Ambiguous substring/prefix matching, numeric-index lookup, and the
-    // "first available file" fallback were removed because they silently served
-    // the WRONG file (HTTP 200) for unknown/typo'd ids and could resurrect
-    // deleted sample files by re-seeding.
+    // Name-based lookup removed to prevent ambiguous resolution where
+    // multiple files could have similar names.
     return undefined;
   }
 
@@ -176,6 +173,21 @@ class PharmaDatabase {
     }
     this.syncCompaniesFromFiles();
     this.rebuildIndexes();
+  }
+
+  public contactsForFile(fileId?: unknown): CompanyContact[] {
+    if (fileId === undefined) return Array.from(this.contacts.values());
+    const file = typeof fileId === 'string' ? this.files.get(fileId) : undefined;
+    if (!file) return [];
+    const local = new PharmaDatabase(false);
+    local.files.set(file.id, file);
+    local.syncCompaniesFromFiles();
+    return Array.from(local.contacts, ([key, scoped]) => ({
+      ...scoped, ...this.contacts.get(key),
+      type: scoped.type, source_file: file.name, source_file_ids: [file.id],
+      traded_with: scoped.traded_with, top_products: scoped.top_products,
+      trade_feature_recurrence: scoped.trade_feature_recurrence,
+    }));
   }
 
   public syncCompaniesFromFiles() {

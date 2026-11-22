@@ -1,6 +1,6 @@
 import { TradeRelationshipResolver, type ResolvedTradeRelationship } from './trade_relationship_resolver';
 import type { ReportCompanyContact } from './docx_report';
-import { canonicalEntityIdentityKey } from './company_identity';
+import { canonicalCountryIdentityKey, canonicalEntityIdentityKey } from './company_identity';
 import { normalizeCountryName } from '../src/utils/countryNormalizer';
 
 export type TradeIndex = {
@@ -244,23 +244,35 @@ export function normalizeContactInfo(contact: ReportCompanyContact): NormalizedC
     linkedin: contact.linkedin ? String(contact.linkedin).trim() : undefined,
     linkedin_urls: Array.from(new Set([contact.linkedin, ...(contact.linkedin_urls || [])].map((value) => String(value || '').trim()).filter(Boolean))),
     socials: Array.isArray(contact.socials) ? contact.socials : [],
-    sources: Array.isArray(contact.sources) ? contact.sources : [],
+    sources: Array.isArray(contact.sources) ? contact.sources.map((source: any) => {
+      const url = String(typeof source === 'string' ? source : source?.url || '').trim();
+      const title = String(typeof source === 'object' ? source?.title || '' : '').trim();
+      const sourceType = String(typeof source === 'object' ? source?.source_type || '' : '').trim();
+      return { url, ...(title ? { title } : {}), ...(sourceType ? { source_type: sourceType } : {}) };
+    }).filter(source => source.url || source.title) : [],
   };
 }
 
 /**
- * Merges duplicate company records by normalized company name so that a single
- * importer/exporter is never rendered twice with split intelligence.
+ * Merges duplicate company records only inside a proven country identity.
+ * Records with missing or placeholder countries stay separate rather than
+ * pooling contact facts for potentially different legal entities.
  */
 export function mergeContacts(contacts: ReportCompanyContact[]): ReportCompanyContact[] {
   const merged = new Map<string, ReportCompanyContact>();
   for (const c of contacts) {
     if (!c || !c.company_name) continue;
     const normalizedCountry = normalizeCountryName(c.country || '');
-    const key = canonicalEntityIdentityKey(
-      TradeRelationshipResolver.cleanCompanyName(c.company_name) || c.company_name,
-      normalizedCountry
-    );
+    const companyKey = TradeRelationshipResolver.cleanCompanyName(c.company_name) || c.company_name;
+    if (!companyKey) continue;
+    if (!canonicalCountryIdentityKey(c.country)) {
+      // A bare company key is not proof that two unscoped records are the same
+      // legal entity. Keep their contacts and leadership separate until country
+      // identity is established; never combine unknown identities by name alone.
+      merged.set(`unscoped:${merged.size}`, { ...c });
+      continue;
+    }
+    const key = canonicalEntityIdentityKey(companyKey, normalizedCountry);
     if (!key) continue;
     const existing = merged.get(key);
     if (!existing) {

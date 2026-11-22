@@ -12,18 +12,22 @@ if (process.platform !== 'win32') {
   const opener = source.split(/\r?\n/).filter(line => line.startsWith('start "" /b powershell ') && line.includes('Invoke-WebRequest'));
   assert.equal(probe.length, 1, 'fixture must replace exactly one external health decision');
   assert.equal(opener.length, 1, 'fixture must suppress exactly one background browser waiter');
+  assert.match(probe[0], /GetEnvironmentVariable\('EDGEVIEW_LAUNCH_ROOT','Process'\)/, 'the installation path must cross PowerShell through the environment, not quoted batch interpolation');
+  assert.doesNotMatch(probe[0], /GetFullPath\('%~dp0'\)/, 'an apostrophe in the installation path must not become PowerShell syntax');
+  assert.match(probe[0], /app\.build\.buildId.*local\.buildId|local\.buildId.*app\.build\.buildId/, 'same-root reuse must compare the running and freshly built identities');
   // Exercise the product's actual step/error routing. Replace external health
   // decision and browser opener only; no listener, browser or live app is touched.
   const isolated = source.replace(probe[0], 'cmd /d /c exit 1').replace(opener[0], 'rem isolated fixture: no browser waiter');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-launch-exit-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "edgeview-launch-exit-'-"));
   try {
     fs.mkdirSync(path.join(root, 'scripts')); fs.mkdirSync(path.join(root, 'dist'));
     fs.writeFileSync(path.join(root, 'EdgeView.bat'), isolated);
     const run = (install, build, server) => {
-      fs.writeFileSync(path.join(root, 'scripts', 'ensure-dependencies.mjs'), `console.log('FIXTURE INSTALL');process.exit(${install});`);
-      fs.writeFileSync(path.join(root, 'scripts', 'build-if-needed.mjs'), `console.log('FIXTURE BUILD');process.exit(${build});`);
-      fs.writeFileSync(path.join(root, 'dist', 'server.cjs'), `console.log('FIXTURE SERVER');process.exit(${server});`);
-      const result = spawnSync('cmd.exe', ['/d', '/c', 'EdgeView.bat'], { cwd: root, input: '\n', encoding: 'utf8', timeout: 15000, windowsHide: true });
+      const environmentGuard = `if(process.env.NODE_ENV!=='production'||process.env.EDGEVIEW_DEV_SERVER||process.env.EDGEVIEW_LAUNCH_ROOT!==${JSON.stringify(root + path.sep)})process.exit(23);`;
+      fs.writeFileSync(path.join(root, 'scripts', 'ensure-dependencies.mjs'), `${environmentGuard}console.log('FIXTURE INSTALL');process.exit(${install});`);
+      fs.writeFileSync(path.join(root, 'scripts', 'build-if-needed.mjs'), `${environmentGuard}console.log('FIXTURE BUILD');process.exit(${build});`);
+      fs.writeFileSync(path.join(root, 'dist', 'server.cjs'), `${environmentGuard}console.log('FIXTURE SERVER');process.exit(${server});`);
+      const result = spawnSync('cmd.exe', ['/d', '/c', path.join(root, 'EdgeView.bat')], { cwd: root, env: { ...process.env, NODE_ENV: 'development', EDGEVIEW_DEV_SERVER: '1' }, input: '\n', encoding: 'utf8', timeout: 15000, windowsHide: true });
       assert.equal(result.error, undefined, 'batch test must terminate without timeout');
       return { status: result.status, output: `${result.stdout}${result.stderr}` };
     };

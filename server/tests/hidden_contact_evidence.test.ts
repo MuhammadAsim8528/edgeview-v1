@@ -10,7 +10,10 @@ const html = `<html><body><h2>Kenya contact details</h2>
 <p>Telephone +254 20 333 7788</p><p>10 Retired Road, Nairobi, Kenya</p>
 <script type="application/ld+json">{"@type":"Person","name":"Retired Fixture","jobTitle":"CEO","address":{"addressCountry":"KE"}}</script></section> -->
 <section><h3>Kenya current office</h3><p>current@scopeanchor.test</p><p>Telephone +254 20 444 5566</p></section>
-<script>const oldContact = 'template@scopeanchor.test';</script></body></html>`;
+<script>const oldContact = 'template@scopeanchor.test';</script>
+<template><section><h3>Kenya inert office</h3><p>inert@scopeanchor.test</p>
+<p>Telephone +254 20 444 9999</p><div class="contact-address">50 Template Road, Nairobi, Kenya</div>
+<script type="application/ld+json">{"@type":"Person","name":"Template Fixture","jobTitle":"CEO","address":{"addressCountry":"KE"}}</script></section></template></body></html>`;
 const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 const page = { id: 'visible-source', provider: 'direct-http', status: 'success', rank: 1,
   url: 'https://scopeanchor.test/contact', html, text, links: [], metadata: {} };
@@ -28,6 +31,9 @@ assert.equal(contactFactScope(page, 'retired@scopeanchor.test', 'Kenya', 'email'
 assert.equal(JSON.stringify(run), original, 'raw evidence remains unchanged');
 assert.ok(!visibleHtmlText(html).includes('retired@scopeanchor.test'));
 assert.ok(!visibleHtmlText(html).includes('template@scopeanchor.test'));
+assert.ok(!visibleHtmlText(html).includes('inert@scopeanchor.test'), 'M33: template content is inert, not visible evidence');
+assert.equal(contactFactScope(page, 'inert@scopeanchor.test', 'Kenya', 'email').quote, '');
+assert.ok(!visibleHtmlText(html).includes('Template Fixture'));
 assert.ok(visibleHtmlText(html).includes('current@scopeanchor.test'));
 assert.ok(visibleHtmlText('<script>const literal="<!--";</script><p>current@scopeanchor.test</p>').includes('current@scopeanchor.test'),
   'a JavaScript string must not swallow later visible HTML');

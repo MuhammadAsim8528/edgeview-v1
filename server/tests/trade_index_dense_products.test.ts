@@ -39,6 +39,14 @@ async function main() {
     } finally { sql.all = readHistory; }
     const recovered = await TradeRelationshipResolver.buildTradeIndex();
     assert.equal(TradeRelationshipResolver.resolveFromIndex('Synthetic Buyer Δ', recovered, 'importer', 'Kenya').importedFrom[0].shipmentCount, rows.length + 1, 'retry must recover the complete stored history after the database read is repaired');
+    await sql.run('INSERT INTO history_data (file_id,file_name,importer,exporter,country,item,tot_fc) VALUES (?,?,?,?,?,?,?)',
+      ['archived-other-id', 'dense.csv', 'Synthetic Buyer Δ', 'Archived Supplier', 'Kenya', 'Distinct file with same name', 1]);
+    const aggregate = await TradeRelationshipResolver.resolveRelationships('Synthetic Buyer Δ', 'importer', 'Kenya');
+    assert.ok(aggregate.importedFrom.some(row => row.partnerName === 'Archived Supplier'));
+    const scoped = await TradeRelationshipResolver.buildTradeIndex('dense');
+    const scopedRows = TradeRelationshipResolver.resolveFromIndex('Synthetic Buyer Δ', scoped, 'importer', 'Kenya').importedFrom;
+    assert.equal(scopedRows.length, 1);
+    assert.equal(scopedRows[0].shipmentCount, rows.length);
     console.log(`PASS dense 3200-product index, exact deduplication, substring preservation, history and country scope (${Math.round(elapsed)}ms)`);
   } finally {
     db.files.clear();

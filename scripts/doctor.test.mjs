@@ -8,12 +8,39 @@ import { writeBuildMetadata } from './build-metadata.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-doctor-'));
 try {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'edgeview', version: '1.0.0', dependencies: {} }));
-  fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ name: 'edgeview', version: '1.0.0', packages: { '': { dependencies: {} } } }));
+  fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ name: 'edgeview', version: '1.0.0', lockfileVersion: 3, packages: { '': { dependencies: {} } } }));
   fs.mkdirSync(path.join(root, 'dist')); fs.writeFileSync(path.join(root, 'dist/server.cjs'), ''); fs.writeFileSync(path.join(root, 'dist/index.html'), '');
   let calls = 0;
   const request = async url => { calls++; assert.equal(url, 'http://127.0.0.1:3901/api/health'); return Response.json({ status: 'ok', app: { name: 'edgeview', project_root: root }, database: { status: 'ok' }, providers: { serper: { enabled: true, configured: true } }, secret: 'must-not-leak' }); };
   const healthy = await runDoctor({ root, request });
   assert.equal(healthy.exitCode, 0); assert.equal(calls, 1);
+  assert.equal(healthy.checks.find(check => check.id === 'dependency_integrity')?.status, 'PASS');
+  const nodeDescriptor = Object.getOwnPropertyDescriptor(process.versions, 'node');
+  try {
+    Object.defineProperty(process.versions, 'node', { value: '22.21.9', configurable: true });
+    const unsupported = await runDoctor({ root, request });
+    assert.equal(unsupported.checks.find(check => check.id === 'runtime')?.status, 'FAIL');
+    assert.match(unsupported.checks.find(check => check.id === 'runtime')?.message || '', /22\.22\+ on 22\.x/);
+    assert.equal(unsupported.exitCode, 1);
+  } finally { Object.defineProperty(process.versions, 'node', nodeDescriptor); }
+  const manifestFile = path.join(root, 'package.json'), lockFile = path.join(root, 'package-lock.json');
+  const originalManifest = fs.readFileSync(manifestFile, 'utf8'), originalLock = fs.readFileSync(lockFile, 'utf8');
+  try {
+    fs.writeFileSync(manifestFile, JSON.stringify({ name: 'edgeview', version: '1.0.0', dependencies: { fixture: '1.0.0' } }));
+    fs.writeFileSync(lockFile, JSON.stringify({ name: 'edgeview', version: '1.0.0', lockfileVersion: 3, packages: {
+      '': { dependencies: { fixture: '1.0.0' } },
+      'node_modules/fixture': { version: '1.0.0', resolved: 'https://registry.npmjs.org/fixture/-/fixture-1.0.0.tgz' },
+    } }));
+    fs.mkdirSync(path.join(root, 'node_modules/fixture'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'node_modules/fixture/package.json'), JSON.stringify({ version: '1.0.0' }));
+    const incompleteIntegrity = await runDoctor({ root, request });
+    assert.equal(incompleteIntegrity.checks.find(check => check.id === 'dependencies')?.status, 'PASS');
+    assert.equal(incompleteIntegrity.checks.find(check => check.id === 'dependency_integrity')?.status, 'FAIL');
+    assert.equal(incompleteIntegrity.exitCode, 1);
+  } finally {
+    fs.writeFileSync(manifestFile, originalManifest); fs.writeFileSync(lockFile, originalLock);
+    fs.rmSync(path.join(root, 'node_modules'), { recursive: true, force: true });
+  }
   assert.equal(healthy.checks.find(check => check.id === 'runtime_maintenance')?.status, 'PASS');
   const gate = path.join(root, 'edgeview.db.lock.maintenance');
   fs.mkdirSync(gate);

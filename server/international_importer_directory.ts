@@ -23,8 +23,9 @@
 //     Top 5 by default and never more than Top 10.
 //   - Contact / leadership fields are DYNAMIC: only values that actually exist
 //     are shown. Missing fields are omitted (never "Not found" placeholders).
-//   - Sources are kept concise ("Source: x" / "Sources: a; b"). The underlying
-//     record continues to store full provenance (URL/type/confidence/evidence).
+//   - Sources are concise actual evidence titles with URLs when available
+//     ("Source: title — url" / URL or title fallback). Full provenance remains
+//     on the underlying record (URL/type/confidence/evidence).
 //   - No data is fabricated.
 
 import { TradeRelationshipResolver } from './trade_relationship_resolver';
@@ -55,7 +56,7 @@ export interface InternationalImporterRow {
   address: string;
   /** Dynamic leadership/contact lines ("Name (Title)", one per line). */
   leadership: string;
-  /** Concise provenance ("Source: url" or "Sources: a; b"). */
+  /** Concise provenance using real title — URL, URL-only, or title-only text. */
   sources: string;
   sNo: number;
 }
@@ -188,12 +189,12 @@ function cleanProductToken(raw: string): string {
  * `limit` (clamped to [1, MAX_TOP_PRODUCTS_LIMIT]).
  */
 export function computeTopProducts(
-  relationships: Array<{ itemDescription?: string }>,
+  relationships: Array<{ itemDescription?: string; shipmentCount?: number; itemShipmentCounts?: Record<string, number> }>,
   limit: number = DEFAULT_TOP_PRODUCTS_LIMIT
 ): string {
   const cap = Math.max(1, Math.min(MAX_TOP_PRODUCTS_LIMIT, Math.floor(limit) || DEFAULT_TOP_PRODUCTS_LIMIT));
   const tally = new Map<string, { count: number; display: string }>();
-  const count = (desc: string | undefined) => {
+  const count = (desc: string | undefined, recurrence = 1) => {
     if (!desc) return;
     for (const item of String(desc).split(',').map((i) => i.trim()).filter(Boolean)) {
       const token = cleanProductToken(item);
@@ -201,13 +202,19 @@ export function computeTopProducts(
       const key = token.toLowerCase();
       const cur = tally.get(key);
       if (cur) {
-        cur.count++;
+        cur.count += recurrence;
       } else {
-        tally.set(key, { count: 1, display: token });
+        tally.set(key, { count: recurrence, display: token });
       }
     }
   };
-  (relationships || []).forEach((r) => count(r.itemDescription));
+  (relationships || []).forEach((r) => {
+    if (r.itemShipmentCounts) {
+      for (const [desc, recurrence] of Object.entries(r.itemShipmentCounts)) count(desc, recurrence);
+    } else {
+      count(r.itemDescription, Math.max(1, Math.floor(r.shipmentCount || 1)));
+    }
+  });
 
   const entries = Array.from(tally.entries());
   entries.sort((a, b) => {
@@ -288,9 +295,12 @@ function contactFields(contact: ReportCompanyContact): Pick<InternationalImporte
 }
 
 function sourcesField(contact: ReportCompanyContact): string {
-  const urls = Array.from(new Set((contact.sources || []).map((s) => clean(s?.url)).filter(Boolean)));
-  if (urls.length === 0) return '';
-  return urls.length === 1 ? `Source: ${urls[0]}` : `Sources: ${urls.join('; ')}`;
+  const sources = Array.from(new Set(normalizeContactInfo(contact).sources.map(source => {
+    const title = clean(source.title), url = clean(source.url);
+    return title && url ? `${title} — ${url}` : title || url;
+  }).filter(Boolean)));
+  if (sources.length === 0) return '';
+  return sources.length === 1 ? `Source: ${sources[0]}` : `Sources: ${sources.join('; ')}`;
 }
 
 /**

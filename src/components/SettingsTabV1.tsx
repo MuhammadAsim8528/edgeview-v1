@@ -121,7 +121,12 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
     event.preventDefault();
     if (loading || loadError || saving) return;
     setSaving(true);
-    const { ok, data, error } = await safeFetchJson<any>('/api/settings', {
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 30_000);
+    let result: Awaited<ReturnType<typeof safeFetchJson<any>>>;
+    try {
+      result = await safeFetchJson<any>('/api/settings', {
+      signal: controller.signal,
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serper_api_key: providers.serper.key, serper_enabled: providers.serper.enabled,
@@ -129,8 +134,10 @@ export const SettingsTabV1: React.FC<SettingsTabProps> = ({ showToast, contacts 
         nvidia_api_key: providers.nvidia.key, nvidia_enabled: providers.nvidia.enabled, nvidia_model: nvidiaModel,
         groq_api_key: providers.groq.key, groq_enabled: providers.groq.enabled, groq_model: groqModel,
         primary_ai_provider: primaryProvider,
-      }),
-    });
+        }),
+      });
+    } finally { clearTimeout(deadline); }
+    const { ok, data, error } = result;
     setSaving(false);
     if (!ok || !data?.success) {
       showToast(data?.error || error || 'Could not save settings', 'error');

@@ -68,19 +68,19 @@ try {
   const persistedBytes = fs.statSync(runPath).size + blobFiles.reduce((sum, file) => sum + fs.statSync(file).size, 0);
   assert.ok(persistedBytes < inlineBytes / 2, 'gzip + dedup should materially reduce this repetitive fixture');
 
-  assert.deepEqual(getV1Run(run.id), run, 'hydrated V2 run must exactly match the original in-memory V1Run');
+  assert.deepEqual(await getV1Run(run.id), run, 'hydrated V2 run must exactly match the original in-memory V1Run');
 
   // Old plain JSON runs remain readable with no migration.
   const legacy = { ...run, id: 'run-legacy-blob-compat', results: [], raw_records: [], evidence_workspace: undefined };
   const legacySerialized = JSON.stringify(legacy, null, 2);
   fs.writeFileSync(path.join(tempRoot, `${legacy.id}.json`), legacySerialized, 'utf8');
-  assert.deepEqual(getV1Run(legacy.id), JSON.parse(legacySerialized), 'legacy V1 JSON run must remain readable unchanged');
+  assert.deepEqual(await getV1Run(legacy.id), JSON.parse(legacySerialized), 'legacy V1 JSON run must remain readable unchanged');
 
   // Content-addressed evidence is never silently trusted: corruption must be
   // visible instead of returning incomplete evidence.
   fs.writeFileSync(blobFiles[0], Buffer.from('not-a-valid-gzip'));
-  assert.throws(
-    () => getV1Run(run.id),
+  await assert.rejects(
+    getV1Run(run.id),
     (error: any) => ['V1_BLOB_INTEGRITY_ERROR', 'V1_BLOB_MISSING'].includes(String(error?.code || '')),
     'tampered evidence blob must fail closed with a visible integrity error'
   );

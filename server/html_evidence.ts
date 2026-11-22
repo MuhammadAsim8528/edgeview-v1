@@ -3,12 +3,12 @@
 export function stripHtmlComments(html: string): string {
   // Skip quoted tag attributes and raw script/style bodies: their literal
   // "<!--" strings do not begin an HTML comment in browser parsing.
-  return html.replace(/<(script|style)\b(?:[^"'<>]|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1\s*>|<!--[\s\S]*?(?:-->|$)|<(?:[^"'<>]|"[^"]*"|'[^']*')+>/gi,
-    token => token.startsWith('<!--') ? ' ' : token);
+  return html.replace(/<(script|style|template)\b(?:[^"'<>]|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1\s*>|<!--[\s\S]*?(?:-->|$)|<(?:[^"'<>]|"[^"]*"|'[^']*')+>/gi,
+    token => token.startsWith('<!--') || /^<template\b/i.test(token) ? ' ' : token);
 }
 
 export function visibleHtmlText(html: string): string {
-  return stripHtmlComments(html).replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ')
+  return stripHtmlComments(html).replace(/<(?:script|style|template)\b[\s\S]*?<\/(?:script|style|template)>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -20,7 +20,7 @@ export function hiddenOnlyHtmlCarrier(html: string, value: string): boolean {
   if (!html || !key) return false;
   const contains = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').includes(key);
   if (!contains(html)) return false;
-  const permitted = stripHtmlComments(html).replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi,
+  const permitted = stripHtmlComments(html).replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1>/gi,
     block => /^<script\b[^>]*\btype\s*=\s*["']application\/ld\+json["']/i.test(block) ? block : ' ');
   return !contains(permitted);
 }

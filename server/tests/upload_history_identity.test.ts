@@ -39,16 +39,11 @@ try {
   const rows = await sql.all('SELECT importer FROM history_data WHERE file_name = ? ORDER BY importer', ['shared-name.csv']);
   assert.deepEqual(rows.map(row => row.importer), ['Synthetic First Buyer', 'Synthetic Second Buyer'],
     'a same-name upload must not erase shipment history owned by a different dataset ID');
-  const prepare = sql.prepare;
+  const replaceHistory = sql.replaceFileHistoryDurably;
   try {
-    sql.prepare = async query => {
-      const statement = await prepare(query);
-      return { ...statement, run: async (...params) => {
-        await statement.run(...params); throw new Error('Controlled shipment insert failure');
-      } };
-    };
+    sql.replaceFileHistoryDurably = async () => { throw new Error('Controlled shipment batch finalize failure'); };
     await upload('Synthetic Failed Buyer', 507);
-  } finally { sql.prepare = prepare; }
+  } finally { sql.replaceFileHistoryDurably = replaceHistory; }
   assert.deepEqual((await loadAllFilesFromDb()).filter(file => file.name === 'shared-name.csv').map(file => file.id).sort(),
     saved.map(file => file.id).sort(), 'failed upload rollback preserves the two older primary datasets');
   assert.deepEqual(await sql.all('SELECT importer FROM history_data WHERE file_name = ? ORDER BY importer', ['shared-name.csv']), rows,

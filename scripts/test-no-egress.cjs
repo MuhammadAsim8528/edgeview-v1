@@ -19,7 +19,7 @@ if (process.env.EDGEVIEW_TEST_MODE === '1' && process.env.EDGEVIEW_E2E_HISTORY_F
   require('sql.js')().then(SQL => {
     const prepare = SQL.Database.prototype.prepare;
     SQL.Database.prototype.prepare = function (sql, ...args) {
-      if (String(sql).trim() === 'SELECT file_name, importer, exporter, country, item, tot_fc FROM history_data'
+      if (String(sql).includes('FROM history_data')
           && fs.existsSync(process.env.EDGEVIEW_E2E_HISTORY_FAULT_FILE)) throw new Error('SYNTHETIC_PRIVATE_HISTORY_FAILURE');
       return prepare.call(this, sql, ...args);
     };

@@ -404,47 +404,55 @@ async function main() {
     'TAWAKAL PHARMACEUTICALS'
   ];
 
-  const summary = { ADMITTABLE: 0, UNPROVEN: 0, CONTRADICTED: 0, FETCH_FAILED: 0, NO_CACHE: 0 };
+  const summary = { ADMITTABLE: 0, UNPROVEN: 0, CONTRADICTED: 0, FETCH_FAILED: 0, NO_CACHE: 0, NO_FETCH: 0, NO_RUN: 0, INCOMPLETE: 0 };
 
   for (const company of failedCompanies) {
     const runResult = db.exec(
-      `SELECT research_id, company, country, status, iterations, evidence_count, pages_retrieved, started_at, completed_at 
-       FROM research_ledger_runs 
+      `SELECT research_id, company, country, status, iterations, evidence_count, pages_retrieved, started_at, completed_at
+       FROM research_ledger_runs
        WHERE company=? ORDER BY started_at DESC LIMIT 1`, [company]);
-    
+
     if (!runResult[0]?.values[0]) {
+      summary.NO_RUN++;
       console.log(`\n=== ${company}: NO RUN FOUND ===`);
       continue;
     }
-    
+
     const run = Object.fromEntries(runResult[0].columns.map((c,i)=>[c,runResult[0].values[0][i]]));
     console.log(`\n=== ${company} (${run.country}) - ${run.status} - evid:${run.evidence_count} pages:${run.pages_retrieved} ===`);
-    
+
     const actionsResult = db.exec(
-      `SELECT iteration, action_type, target_type, provider, query, status, information_gain, latency_ms, error 
-       FROM research_ledger_actions 
+      `SELECT iteration, action_type, target_type, provider, query, status, information_gain, latency_ms, error
+       FROM research_ledger_actions
        WHERE research_id=? AND action_type='FETCH' ORDER BY iteration`, [run.research_id]);
-    
+    let fetchUrls = 0;
+
     if (actionsResult[0]?.values?.length) {
       for (const action of actionsResult[0].values) {
         const act = Object.fromEntries(actionsResult[0].columns.map((c,i)=>[c,action[i]]));
         if (act.query && act.query.startsWith('http')) {
+          fetchUrls++;
           const url = act.query;
+          if (act.status && !['success', 'completed', 'ok'].includes(String(act.status).toLowerCase())) {
+            summary.FETCH_FAILED++;
+            console.log(`  URL: ${url} - FETCH DID NOT COMPLETE`);
+            continue;
+          }
           const cacheResult = db.exec(`SELECT content FROM scraped_url_cache WHERE url=?`, [url]);
           if (cacheResult[0]?.values[0]?.[0]) {
             const content = cacheResult[0].values[0][0];
-            
+
             const assessment = assessEvidenceForCountry(
               content, url, company, run.country || undefined, undefined, { sourceType: 'web' }
             );
-            
+
             let classification = 'UNKNOWN';
             if (assessment.admissible) classification = 'ADMITTABLE';
             else if (assessment.decision === 'REJECT' && assessment.reasons.some(r => r.includes('foreign') || r.includes('contradict') || r.includes('wrong entity'))) classification = 'CONTRADICTED';
             else classification = 'UNPROVEN';
-            
+
             summary[classification]++;
-            
+
             console.log(`  URL: ${url}`);
             console.log(`    admissible: ${assessment.admissible} | decision: ${assessment.decision} | entityMatch: ${assessment.entityMatch} | countryMatch: ${assessment.countryMatch}`);
             console.log(`    score: ${assessment.associationScore} | targetCountryMatch: ${assessment.targetCountryMatch} | foreign: ${assessment.foreignCountryMentions.join(',') || 'none'}`);
@@ -457,10 +465,20 @@ async function main() {
         }
       }
     }
+    if (fetchUrls === 0) {
+      summary.NO_FETCH++;
+      console.log('  NO FETCH ACTIONS AVAILABLE FOR ASSESSMENT');
+    }
   }
-  
+
+  summary.INCOMPLETE = summary.NO_RUN + summary.NO_FETCH + summary.NO_CACHE + summary.FETCH_FAILED;
   console.log('\n=== SUMMARY ===');
   console.log(JSON.stringify(summary, null, 2));
+  db.close();
+  if (summary.INCOMPLETE > 0) process.exitCode = 1;
 }
 
-main().catch(console.error);
+main().catch(error => {
+  console.error('Standalone assessment failed:', error instanceof Error ? error.message : 'unknown failure');
+  process.exitCode = 1;
+});

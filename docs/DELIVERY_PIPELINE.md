@@ -13,11 +13,13 @@ code; the launcher deliberately reuses a healthy same-root instance.
 `.github/workflows/ci.yml` runs Windows static checks, Git history secret scanning,
 focused regression suites, build/release/isolation checks, and cold package launch.
 A separate Linux Docker job runs the portable build/test contract. Successful
-Windows runs retain a downloadable ZIP for 14 days. A version tag beginning `v`
-publishes that ZIP as a GitHub release only after both jobs succeed. Pull requests
+Windows runs retain a downloadable workflow artifact for 14 days. Version tags
+currently run the same verification workflow; this repository has no automated
+GitHub Release publication job. Any future publication route requires a separate
+owner-authorized change and exact-artifact/release-evidence review. Pull requests
 have read-only repository permissions and receive no provider credentials.
 
-Publishing a release is delivery, not permission to silently overwrite laptop
+A future publishing route would be delivery, not permission to silently overwrite laptop
 data or interrupt active enrichment. Download/extract a verified package separately,
 stop the prior application normally, and launch the new copy. Configure credentials
 locally; never put keys, datasets, databases, evidence or runtime logs in GitHub.

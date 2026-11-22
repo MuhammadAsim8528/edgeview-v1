@@ -60,9 +60,16 @@ export function prototypePackageVersion(revision = '2') {
   }
   return '0.0.0.' + revision;
 }
+export function prototypeArchitecture(arch = process.arch) {
+  // The bundled Node, native launcher and Appx identity are all x64. Refuse to
+  // mislabel a different host runtime instead of producing a broken package.
+  if (arch !== 'x64') throw new Error('MSIX_PROTOTYPE_ARCHITECTURE_MISMATCH');
+  return 'x64';
+}
 export async function buildMsixPrototype(root, revision) {
   const manifestVersion = prototypePackageVersion(revision);
   if (process.platform !== 'win32') throw new Error('MSIX_PROTOTYPE_REQUIRES_WINDOWS');
+  const architecture = prototypeArchitecture();
   const { commit, identity } = prototypePreflight(root);
   const sdk = path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Windows Kits', '10', 'bin');
   const makeappx = fs.readdirSync(sdk).filter(value => /^\d+\.\d+\.\d+\.\d+$/.test(value))
@@ -128,7 +135,7 @@ export async function buildMsixPrototype(root, revision) {
       '/reference:System.Web.Extensions.dll', `/out:${path.join(app, 'EdgeView.exe')}`, path.join(root, 'packaging/windows/EdgeViewLauncher.cs')], root, 'launcher');
     let manifest = fs.readFileSync(path.join(root, 'packaging/prototype-msix/AppxManifest.xml'), 'utf8');
     manifest = manifest.replace('Version="0.0.0.1"', 'Version="' + manifestVersion + '"').replace('Executable="runtime\\node.exe"', 'Executable="EdgeView.exe"')
-      .replace(/\s+uap11:Parameters="[^"]*"/, '');
+      .replace(/ProcessorArchitecture="[^"]+"/, `ProcessorArchitecture="${architecture}"`).replace(/\s+uap11:Parameters="[^"]*"/, '');
     fs.writeFileSync(path.join(app, 'AppxManifest.xml'), manifest);
     const files = [];
     const visit = (relative = '') => {
@@ -138,7 +145,7 @@ export async function buildMsixPrototype(root, revision) {
         if (entry.isSymbolicLink()) throw new Error('MSIX_PAYLOAD_LINK_REJECTED');
         if (entry.isDirectory()) visit(child);
         else if (entry.isFile()) {
-          if (/^(?:config(?:\.prev)?\.json|edgeview(?:_db\.json|\.db(?:\..*)?)|\.env(?:\..*)?)$/i.test(entry.name)) throw new Error('MSIX_PRIVATE_STATE_REJECTED');
+          if (/^(?:config(?:\.prev)?\.json|edgeview(?:_db\.json|\.db(?:\..*)?)|pharma_db\.json|\.env(?:\..*)?)$/i.test(entry.name)) throw new Error('MSIX_PRIVATE_STATE_REJECTED');
           files.push({ path: child, bytes: fs.statSync(path.join(app, child)).size, sha256: digest(path.join(app, child)) });
         } else throw new Error('MSIX_PAYLOAD_SPECIAL_FILE_REJECTED');
       }

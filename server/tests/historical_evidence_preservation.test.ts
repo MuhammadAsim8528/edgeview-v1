@@ -34,14 +34,14 @@ try {
   persistV1Run(base);
   for (let i = 0; i < 25; i += 1) persistV1Run({ ...base, id: `run-weak-history-${i}`, started_at: `2026-01-${String(i + 1).padStart(2,'0')}T00:00:00.000Z`, status: 'FAILED', results: [] });
   persistV1Run({ ...base, id: 'run-other-country', country: 'Uganda', results: [] });
-  const projected = projectHistoricalContactFields({ ...base, id: 'run-current-weak', status: 'FAILED', started_at: '2026-10-19T00:00:00.000Z', results: [] });
+  const projected = await projectHistoricalContactFields({ ...base, id: 'run-current-weak', status: 'FAILED', started_at: '2026-10-19T00:00:00.000Z', results: [] });
   assert.equal(projected.website, strong.website, '25 later weak runs must not erase a trusted official site');
   assert.deepEqual(projected.emails_list, strong.emails_list);
   assert.deepEqual(projected.phones_list, strong.phones_list);
   assert.equal(projected.addresses[0].address, strong.addresses[0]);
   assert.equal(projected.contact_persons[0].name, 'Jane Makori');
   assert.ok(projected.socials.some(item => /linkedin/.test(item.url)));
-  const otherCountry = projectHistoricalContactFields({ ...base, id: 'run-uganda-weak', country: 'Uganda', results: [] });
+  const otherCountry = await projectHistoricalContactFields({ ...base, id: 'run-uganda-weak', country: 'Uganda', results: [] });
   assert.equal(otherCountry.emails_list.length, 0, 'historical evidence must remain country-isolated');
   console.log('PASS historical website, email, phone, address, leadership and social evidence survives 25 weak refreshes with country isolation.');
 } finally { delete process.env.EDGEVIEW_V1_DATA_DIR; fs.rmSync(root, { recursive: true, force: true }); }

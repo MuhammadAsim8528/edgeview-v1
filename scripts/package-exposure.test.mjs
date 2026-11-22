@@ -24,6 +24,9 @@ try {
   write('src/docs/DEEPER/INNER.md', `${CANARY} deep developer map`);
   write('public/data/private.json', `${CANARY} runtime data`);
   write('public/config.json', `${CANARY} dpapi wrapper`);
+  write('public/config.prev.json', `${CANARY} previous dpapi wrapper`);
+  write('public/pharma_db.json', `${CANARY} legacy private dataset`);
+  write('pharma_db.json', `${CANARY} root legacy private dataset`);
   write('public/.env.local', `${CANARY} provider key`);
   write('src/AGENTS.md', `${CANARY} agent instructions`);
   write('src/logs/retained.md', `${CANARY} runtime log folder`);
@@ -53,7 +56,7 @@ try {
   assert.ok(paths.some(item => item === 'src/main.tsx') && paths.some(item => item === 'dist/server.cjs'), 'runtime inputs still ship');
   assert.deepEqual(paths.filter(item => /^docs\//.test(item)), [], 'the internal docs tree must not ship');
   assert.deepEqual(paths.filter(item => /(^|\/)docs\//.test(item)), [], 'no docs directory ships at any depth');
-  assert.deepEqual(paths.filter(item => /(^|\/)(?:\.env|config\.json|data\/|logs\/|uploads\/|backups\/|node_modules\/|\.git\/|AGENTS\.md|tests\/|package-windows\.mjs|generate-third-party-notices\.mjs)/.test(item)), [], 'state, secrets, tests and release tooling stay out of the deliverable');
+  assert.deepEqual(paths.filter(item => /(^|\/)(?:\.env|config(?:\.prev)?\.json|pharma_db\.json|data\/|logs\/|uploads\/|backups\/|node_modules\/|\.git\/|AGENTS\.md|tests\/|package-windows\.mjs|generate-third-party-notices\.mjs)/.test(item)), [], 'state, secrets, tests and release tooling stay out of the deliverable');
   assert.deepEqual(fs.readdirSync(path.join(stage, 'scripts')).sort(), [...shippedScripts].sort(), 'only the allowlisted launcher helpers ship');
 
   const scanned = [];

@@ -40,6 +40,7 @@ import { contactResearchCategory, matchesResearchFilter } from '../../shared/con
 import { directoryPage as getDirectoryPage } from '../utils/directoryPagination';
 
 interface ContactsProps {
+  fileId?: string;
   contacts: CompanyContact[];
   onFetchDetailsAutomated?: (companyName: string, id?: string, forceFetch?: boolean, reuseOnly?: boolean) => Promise<any>;
   onOpenExport?: (payload: GlobalExportPayload) => void;
@@ -60,11 +61,29 @@ const decodeDisplayText = (value?: string) => {
 };
 
 export const Contacts: React.FC<ContactsProps> = ({
-  contacts,
+  contacts: allContacts, fileId,
   onFetchDetailsAutomated,
   onOpenExport,
   refreshData,
 }) => {
+  const [scoped, setScoped] = useState<CompanyContact[]>([]);
+  const [scopeError, setScopeError] = useState(false);
+  const query = fileId ? '?file_id=' + encodeURIComponent(fileId) : '';
+  const requestIdRef = useRef(0);
+  useEffect(() => {
+    if (!fileId) return;
+    const controller = new AbortController();
+    const currentRequestId = ++requestIdRef.current;
+    void safeFetchJson<CompanyContact[]>('/api/companies' + query, { signal: controller.signal }).then(result => {
+      if (controller.signal.aborted || currentRequestId !== requestIdRef.current) return;
+      setScopeError(!result.ok);
+      setScoped(result.ok && Array.isArray(result.data) ? result.data : []);
+    });
+    return () => controller.abort();
+  }, [fileId, query]);
+  const contacts = fileId ? scoped : allContacts;
+  const [batchIds, setBatchIds] = useState<string[] | null>(null);
+  const openBatch = (ids: string[] | null) => { setBatchIds(ids); setIsBatchModalOpen(true); };
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('edgeview_contacts_search') || '');
   // Show every researched company by default, but preserve an explicitly saved
   // filter. Reapplying an ENRICHED migration on every mount erased user choice.
@@ -92,17 +111,17 @@ export const Contacts: React.FC<ContactsProps> = ({
   const [directoryLoading, setDirectoryLoading] = useState<boolean>(false);
   const [directoryRevision, setDirectoryRevision] = useState(0);
   const [summaryData, setSummaryData] = useState({ total_companies: 0, researched_companies: 0, contacts_found: 0, unresolved_after_research: 0, not_researched: 0, excluded_exporters: 0, research_scope: 0, source_records: 0 });
-  const loadSummary = async () => {
+  const loadSummary = async (signal?: AbortSignal) => {
     try {
-      const { ok, data } = await safeFetchJson<any>('/api/summary');
-      if (ok && data) {
-        setSummaryData(data);
-      }
-    } catch (err) { console.error('Failed to load company research summary', err); }
+      const { ok, data } = await safeFetchJson<any>('/api/summary' + query, { signal });
+      if (!signal?.aborted && ok && data) setSummaryData(data);
+    } catch (err) { if (!signal?.aborted) console.error('Failed to load company research summary', err); }
   };
 
   useEffect(() => {
-    loadSummary();
+    const controller = new AbortController();
+    void loadSummary(controller.signal);
+    return () => controller.abort();
   }, [contacts]);
 
   const [currentPage, setCurrentPage] = useState<number>(() => Math.max(1, Number(localStorage.getItem('edgeview_contacts_page')) || 1));
@@ -210,10 +229,11 @@ export const Contacts: React.FC<ContactsProps> = ({
     }
 
     setSelectedIds(failedIds);
-    setIsBatchModalOpen(true);
+    openBatch(failedIds);
   };
 
   const loadDirectory = () => setDirectoryRevision(revision => revision + 1);
+  const directoryRequestIdRef = useRef(0);
 
   useEffect(() => {
     // A contact refresh invalidates this derived view. Never let an older request
@@ -221,20 +241,21 @@ export const Contacts: React.FC<ContactsProps> = ({
     setDirectoryData(null);
     if (viewMode !== 'directory') return;
     const controller = new AbortController();
+    const currentRequestId = ++directoryRequestIdRef.current;
     let active = true;
     const timeout = setTimeout(() => controller.abort(), 15_000);
     setDirectoryLoading(true);
     void (async () => {
       try {
-        const { ok, data } = await safeFetchJson<IntlDirectory>('/api/international-importer-directory', { signal: controller.signal });
-        if (active && ok && data) setDirectoryData(data);
+        const { ok, data } = await safeFetchJson<IntlDirectory>('/api/international-importer-directory' + query, { signal: controller.signal });
+        if (active && currentRequestId === directoryRequestIdRef.current && ok && data) setDirectoryData(data);
       } finally {
         clearTimeout(timeout);
-        if (active) setDirectoryLoading(false);
+        if (active && currentRequestId === directoryRequestIdRef.current) setDirectoryLoading(false);
       }
     })();
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
-  }, [contacts, viewMode, directoryRevision]);
+  }, [viewMode, directoryRevision, query]);
 
   const handleViewModeToggle = (mode: 'table' | 'directory') => {
     setViewMode(mode);
@@ -242,6 +263,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   return (
     <div className="space-y-4">
+      {scopeError && <p role="alert">Could not load this file’s contacts. Reopen Contacts to retry.</p>}
       <SummaryCards data={summaryData} onFilterClick={(f) => setFilterType(f)} />
 
       {/* Main Directory Table Container */}
@@ -267,7 +289,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setIsBatchModalOpen(true)}
+              onClick={() => openBatch(null)}
               disabled={!researchAvailable && !savedEvidenceAvailable}
               title={researchAvailable ? 'Research selected or eligible companies' : savedEvidenceAvailable ? 'Recheck companies with retained evidence without provider calls' : `${researchReason}${researchRemediation ? ` ${researchRemediation}` : ''}`}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#10b981] hover:bg-[#10b981]/80 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#10b981]"
@@ -293,7 +315,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                 onClick={() => {
                   if (onOpenExport) {
                     onOpenExport({
-                      dataset: 'contacts',
+                      dataset: 'contacts', contactFileId: fileId,
                       title: 'Company Contact Directory',
                       defaultReportType: contactExportReportType(filterType),
                       records: filteredContacts,
@@ -341,7 +363,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setIsBatchModalOpen(true)}
+                onClick={() => openBatch(selectedIds)}
                 disabled={!researchAvailable && !selectedIds.every(id => canRecheckSaved(contacts.find(contact => contact.id === id)))}
                 title={researchAvailable ? 'Enrich selected companies' : 'Recheck retained evidence for the selected companies'}
                 className="px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-sky-600"
@@ -351,12 +373,17 @@ export const Contacts: React.FC<ContactsProps> = ({
               <button
                 onClick={() => {
                   if (onOpenExport) {
-                    const selectedRecords = filteredContacts.filter((c) => selectedIds.includes(c.id));
+                    // Filtering changes visibility, not the user's selection authority.
+                    // Every selected ID must remain represented in the export scope;
+                    // buildExportRequest rejects stale IDs instead of exporting a
+                    // different (or wider) set of contacts.
+                    const selectedIdSet = new Set(selectedIds);
+                    const selectedRecords = contacts.filter((contact) => selectedIdSet.has(contact.id));
                     onOpenExport({
-                      dataset: 'contacts',
+                      dataset: 'contacts', contactFileId: fileId,
                       title: 'Selected Company Contacts',
                       defaultReportType: contactExportReportType(filterType),
-                      records: selectedRecords.length > 0 ? selectedRecords : filteredContacts,
+                      records: selectedRecords,
                       selectedRows: selectedIds,
                       filenamePrefix: 'EdgeView_Selected_Contacts',
                     });
@@ -765,12 +792,13 @@ export const Contacts: React.FC<ContactsProps> = ({
       <BatchEnrichmentModal
         isOpen={isBatchModalOpen}
         onClose={() => setIsBatchModalOpen(false)}
-        contacts={!researchAvailable && savedEvidenceAvailable ? contacts.filter(contact => contact.can_revalidate_evidence === true) : contacts}
+        initialIds={batchIds}
+        contacts={contacts.filter(contact => (!batchIds || batchIds.includes(contact.id)) && (researchAvailable || !savedEvidenceAvailable || contact.can_revalidate_evidence === true))}
         evidenceOnly={!researchAvailable && savedEvidenceAvailable}
         refreshData={refreshData}
       />
 
-      <ExportReportModal
+      <ExportReportModal fileId={fileId}
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         contacts={contacts}

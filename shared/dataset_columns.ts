@@ -103,6 +103,17 @@ const TARGET_COLUMNS_CONFIG = [
   },
 ];
 
+function tradePartyColumnMatches(column: string, keyword: string): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  const columnName = normalize(column), alias = normalize(keyword);
+  if (!alias) return false;
+  if (columnName === alias) return true;
+  // Descriptive name/company suffixes remain useful. Country, date, notes and
+  // other attributes of a trade party are not themselves the party column.
+  const suffixes = new Set(['name', 'company', 'company name', 'legal name', 'entity', 'entity name']);
+  return columnName.startsWith(`${alias} `) && suffixes.has(columnName.slice(alias.length + 1));
+}
+
 /**
  * Column Detection Logic:
  * Scans file.columns for matching keywords and assigns actual column names to target headers.
@@ -132,8 +143,15 @@ export const detectColumns = (fileColumns: string[]) => {
       }
     }
 
-    // 2. Try substring match if exact match not found
-    if (!bestMatch) {
+    // 2. Trade-party columns permit only explicit name/company qualifiers.
+    if (!bestMatch && (target.key === 'importer' || target.key === 'exporter')) {
+      const match = normalizedFileCols.find(c => !usedOriginalCols.has(c.original)
+        && allKeywords.some(keyword => tradePartyColumnMatches(c.original, keyword)));
+      if (match) bestMatch = match.original;
+    }
+
+    // 3. Other fields retain their historical substring fallback.
+    if (!bestMatch && target.key !== 'importer' && target.key !== 'exporter') {
       for (const kw of allKeywords) {
         const cleanKw = kw.replace(/[^a-z0-9_]/g, '');
         if (cleanKw.length < 2) continue;

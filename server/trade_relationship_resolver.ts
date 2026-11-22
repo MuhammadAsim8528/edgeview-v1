@@ -1,11 +1,13 @@
 import { db } from './db';
 import { getDb } from './sqlite';
-import { canonicalCompanyIdentityKey, canonicalCountryIdentityKey, canonicalEntityIdentityKey } from './company_identity';
+import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './company_identity';
 
 export interface ResolvedTradeRelationship {
   partnerName: string;
   country: string;
   itemDescription?: string;
+  /** Exact raw item description -> shipment recurrence within this relationship. */
+  itemShipmentCounts?: Record<string, number>;
   totalVal?: number;
   shipmentCount: number;
 }
@@ -44,157 +46,14 @@ export class TradeRelationshipResolver {
     role: 'importer' | 'exporter' | 'both' = 'both',
     country?: string
   ): Promise<{ importedFrom: ResolvedTradeRelationship[]; suppliedTo: ResolvedTradeRelationship[] }> {
-    const importedFromMap = new Map<string, ResolvedTradeRelationship>();
-    const suppliedToMap = new Map<string, ResolvedTradeRelationship>();
-
-    const targetClean = this.cleanCompanyName(companyName);
-    const targetCountry = canonicalCountryIdentityKey(country);
-    if (!targetClean) {
-      return { importedFrom: [], suppliedTo: [] };
-    }
-
-    // 1. Resolve from current in-memory files (db.files)
-    try {
-      for (const file of db.files.values()) {
-        const cols = file.columns;
-        const impCol = cols.find((c: string) => /(importer|import|buyer|customer|consignee)/i.test(c));
-        const expCol = cols.find((c: string) => /(exporter|export|seller|supplier|vendor)/i.test(c));
-        const countryCol = cols.find((c: string) => /(country|origin|dest)/i.test(c));
-        const itemCol = cols.find((c: string) => /(item|product|drug|desc)/i.test(c));
-        const costCol = cols.find((c: string) => /(cost|value|price|tot_fc|val_usd|invoice_value)/i.test(c));
-        const ntnCol = cols.find((c: string) => /(ntn|ntn_no)/i.test(c));
-
-        if (impCol && expCol) {
-          for (const row of file.rows) {
-            const rawImp = String(row[impCol] || '').trim();
-            const rawExp = String(row[expCol] || '').trim();
-            const rawCountry = countryCol ? String(row[countryCol] || 'Unknown').trim() : 'Unknown';
-            const rawItem = itemCol ? String(row[itemCol] || '').trim() : undefined;
-            const rawCost = costCol ? Number(String(row[costCol] || '0').replace(/[^0-9.-]/g, '')) : 0;
-            const rawNtn = ntnCol ? String(row[ntnCol] || '').trim() : '';
-
-            const impClean = this.cleanCompanyName(rawImp);
-            const expClean = this.cleanCompanyName(rawExp);
-
-            // Match Importer (resolves what exporters they imported from)
-            if (role !== 'exporter' && impClean && impClean === targetClean && (!targetCountry || canonicalCountryIdentityKey(rawCountry) === targetCountry)) {
-              if (rawExp && rawExp.toLowerCase() !== 'n/a') {
-                const partnerKey = rawExp.toLowerCase().trim();
-                const existing = importedFromMap.get(partnerKey) || {
-                  partnerName: rawExp,
-                  country: rawCountry,
-                  itemDescription: rawItem,
-                  totalVal: 0,
-                  shipmentCount: 0,
-                };
-                existing.totalVal = (existing.totalVal || 0) + rawCost;
-                existing.shipmentCount++;
-                if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-                  existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-                }
-                importedFromMap.set(partnerKey, existing);
-              }
-            }
-
-            // Match Exporter (resolves what importers they supplied to)
-            if (role !== 'importer' && expClean && expClean === targetClean) {
-              if (rawImp && rawImp.toLowerCase() !== 'n/a') {
-                const partnerKey = rawImp.toLowerCase().trim();
-                const existing = suppliedToMap.get(partnerKey) || {
-                  partnerName: rawImp,
-                  country: rawCountry,
-                  itemDescription: rawItem,
-                  totalVal: 0,
-                  shipmentCount: 0,
-                };
-                existing.totalVal = (existing.totalVal || 0) + rawCost;
-                existing.shipmentCount++;
-                if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-                  existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-                }
-                suppliedToMap.set(partnerKey, existing);
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Error resolving trade relationships from files:', err);
-    }
-
-    // 2. Resolve from SQLite History DB
-    try {
-      const sqliteDb = await getDb();
-      const query = `
-        SELECT importer, exporter, country, item, tot_fc 
-        FROM history_data 
-        WHERE LOWER(importer) LIKE ? OR LOWER(exporter) LIKE ?
-      `;
-      const searchPattern = `%${companyName.toLowerCase().trim()}%`;
-      const rows = await sqliteDb.all(query, [searchPattern, searchPattern]);
-
-      for (const row of rows) {
-        const rawImp = String(row.importer || '').trim();
-        const rawExp = String(row.exporter || '').trim();
-        const rawCountry = String(row.country || 'Unknown').trim();
-        const rawItem = String(row.item || '').trim();
-        const rawCost = Number(row.tot_fc || 0);
-
-        const impClean = this.cleanCompanyName(rawImp);
-        const expClean = this.cleanCompanyName(rawExp);
-
-        if (role !== 'exporter' && impClean && impClean === targetClean && (!targetCountry || canonicalCountryIdentityKey(rawCountry) === targetCountry)) {
-          if (rawExp && rawExp.toLowerCase() !== 'n/a') {
-            const partnerKey = rawExp.toLowerCase().trim();
-            const existing = importedFromMap.get(partnerKey) || {
-              partnerName: rawExp,
-              country: rawCountry,
-              itemDescription: rawItem,
-              totalVal: 0,
-              shipmentCount: 0,
-            };
-            existing.totalVal = (existing.totalVal || 0) + rawCost;
-            existing.shipmentCount++;
-            if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-              existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-            }
-            importedFromMap.set(partnerKey, existing);
-          }
-        }
-
-        if (role !== 'importer' && expClean && expClean === targetClean) {
-          if (rawImp && rawImp.toLowerCase() !== 'n/a') {
-            const partnerKey = rawImp.toLowerCase().trim();
-            const existing = suppliedToMap.get(partnerKey) || {
-              partnerName: rawImp,
-              country: rawCountry,
-              itemDescription: rawItem,
-              totalVal: 0,
-              shipmentCount: 0,
-            };
-            existing.totalVal = (existing.totalVal || 0) + rawCost;
-            existing.shipmentCount++;
-            if (rawItem && !existing.itemDescription?.includes(rawItem)) {
-              existing.itemDescription = existing.itemDescription ? `${existing.itemDescription}, ${rawItem}` : rawItem;
-            }
-            suppliedToMap.set(partnerKey, existing);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Error resolving trade relationships from SQLite:', err);
-    }
-
-    return {
-      importedFrom: Array.from(importedFromMap.values()),
-      suppliedTo: Array.from(suppliedToMap.values()),
-    };
+    const index = await this.buildTradeIndex();
+    return this.resolveFromIndex(companyName, index, role, country);
   }
 
   /**
    * Builds a reusable single-pass trade index for batch export operations across 17k+ rows.
    */
-  public static async buildTradeIndex(): Promise<{
+  public static async buildTradeIndex(fileId?: string): Promise<{
     importedFrom: Map<string, Map<string, ResolvedTradeRelationship>>;
     suppliedTo: Map<string, Map<string, ResolvedTradeRelationship>>;
   }> {
@@ -204,16 +63,18 @@ export class TradeRelationshipResolver {
     };
     // Accumulate exact product descriptions without repeatedly scanning and
     // copying an ever-growing relationship string. Join once after both stores.
-    const descriptions = new Map<ResolvedTradeRelationship, Set<string>>();
+    const descriptions = new Map<ResolvedTradeRelationship, Map<string, number>>();
     const addDescription = (relationship: ResolvedTradeRelationship, item: string | undefined) => {
       let items = descriptions.get(relationship);
-      if (!items) { items = new Set(); descriptions.set(relationship, items); }
-      if (item) items.add(item);
+      if (!items) { items = new Map(); descriptions.set(relationship, items); }
+      if (item) items.set(item, (items.get(item) || 0) + 1);
     };
 
     // 1. Process in-memory files
-    const loadedTradeFileNames = new Set<string>();
+    const loadedTradeFileIds = new Set<string>();
+    const loadedTradeFileNames = new Map<string, number>();
     for (const file of db.files.values()) {
+      if (fileId !== undefined && file.id !== fileId) continue;
       const cols = file.columns;
       const impCol = cols.find((c: string) => /(importer|import|buyer|customer|consignee)/i.test(c));
       const expCol = cols.find((c: string) => /(exporter|export|seller|supplier|vendor)/i.test(c));
@@ -224,7 +85,8 @@ export class TradeRelationshipResolver {
       if (impCol && expCol) {
         // Real uploads are stored BOTH in db.files (memory) AND in history_data
         // (SQLite). Record this file so its rows are not counted twice in step 2.
-        if (file.name) loadedTradeFileNames.add(file.name);
+        loadedTradeFileIds.add(file.id);
+        if (file.name) loadedTradeFileNames.set(file.name, (loadedTradeFileNames.get(file.name) || 0) + 1);
         for (const row of file.rows) {
           const rawImp = String(row[impCol] || '').trim();
           const rawExp = String(row[expCol] || '').trim();
@@ -254,8 +116,9 @@ export class TradeRelationshipResolver {
           }
 
           if (expClean && rawImp && rawImp.toLowerCase() !== 'n/a') {
-            if (!index.suppliedTo.has(expClean)) index.suppliedTo.set(expClean, new Map());
-            const compMap = index.suppliedTo.get(expClean)!;
+            const exporterEntityKey = canonicalEntityIdentityKey(expClean, rawCountry);
+            if (!index.suppliedTo.has(exporterEntityKey)) index.suppliedTo.set(exporterEntityKey, new Map());
+            const compMap = index.suppliedTo.get(exporterEntityKey)!;
             const partnerKey = rawImp.toLowerCase().trim();
             const existing = compMap.get(partnerKey) || {
               partnerName: rawImp,
@@ -276,13 +139,19 @@ export class TradeRelationshipResolver {
     // 2. Process SQLite DB history_data
     try {
       const sqliteDb = await getDb();
-      const rows = await sqliteDb.all('SELECT file_name, importer, exporter, country, item, tot_fc FROM history_data');
+      const query = 'SELECT file_id, file_name, importer, exporter, country, item, tot_fc FROM history_data';
+      const rows = fileId === undefined ? await sqliteDb.all(query) :
+        await sqliteDb.all(query + ' WHERE file_id = ?', [fileId]);
       for (const row of rows) {
         // Rows for files that are currently loaded in memory were already
         // counted in step 1 (real uploads exist in both stores). Skip them so
         // each shipment is counted exactly once. Rows for files no longer in
         // memory (kept only in the History DB) are still counted here.
-        if (row.file_name && loadedTradeFileNames.has(String(row.file_name))) continue;
+        if (row.file_id && loadedTradeFileIds.has(String(row.file_id))) continue;
+        if (!row.file_id && loadedTradeFileNames.get(String(row.file_name)) === 1) continue;
+        // A null legacy owner is safe to deduplicate only against one loaded
+        // filename. With multiple same-named files, preserve the archived row:
+        // its ownership is ambiguous and silently dropping it loses shipments.
 
         const rawImp = String(row.importer || '').trim();
         const rawExp = String(row.exporter || '').trim();
@@ -312,8 +181,9 @@ export class TradeRelationshipResolver {
         }
 
         if (expClean && rawImp && rawImp.toLowerCase() !== 'n/a') {
-          if (!index.suppliedTo.has(expClean)) index.suppliedTo.set(expClean, new Map());
-          const compMap = index.suppliedTo.get(expClean)!;
+          const exporterEntityKey = canonicalEntityIdentityKey(expClean, rawCountry);
+          if (!index.suppliedTo.has(exporterEntityKey)) index.suppliedTo.set(exporterEntityKey, new Map());
+          const compMap = index.suppliedTo.get(exporterEntityKey)!;
           const partnerKey = rawImp.toLowerCase().trim();
           const existing = compMap.get(partnerKey) || {
             partnerName: rawImp,
@@ -334,7 +204,10 @@ export class TradeRelationshipResolver {
       throw Object.assign(new Error('Stored trade history could not be read. Please retry when database access is restored.'), { code: 'TRADE_HISTORY_UNAVAILABLE' });
     }
 
-    for (const [relationship, items] of descriptions) relationship.itemDescription = [...items].join(', ') || undefined;
+    for (const [relationship, items] of descriptions) {
+      relationship.itemDescription = [...items.keys()].join(', ') || undefined;
+      if (items.size) relationship.itemShipmentCounts = Object.fromEntries(items);
+    }
     return index;
   }
 
@@ -351,27 +224,47 @@ export class TradeRelationshipResolver {
     country?: string
   ): { importedFrom: ResolvedTradeRelationship[]; suppliedTo: ResolvedTradeRelationship[] } {
     const clean = this.cleanCompanyName(companyName);
-    const importerKey = canonicalEntityIdentityKey(clean, country);
-    let impMap = role !== 'exporter' ? tradeIndex.importedFrom.get(importerKey) : undefined;
+    const entityKey = canonicalEntityIdentityKey(clean, country);
+    let impMap = role !== 'exporter' ? tradeIndex.importedFrom.get(entityKey) : undefined;
+    let expMap = role !== 'importer' ? tradeIndex.suppliedTo.get(entityKey) : undefined;
     // Compatibility for callers that genuinely have no country context: merge
     // all country-specific variants. Country-aware application paths must pass
     // country and therefore never enter this branch.
-    if (!country && role !== 'exporter' && !impMap) {
-      const combined = new Map<string, ResolvedTradeRelationship>();
-      for (const [key, relationships] of tradeIndex.importedFrom) {
-        if (key !== clean && !key.startsWith(`${clean}__`)) continue;
-        for (const [partnerKey, relationship] of relationships) {
-          const existing = combined.get(partnerKey);
-          if (!existing) combined.set(partnerKey, { ...relationship });
-          else {
+    if (!country) {
+      const combine = (source: Map<string, Map<string, ResolvedTradeRelationship>>) => {
+        const combined = new Map<string, ResolvedTradeRelationship>();
+        const countsFor = (relationship: ResolvedTradeRelationship) => {
+          if (relationship.itemShipmentCounts) return { ...relationship.itemShipmentCounts };
+          const counts: Record<string, number> = {};
+          for (const item of relationship.itemDescription?.split(', ') || []) if (item) counts[item] = 1;
+          return counts;
+        };
+        for (const [key, relationships] of source) {
+          if (key !== clean && !key.startsWith(`${clean}__`)) continue;
+          for (const [partnerKey, relationship] of relationships) {
+            const existing = combined.get(partnerKey);
+            if (!existing) {
+              combined.set(partnerKey, { ...relationship,
+                ...(relationship.itemShipmentCounts ? { itemShipmentCounts: { ...relationship.itemShipmentCounts } } : {}) });
+              continue;
+            }
+            const itemShipmentCounts = countsFor(existing);
+            for (const [item, count] of Object.entries(countsFor(relationship))) {
+              itemShipmentCounts[item] = (itemShipmentCounts[item] || 0) + count;
+            }
             existing.shipmentCount += relationship.shipmentCount || 0;
             existing.totalVal = (existing.totalVal || 0) + (relationship.totalVal || 0);
+            if (Object.keys(itemShipmentCounts).length) {
+              existing.itemShipmentCounts = itemShipmentCounts;
+              existing.itemDescription = Object.keys(itemShipmentCounts).join(', ');
+            }
           }
         }
-      }
-      impMap = combined.size ? combined : undefined;
+        return combined.size ? combined : undefined;
+      };
+      if (role !== 'exporter') impMap = combine(tradeIndex.importedFrom);
+      if (role !== 'importer') expMap = combine(tradeIndex.suppliedTo);
     }
-    const expMap = role !== 'importer' ? tradeIndex.suppliedTo.get(clean) : undefined;
 
     return {
       importedFrom: impMap ? Array.from(impMap.values()) : [],

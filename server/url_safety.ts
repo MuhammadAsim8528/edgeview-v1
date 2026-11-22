@@ -5,11 +5,12 @@ import https from 'node:https';
 import { Transform, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
+import { createDeadlineSignal, throwIfCancelled } from './operation_control';
 
 export function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split('.').map((p) => parseInt(p, 10));
   if (parts.length !== 4 || parts.some((p) => isNaN(p))) return false;
-  const [a, b] = parts;
+  const [a, b, c] = parts;
   return (
     a === 0 ||
     a === 10 ||
@@ -18,8 +19,15 @@ export function isPrivateIPv4(ip: string): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19)) ||
+    // IETF protocol assignments, TEST-NET examples and other non-public ranges.
+    // A documented example address is not a safe public retrieval destination.
     (a === 192 && b === 0) ||
+    (a === 192 && b === 31 && c === 196) ||
+    (a === 192 && b === 52 && c === 193) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 192 && b === 175 && c === 48) ||
+    (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+    (a === 203 && b === 0) ||
     a >= 224
   );
 }
@@ -29,6 +37,8 @@ export function isPrivateIPv6(ip: string): boolean {
   if (lower.startsWith('::1') || lower === '::') return true;
   const firstHextet = parseInt(lower.split(':')[0] || '0', 16);
   if (firstHextet >= 0xfe80 && firstHextet <= 0xfebf) return true;
+  // Deprecated IPv6 site-local addresses are still non-public destinations.
+  if (firstHextet >= 0xfec0 && firstHextet <= 0xfeff) return true;
   if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
   if (lower.startsWith('ff')) return true;
   const mappedHextets = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
@@ -62,10 +72,9 @@ export function isSafeExternalUrl(urlStr: string): boolean {
     let host = stripBrackets(parsed.hostname);
     if (!host) return false;
 
-    if (net.isIPv6(host)) {
-      if (isPrivateIPv6(host)) return false;
-      return true;
-    }
+    // Literal addresses must follow exactly the same policy as DNS answers.
+    if (net.isIPv4(host)) return !isPrivateIPv4(host);
+    if (net.isIPv6(host)) return !isPrivateIPv6(host);
 
     if (host.endsWith('.')) host = host.slice(0, -1);
 
@@ -111,11 +120,13 @@ async function resolveSafeOutboundAddress(urlStr: string): Promise<{ address: st
   }
 
   let addresses;
+  const lookup = createDeadlineSignal(undefined, 10_000, 'RETRIEVAL_TIMEOUT');
   try {
-    addresses = await dns.lookup(host, { all: true, verbatim: true });
-  } catch {
+    addresses = await Promise.race([dns.lookup(host, { all: true, verbatim: true }), lookup.timeout]);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'RETRIEVAL_TIMEOUT') throw error;
     throw new Error('Blocked: could not resolve URL hostname (SSRF guard)');
-  }
+  } finally { lookup.cleanup(); }
   if (!addresses.length) throw new Error('Blocked: could not resolve URL hostname (SSRF guard)');
   for (const addr of addresses) {
     if (!net.isIP(addr.address)) throw new Error('Blocked: invalid DNS address (SSRF guard)');

@@ -1,4 +1,5 @@
 import { acquireCompanyIdentityWork } from './company_identity_work';
+import { createDeadlineSignal, throwIfCancelled, withBoundedConcurrency } from './operation_control';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -159,6 +160,8 @@ export interface V1Run {
 
 export interface V1RunOptions {
   profile?: 'interactive' | 'bulk';
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface V1RunSummary {
@@ -185,7 +188,8 @@ const dataDir = process.env.EDGEVIEW_V1_DATA_DIR
   : path.join(getRuntimeDataRoot(), 'data', 'v1-runs');
 const identityIndexPath = path.join(dataDir, 'identity-index.jsonl');
 const providerMetricsPath = path.join(dataDir, 'provider-metrics.json');
-const activeRuns = new Map<string, Promise<V1Run>>();
+const activeRuns = new Map<string, { promise: Promise<V1Run>; startedAt: number }>();
+const ACTIVE_RUN_TTL_MS = 5 * 60 * 1000;
 let summaryCache: V1RunSummary[] | null = null;
 type V1RunIdentityHeader = {
   id: string; company_name: string; country: string; status: V1Run['status'];
@@ -193,6 +197,20 @@ type V1RunIdentityHeader = {
   research_context?: V1ResearchContext;
 };
 let identityHeaderCache: V1RunIdentityHeader[] | null = null;
+
+function invalidateV1Caches(): void {
+  summaryCache = null;
+  identityHeaderCache = null;
+}
+
+function cleanupActiveRuns(): void {
+  const now = Date.now();
+  for (const [key, value] of activeRuns.entries()) {
+    if (now - value.startedAt > ACTIVE_RUN_TTL_MS) {
+      activeRuns.delete(key);
+    }
+  }
+}
 const hardUnavailableProviders = new Map<string, string>();
 const providerCooldowns = new Map<string, { until: number; reason: string }>();
 type ProviderMetricAggregate = {
@@ -210,9 +228,14 @@ function sha(value: unknown) { return crypto.createHash('sha256').update(JSON.st
 function cleanText(value: unknown) { return typeof value === 'string' ? value.trim() : ''; }
 function safeError(error: unknown, status?: number) {
   const e = error instanceof Error ? error : new Error(String(error));
-  const responseStatus = (e as Error & { status?: unknown }).status;
+  const responseStatus = (e as Error & { status?: unknown; httpStatus?: unknown }).status;
+  const observedHttpStatus = (e as Error & { httpStatus?: unknown }).httpStatus;
   if (!status && typeof responseStatus === 'number' && Number.isInteger(responseStatus) && responseStatus >= 100 && responseStatus <= 599) status = responseStatus;
+  if (!status && typeof observedHttpStatus === 'number' && Number.isInteger(observedHttpStatus) && observedHttpStatus >= 100 && observedHttpStatus <= 599) status = observedHttpStatus;
   return { name: e.name || 'Error', message: e.message || 'Unknown failure', ...(status ? { status } : {}) };
+}
+function throwIfRunAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('RUN_DEADLINE_EXCEEDED');
 }
 function attachOperationFailure(run: V1Run, provider: string, request: Record<string, unknown>, failure: V1RawRecord['failure']): void {
   const captured = run.raw_records.find(record => record.provider === provider && record.request === request);
@@ -355,58 +378,79 @@ function jsonStringFromHeader(header: string, field: string): string {
  * of each immutable run is read; multi-megabyte provider payloads are not
  * parsed during application startup.
  */
+function readV1RunIdentityHeader(name: string): V1RunIdentityHeader | null {
+  let handle: number | undefined;
+  try {
+    handle = fs.openSync(path.join(dataDir, name), 'r');
+    const stat = fs.fstatSync(handle);
+    const maxHeaderSize = 64 * 1024;
+    const buffer = Buffer.alloc(Math.min(stat.size, maxHeaderSize));
+    const bytes = fs.readSync(handle, buffer, 0, buffer.length, 0);
+    const header = buffer.subarray(0, bytes).toString('utf8');
+    const idValue = jsonStringFromHeader(header, 'id');
+    const company = jsonStringFromHeader(header, 'company_name');
+    const countryValue = jsonStringFromHeader(header, 'country');
+    const statusValue = jsonStringFromHeader(header, 'status') as V1Run['status'];
+    const startedAt = jsonStringFromHeader(header, 'started_at');
+    const completedAt = jsonStringFromHeader(header, 'completed_at');
+    const queriesMatch = header.match(/"queries"\s*:\s*(\[[\s\S]*?\])\s*,\s*"results"/);
+    let queryCount = 0;
+    try { queryCount = queriesMatch ? JSON.parse(queriesMatch[1]).length : 0; } catch { /* header remains usable */ }
+    let researchContext: V1ResearchContext | undefined;
+    try {
+      const match = header.match(/"research_context"\s*:\s*(\{[^{}]*\})/);
+      if (match) researchContext = JSON.parse(match[1]);
+    } catch { /* Legacy/damaged metadata never becomes verified context. */ }
+    if (idValue !== name.slice(0, -5) || !company || !countryValue) return null;
+    return {
+      id: idValue, company_name: company, country: countryValue,
+      status: ['RUNNING', 'COMPLETED', 'PARTIAL', 'FAILED'].includes(statusValue) ? statusValue : 'PARTIAL',
+      started_at: startedAt, ...(completedAt ? { completed_at: completedAt } : {}), query_count: queryCount,
+      ...(researchContext ? { research_context: researchContext } : {}),
+    };
+  } catch { return null; } // One damaged header cannot hide other runs.
+  finally { if (handle !== undefined) fs.closeSync(handle); }
+}
+
 export function listV1RunIdentityHeaders() {
   if (identityHeaderCache) return identityHeaderCache;
-  identityHeaderCache = [];
-  if (!fs.existsSync(dataDir)) return identityHeaderCache;
+  const byId = new Map<string, V1RunIdentityHeader>();
+  if (!fs.existsSync(dataDir)) return (identityHeaderCache = []);
   if (fs.existsSync(identityIndexPath)) {
-    const byId = new Map<string, V1RunIdentityHeader>();
-    for (const line of fs.readFileSync(identityIndexPath, 'utf8').split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      try { const item = JSON.parse(line) as V1RunIdentityHeader; if (item.id) byId.set(item.id, item); } catch { /* ignore damaged cache line */ }
-    }
-    identityHeaderCache = [...byId.values()].sort((a, b) => b.started_at.localeCompare(a.started_at));
-    return identityHeaderCache;
-  }
-  for (const name of fs.readdirSync(dataDir).filter(file => /^run-[a-z0-9-]+\.json$/i.test(file))) {
-    let handle: number | undefined;
     try {
-      handle = fs.openSync(path.join(dataDir, name), 'r');
-      const buffer = Buffer.alloc(16 * 1024);
-      const bytes = fs.readSync(handle, buffer, 0, buffer.length, 0);
-      const header = buffer.subarray(0, bytes).toString('utf8');
-      const idValue = jsonStringFromHeader(header, 'id');
-      const company = jsonStringFromHeader(header, 'company_name');
-      const countryValue = jsonStringFromHeader(header, 'country');
-      const statusValue = jsonStringFromHeader(header, 'status') as V1Run['status'];
-      const startedAt = jsonStringFromHeader(header, 'started_at');
-      const completedAt = jsonStringFromHeader(header, 'completed_at');
-      const queriesMatch = header.match(/"queries"\s*:\s*(\[[\s\S]*?\])\s*,\s*"results"/);
-      let queryCount = 0;
-      try { queryCount = queriesMatch ? JSON.parse(queriesMatch[1]).length : 0; } catch { /* header remains usable */ }
-      let researchContext: V1ResearchContext | undefined;
-      try {
-        const match = header.match(/"research_context"\s*:\s*(\{[^{}]*\})/);
-        if (match) researchContext = JSON.parse(match[1]);
-      } catch { /* Legacy/damaged metadata never becomes verified context. */ }
-      if (idValue && company && countryValue) identityHeaderCache.push({
-        id: idValue, company_name: company, country: countryValue,
-        status: ['RUNNING', 'COMPLETED', 'PARTIAL', 'FAILED'].includes(statusValue) ? statusValue : 'PARTIAL',
-        started_at: startedAt, ...(completedAt ? { completed_at: completedAt } : {}), query_count: queryCount,
-        ...(researchContext ? { research_context: researchContext } : {}),
-      });
-    } catch { /* one damaged header cannot hide other runs */ }
-    finally { if (handle !== undefined) fs.closeSync(handle); }
+      for (const line of fs.readFileSync(identityIndexPath, 'utf8').split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
+          const item = JSON.parse(line) as V1RunIdentityHeader;
+          if (item && /^run-[a-z0-9-]+$/i.test(item.id) && typeof item.company_name === 'string'
+            && typeof item.country === 'string' && typeof item.started_at === 'string') byId.set(item.id, item);
+        } catch { /* ignore damaged cache line */ }
+      }
+    } catch { /* an unreadable derived index is rebuilt from immutable runs */ }
   }
-  identityHeaderCache.sort((a, b) => b.started_at.localeCompare(a.started_at));
-  try { fs.writeFileSync(identityIndexPath, identityHeaderCache.map(item => JSON.stringify(item)).join('\n') + '\n', 'utf8'); } catch { /* derived cache can be rebuilt */ }
+  const indexed = JSON.stringify([...byId.values()].sort((a, b) => b.started_at.localeCompare(a.started_at)));
+  // Promotion is the durable commit point. Reconcile every cold start, even
+  // when an index exists, because its append may have failed or been interrupted.
+  for (const name of fs.readdirSync(dataDir).filter(file => /^run-[a-z0-9-]+\.json$/i.test(file))) {
+    const header = readV1RunIdentityHeader(name);
+    if (header) byId.set(header.id, header);
+  }
+  identityHeaderCache = [...byId.values()].sort((a, b) => b.started_at.localeCompare(a.started_at));
+  if (JSON.stringify(identityHeaderCache) !== indexed) {
+    const temp = `${identityIndexPath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+    try {
+      fs.writeFileSync(temp, identityHeaderCache.map(item => JSON.stringify(item)).join('\n') + '\n', { encoding: 'utf8', flag: 'wx' });
+      fs.renameSync(temp, identityIndexPath);
+    } catch { /* recovered in-memory headers remain truthful; retry next start */ }
+    finally { try { if (fs.existsSync(temp)) fs.unlinkSync(temp); } catch { /* derived temp cleanup */ } }
+  }
   return identityHeaderCache;
 }
 async function boundedFetch(url: string, init: RequestInit, timeoutMs = PROVIDER_TIMEOUT_MS, maxRequestBytes = 2 * 1024 * 1024) {
   return safeFetchProviderRequest(url, { ...init, timeoutMs, maxBytes: 8 * 1024 * 1024, maxRequestBytes });
 }
 
-function parseQueries(text: string, company: string, country: string, maxQueries = MAX_QUERIES): string[] {
+export function parseQueries(text: string, company: string, country: string, maxQueries = MAX_QUERIES): string[] {
   let candidates: unknown = null;
   try {
     const match = text.match(/\[[\s\S]*\]/);
@@ -445,7 +489,8 @@ function orderAiProviders<T extends { name: string }>(providers: T[], primary: '
   return [...providers].sort((a, b) => Number(b.name.startsWith(preferred)) - Number(a.name.startsWith(preferred)));
 }
 
-async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', settings: AppSettings): Promise<string[]> {
+async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', settings: AppSettings, signal: AbortSignal): Promise<string[]> {
+  throwIfRunAborted(signal);
   assertResearchSettingsCurrent(settings);
   const request = {
     company_name: run.company_name,
@@ -464,6 +509,7 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', sett
   }
   let lastError: unknown = new Error('Query generation failed');
   for (const provider of providers) {
+    throwIfRunAborted(signal);
     assertResearchSettingsCurrent(settings);
     if (!providerAvailable(run, provider.name, `${run.company_name} ${run.country}`)) continue;
     const started = Date.now(); const requestedAt = now();
@@ -472,10 +518,10 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', sett
       if (provider.name === 'nvidia') aiPayload.chat_template_kwargs = { thinking: false };
       const response = await safeFetchProviderRequest(provider.url, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` },
-        body: JSON.stringify(aiPayload), maxBytes: 8 * 1024 * 1024,
+        body: JSON.stringify(aiPayload), maxBytes: 8 * 1024 * 1024, signal,
         timeoutMs: provider.name === 'nvidia' ? 8_000 : 12_000,
       });
-      const { body, failure: bodyFailure } = await readProviderResponse(response);
+      const { body, failure: bodyFailure } = await readProviderResponse(response, 8 * 1024 * 1024, 20_000, false, signal);
       const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
       run.raw_records.push(raw);
       raw.http_status = response.status;
@@ -490,12 +536,14 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', sett
       return queries;
     } catch (error) {
       lastError = error; const failure = safeError(error);
+      if (failure.status) rememberHardProviderFailure(provider.name, failure.status, settings);
       attachOperationFailure(run, provider.name, request, failure);
-      if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message) && researchSettingsStillCurrent(settings)) {
+      if (!signal.aborted && /aborted|timeout|fetch failed|socket|network/i.test(failure.message) && researchSettingsStillCurrent(settings)) {
         providerCooldowns.set(providerCircuitKey(provider.name), { until: Date.now() + 120_000, reason: failure.message });
       }
-      if (!run.raw_records.some(r => r.kind === 'ai' && r.provider === provider.name)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+      if (!run.raw_records.some(r => r.kind === 'ai' && r.provider === provider.name)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, failure, ...(failure.status ? { http_status: failure.status } : {}), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
       run.timeline.push({ at: now(), stage: 'query_generation', status: 'failed', provider: provider.name, latency_ms: Date.now() - started, message: 'Query generation provider failed; trying next configured provider', error: failure.message });
+      throwIfRunAborted(signal);
     }
   }
   const queries = fallbackIdentityQueries(run.company_name, run.country, run.limits.max_queries);
@@ -503,7 +551,8 @@ async function generateQueries(run: V1Run, profile: 'interactive' | 'bulk', sett
   return queries;
 }
 
-async function searchSerper(run: V1Run, query: string, settings: AppSettings): Promise<V1Result[]> {
+async function searchSerper(run: V1Run, query: string, settings: AppSettings, signal: AbortSignal): Promise<V1Result[]> {
+  throwIfRunAborted(signal);
   assertResearchSettingsCurrent(settings);
   const provider = 'serper';
   if (!providerAvailable(run, provider, query)) return [];
@@ -511,8 +560,8 @@ async function searchSerper(run: V1Run, query: string, settings: AppSettings): P
   const started = Date.now(); const requestedAt = now();
   try {
     if (!settings.serper_enabled || !settings.serper_api_key) throw new Error('Serper is not configured and enabled');
-    const response = await boundedFetch('https://google.serper.dev/search', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-KEY': settings.serper_api_key }, body: JSON.stringify(request) });
-    const { body, failure: bodyFailure } = await readProviderResponse(response);
+    const response = await boundedFetch('https://google.serper.dev/search', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-KEY': settings.serper_api_key }, body: JSON.stringify(request), signal });
+    const { body, failure: bodyFailure } = await readProviderResponse(response, 8 * 1024 * 1024, 20_000, false, signal);
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { failure: safeError(new Error(`HTTP ${response.status}`), response.status), response: body }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
     raw.http_status = response.status;
@@ -539,7 +588,8 @@ async function searchSerper(run: V1Run, query: string, settings: AppSettings): P
   }
 }
 
-async function resolveSerperSearchLinks(run: V1Run, settings: AppSettings): Promise<void> {
+async function resolveSerperSearchLinks(run: V1Run, settings: AppSettings, signal: AbortSignal): Promise<void> {
+  throwIfRunAborted(signal);
   assertResearchSettingsCurrent(settings);
   const pending=run.raw_records.filter(record=>record.provider==='serper'&&record.kind==='search'
     && record.http_status!==undefined&&record.http_status>=200&&record.http_status<300
@@ -551,7 +601,7 @@ async function resolveSerperSearchLinks(run: V1Run, settings: AppSettings): Prom
   // Search all query responses first, then resolve with two bounded workers.
   // Google links age together instead of paying a fresh ~30s wait per query.
   const worker=async()=>{
-    while(cursor<pending.length){
+    while(!signal.aborted&&cursor<pending.length){
       const source=pending[cursor++], query=String(source.request.q||'');
       const request={operation:'resolve',source_raw_record_id:source.id,q:query};
       const raw:V1RawRecord={id:id('raw'),run_id:run.id,kind:'search',provider:'serper-resolve',request,
@@ -562,9 +612,9 @@ async function resolveSerperSearchLinks(run: V1Run, settings: AppSettings): Prom
         const remaining=deadline-Date.now();
         if(remaining<=0)throw Object.assign(new Error('Serper link resolution budget exhausted'),{status:408});
         const response=await boundedFetch('https://google.serper.dev/resolve',{method:'POST',redirect:'error',
-          headers:{'Content-Type':'application/json','X-API-KEY':settings.serper_api_key},body:JSON.stringify(source.response)},Math.min(40_000,remaining),8*1024*1024);
+          headers:{'Content-Type':'application/json','X-API-KEY':settings.serper_api_key},body:JSON.stringify(source.response),signal},Math.min(40_000,remaining),8*1024*1024);
         raw.http_status=response.status;
-        const captured=await readProviderResponse(response,8*1024*1024,Math.max(1,Math.min(20_000,deadline-Date.now())));
+        const captured=await readProviderResponse(response,8*1024*1024,Math.max(1,Math.min(20_000,deadline-Date.now())),false,signal);
         raw.response=captured.body;
         if(captured.failure)throw Object.assign(new Error(captured.failure.message),captured.failure);
         if(!response.ok)throw Object.assign(new Error(`Serper link resolution returned HTTP ${response.status}`),{status:response.status});
@@ -593,6 +643,7 @@ async function resolveSerperSearchLinks(run: V1Run, settings: AppSettings): Prom
     }
   };
   await Promise.all(Array.from({length:Math.min(2,pending.length)},worker));
+  throwIfRunAborted(signal);
   // A partial malformed-sibling warning must not strand usable siblings, and
   // no skipped/failed source may leave an opaque link labelled successful.
   for(const result of run.results)if(isSerperGoogleRedirect(result.url)){
@@ -673,7 +724,8 @@ async function searchLinkup(run: V1Run, query: string): Promise<V1Result[]> {
   }
 }
 
-async function enrichHunter(run: V1Run, domain: string, settings: AppSettings): Promise<V1Result[]> {
+async function enrichHunter(run: V1Run, domain: string, settings: AppSettings, signal: AbortSignal): Promise<V1Result[]> {
+  throwIfRunAborted(signal);
   assertResearchSettingsCurrent(settings); const provider = 'hunter';
   if (!settings.hunter_enabled || !settings.hunter_api_key || !domain) return [];
   if (!providerAvailable(run, provider, domain)) return [];
@@ -682,8 +734,8 @@ async function enrichHunter(run: V1Run, domain: string, settings: AppSettings): 
   try {
     const endpoint = new URL('https://api.hunter.io/v2/domain-search');
     endpoint.searchParams.set('domain', domain); endpoint.searchParams.set('api_key', settings.hunter_api_key);
-    const response = await boundedFetch(endpoint.toString(), { method: 'GET' });
-    const { body, failure: bodyFailure } = await readProviderResponse(response);
+    const response = await boundedFetch(endpoint.toString(), { method: 'GET', signal });
+    const { body, failure: bodyFailure } = await readProviderResponse(response, 8 * 1024 * 1024, 20_000, false, signal);
     const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'search', provider, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
     run.raw_records.push(raw);
     raw.http_status = response.status;
@@ -780,7 +832,7 @@ async function scrapeApifyFallback(run: V1Run, result: V1Result): Promise<boolea
 const DEFAULT_DIRECT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const OFFICIAL_DIRECT_PAGE_MAX_BYTES = 4 * 1024 * 1024;
 
-async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12_000, officialDomain?: string, attempt = 1): Promise<void> {
+async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12_000, officialDomain?: string, attempt = 1, signal?: AbortSignal): Promise<void> {
   const provider = 'direct-http'; const request = {
     url: result.url,
     max_bytes: officialDomain ? OFFICIAL_DIRECT_PAGE_MAX_BYTES : DEFAULT_DIRECT_PAGE_MAX_BYTES,
@@ -793,6 +845,7 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
   try {
     const { response, text, transport, provenance } = await safeFetchOutboundText(result.url, {
       timeoutMs,
+      signal,
       maxBytes: request.max_bytes,
       maxBytesDomain: officialDomain,
       allowGzip: Boolean(officialDomain),
@@ -808,12 +861,16 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
     run.raw_records.push(raw); responseRecorded = true;
     result.raw_record_id = [result.raw_record_id, raw.id].filter(Boolean).join(',');
     if (!response.ok) throw new Error(`Direct retrieval returned HTTP ${response.status}`);
+    const originalUrl = result.url;
+    result.url = provenance.finalUrl;
     result.html = text;
     result.text = visibleHtmlText(text);
     result.links = [...text.matchAll(/href=["']([^"'#]+)["']/gi)].map(match => {
-      try { return new URL(match[1], result.url).toString(); } catch { return ''; }
+      try { return new URL(match[1], provenance.finalUrl).toString(); } catch { return ''; }
     }).filter(Boolean).slice(0, 500);
-    result.metadata = { ...result.metadata, scrape_status: 'success', direct_http_status: response.status, content_type: response.headers.get('content-type') || '' };
+    result.metadata = { ...result.metadata,
+      ...(originalUrl !== provenance.finalUrl ? { original_url: originalUrl } : {}),
+      scrape_status: 'success', direct_http_status: response.status, content_type: response.headers.get('content-type') || '' };
     result.status = 'success'; result.error = undefined; result.scrape_latency_ms = raw.latency_ms;
     run.timeline.push({ at: now(), stage: 'scrape', status: 'success', provider, query: result.query, latency_ms: raw.latency_ms, message: `Captured bounded HTML fallback for ${result.url}` });
   } catch (error) {
@@ -832,7 +889,8 @@ async function scrapeDirectFallback(run: V1Run, result: V1Result, timeoutMs = 12
   }
 }
 
-async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
+async function crawlOfficialWebsite(run: V1Run, domain: string, signal: AbortSignal): Promise<void> {
+  throwIfRunAborted(signal);
   if (!domain) return;
   const pagePriority = (url: string) => /(?:management|leadership|team|board|director|executive)/i.test(url) ? 4 : /contact/i.test(url) ? 3 : /about|company/i.test(url) ? 2 : 1;
   // Search already discovered real CMS routes (for example contact-us.php and
@@ -849,6 +907,7 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
   let transientRetries = 0;
   const existingPages = run.results.filter(result => sameDomainOrSubdomain(result.url, domain) && result.status === 'success' && Boolean(result.html || result.text || result.markdown));
   await crawlOfficialPages(domain, run.limits.max_scrapes, existingPages, [...discoveredSearchPages, ...fallbackUrls], async (url, rank) => {
+    throwIfRunAborted(signal);
     const result: V1Result = {
       id: id('result'), run_id: run.id, raw_record_id: '',
       query: `official website crawl: ${run.company_name} ${run.country}`,
@@ -862,7 +921,8 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
     // conflicting scrape payloads while preserving the complete HTTP response
     // (or structured failure) for every attempted page.
     run.results.push(result);
-    await scrapeDirectFallback(run, result, 10_000, domain);
+    await scrapeDirectFallback(run, result, 10_000, domain, 1, signal);
+    throwIfRunAborted(signal);
     const lastCapture = run.raw_records.at(-1);
     // At most two extra network attempts for the entire official crawl. Never
     // retry caller aborts, policy refusals, body limits, HTTP failures or every
@@ -872,13 +932,14 @@ async function crawlOfficialWebsite(run: V1Run, domain: string): Promise<void> {
       transientRetries++;
       run.timeline.push({ at: now(), stage: 'scrape', status: 'pending', provider: 'direct-http',
         message: `Retrying transient official-page capture (${transientRetries}/2 retry budget)` });
-      await scrapeDirectFallback(run, result, 10_000, domain, 2);
+      await scrapeDirectFallback(run, result, 10_000, domain, 2, signal);
     }
     return result;
   });
 }
 
-async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'bulk', settings: AppSettings): Promise<void> {
+async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'bulk', settings: AppSettings, signal: AbortSignal): Promise<void> {
+  throwIfRunAborted(signal);
   assertResearchSettingsCurrent(settings);
   const domain = run.identity_resolution?.official_domain || '';
   const pagePriority = (url: string) => /(?:management|leadership|team|board|director|executive)/i.test(url) ? 3 : /contact/i.test(url) ? 2 : /about|company/i.test(url) ? 1 : 0;
@@ -911,6 +972,7 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
   // giving the model up to ten complete, source-addressable chunks.
   const batches = Array.from({ length: Math.ceil(chunks.length / 5) }, (_, index) => chunks.slice(index * 5, index * 5 + 5));
   for (const [batchIndex, batchChunks] of batches.entries()) {
+    throwIfRunAborted(signal);
     const request = {
       company_name: run.company_name, country: run.country, official_domain: domain, batch: batchIndex + 1, total_batches: batches.length,
       instruction: 'Extract only explicit facts about the exact target company. Official chunks may support address, email, phone, and leaders. LinkedIn chunks may support leader name/title only, never email, phone, or address. Return JSON object {claims:[{field:"address|email|phone|leader",value:string,role?:string,source_chunk_id:string,quote:string}]}. quote must be a short exact substring from that chunk. Do not infer, repair, or add facts.',
@@ -918,12 +980,13 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
     };
     let batchSucceeded = false;
     for (const provider of providers) {
+      throwIfRunAborted(signal);
       assertResearchSettingsCurrent(settings);
       if (!providerAvailable(run, provider.name, `evidence batch ${batchIndex + 1}`)) continue;
       const started = Date.now(); const requestedAt = now();
       try {
-        const response = await safeFetchProviderRequest(provider.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` }, body: JSON.stringify({ model: provider.model, temperature: 0, max_tokens: 2200, messages: [{ role: 'system', content: 'You are a strict evidence extractor. Output JSON only.' }, { role: 'user', content: JSON.stringify(request) }], ...(provider.name.startsWith('nvidia') ? { chat_template_kwargs: { thinking: false } } : {}) }), timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024 });
-        const { body, failure: bodyFailure } = await readProviderResponse(response);
+        const response = await safeFetchProviderRequest(provider.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` }, body: JSON.stringify({ model: provider.model, temperature: 0, max_tokens: 2200, messages: [{ role: 'system', content: 'You are a strict evidence extractor. Output JSON only.' }, { role: 'user', content: JSON.stringify(request) }], ...(provider.name.startsWith('nvidia') ? { chat_template_kwargs: { thinking: false } } : {}) }), timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024, signal });
+        const { body, failure: bodyFailure } = await readProviderResponse(response, 8 * 1024 * 1024, 20_000, false, signal);
         const raw: V1RawRecord = { id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, ...(response.ok ? { response: body } : { response: body, failure: safeError(new Error(`HTTP ${response.status}`), response.status) }), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(body) };
         run.raw_records.push(raw);
         raw.http_status = response.status;
@@ -931,19 +994,32 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
         if (bodyFailure) { if (response.ok) raw.failure = bodyFailure; throw Object.assign(new Error(bodyFailure.message), bodyFailure); }
         if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
         validateProviderEnvelope(body, 'ai');
-        const content = cleanText((body as any)?.choices?.[0]?.message?.content);
-        const match = content.match(/\{[\s\S]*\}/);
-        const claims = match ? JSON.parse(match[0])?.claims : undefined;
+        const choice = (body as any).choices[0];
+        if (choice.message.role !== undefined && choice.message.role !== 'assistant') throw providerSchemaError('AI extraction message must have the assistant role');
+        if (choice.finish_reason !== undefined && choice.finish_reason !== 'stop') throw providerSchemaError('AI extraction response was truncated or incomplete');
+        const content = cleanText(choice.message.content);
+        let claims: unknown;
+        try { claims = JSON.parse(content)?.claims; }
+        catch { throw providerSchemaError('AI extraction response is not one complete JSON object'); }
         if (!Array.isArray(claims)) throw providerSchemaError('AI extraction response lacks a claims array');
-        for (const claim of Array.isArray(claims) ? claims : []) {
-          const chunk = batchChunks.find(item => item.id === claim?.source_chunk_id);
-          const field = cleanText(claim?.field) as 'address' | 'email' | 'phone' | 'leader';
-          const value = cleanText(claim?.value); const quote = cleanText(claim?.quote);
+        for (const claim of claims) {
+          if (!claim || typeof claim !== 'object' || Array.isArray(claim)) {
+            run.evidence_workspace.rejected_claims.push({ claim, reason: 'claim is not an object' });
+            continue;
+          }
+          const chunk = batchChunks.find(item => item.id === claim.source_chunk_id);
+          const field = cleanText(claim.field) as 'address' | 'email' | 'phone' | 'leader';
+          const value = cleanText(claim.value); const quote = cleanText(claim.quote); const role = cleanText(claim.role);
+          const unsupportedRole = claim.role !== undefined && (!role || role.length > 120 || !quote.toLowerCase().includes(role.toLowerCase()));
           if (!chunk || !['address', 'email', 'phone', 'leader'].includes(field) || !value || !quote || !chunk.text.includes(quote) || !quote.toLowerCase().includes(value.toLowerCase()) || (chunk.source_type === 'linkedin' && field !== 'leader')) {
             run.evidence_workspace.rejected_claims.push({ claim, reason: 'claim lacks an exact supporting quote in its cited evidence chunk' });
             continue;
           }
-          const accepted = { field, value, ...(claim?.role ? { role: cleanText(claim.role) } : {}), source_result_id: chunk.result_id, source_url: chunk.url, source_type: chunk.source_type, quote };
+          if (unsupportedRole) {
+            run.evidence_workspace.rejected_claims.push({ claim, reason: 'claim role lacks an exact supporting quote in its cited evidence chunk' });
+            continue;
+          }
+          const accepted = { field, value, ...(role ? { role } : {}), source_result_id: chunk.result_id, source_url: chunk.url, source_type: chunk.source_type, quote };
           if (!run.evidence_workspace.accepted_claims.some(existing => existing.field === accepted.field && existing.value.toLowerCase() === accepted.value.toLowerCase())) run.evidence_workspace.accepted_claims.push(accepted);
         }
         run.timeline.push({ at: now(), stage: 'resolution', status: 'success', provider: provider.name, latency_ms: raw.latency_ms, message: `Evidence workspace batch ${batchIndex + 1}/${batches.length} processed` });
@@ -951,12 +1027,14 @@ async function extractStructuredEvidence(run: V1Run, profile: 'interactive' | 'b
         break;
       } catch (error) {
         const failure = safeError(error);
+        if (failure.status) rememberHardProviderFailure(provider.name, failure.status, settings);
         attachOperationFailure(run, provider.name, request, failure);
-        if (/aborted|timeout|fetch failed|socket|network/i.test(failure.message) && researchSettingsStillCurrent(settings)) {
+        if (!signal.aborted && /aborted|timeout|fetch failed|socket|network/i.test(failure.message) && researchSettingsStillCurrent(settings)) {
           providerCooldowns.set(providerCircuitKey(provider.name), { until: Date.now() + 120_000, reason: failure.message });
         }
-        if (!run.raw_records.some(record => record.provider === provider.name && (record.request as any).batch === batchIndex + 1)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, failure, requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
+        if (!run.raw_records.some(record => record.provider === provider.name && (record.request as any).batch === batchIndex + 1)) run.raw_records.push({ id: id('raw'), run_id: run.id, kind: 'ai', provider: provider.name, request, failure, ...(failure.status ? { http_status: failure.status } : {}), requested_at: requestedAt, completed_at: now(), latency_ms: Date.now() - started, sha256: sha(failure) });
         run.timeline.push({ at: now(), stage: 'resolution', status: 'failed', provider: provider.name, latency_ms: Date.now() - started, message: `Evidence workspace batch ${batchIndex + 1}/${batches.length} failed; trying fallback`, error: failure.message });
+        throwIfRunAborted(signal);
       }
     }
     if (!batchSucceeded) run.timeline.push({ at: now(), stage: 'resolution', status: 'failed', message: `Evidence workspace batch ${batchIndex + 1}/${batches.length} could not be processed; captured chunks remain available` });
@@ -972,87 +1050,95 @@ export function classifyRunStatus(resultsCount: number, hasRecordedFailures: boo
   return 'FAILED';
 }
 
-async function execute(companyName: string, country: string, profile: 'interactive' | 'bulk'): Promise<V1Run> {
+async function execute(companyName: string, country: string, profile: 'interactive' | 'bulk', options: V1RunOptions = {}): Promise<V1Run> {
   const bulk = profile === 'bulk';
+  throwIfCancelled(options.signal);
+  const deadline = createDeadlineSignal(options.signal, options.timeoutMs ?? (bulk ? 180_000 : RUN_TIMEOUT_MS), 'RUN_DEADLINE_EXCEEDED');
   const run: V1Run = { id: id('run'), company_name: companyName.trim(), country: country.trim(), status: 'RUNNING', started_at: now(), research_context: undefined, queries: [], results: [], raw_records: [], timeline: [], limits: bulk
-    ? { max_queries: 4, max_results_per_query: 8, max_scrapes: 8, timeout_ms: 180_000 }
-    : { max_queries: MAX_QUERIES, max_results_per_query: MAX_RESULTS, max_scrapes: MAX_SCRAPES, timeout_ms: RUN_TIMEOUT_MS } };
+    ? { max_queries: 4, max_results_per_query: 8, max_scrapes: 8, timeout_ms: options.timeoutMs ?? 180_000 }
+    : { max_queries: MAX_QUERIES, max_results_per_query: MAX_RESULTS, max_scrapes: MAX_SCRAPES, timeout_ms: options.timeoutMs ?? RUN_TIMEOUT_MS } };
   run.timeline.push({ at: now(), stage: 'run', status: 'pending', message: `Started bounded V1 enrichment for ${run.company_name} in ${run.country}` });
   try {
     const settings = Object.freeze({ ...getAppSettings() });
     run.research_context = createV1ResearchContext(profile, settings);
-    run.queries = await generateQueries(run, profile, settings);
+    run.queries = await generateQueries(run, profile, settings, deadline.signal);
     // V1's supported retrieval path is intentionally narrow: Serper discovers
     // candidates, Hunter enriches the resolved company domain, and bounded
     // deterministic HTTP capture reads the official site. Other experimental
     // providers remain in the repository but cannot enter this critical path.
-    for (const query of run.queries) run.results.push(...await searchSerper(run, query, settings));
-    await resolveSerperSearchLinks(run, settings);
+    for (const query of run.queries) run.results.push(...await searchSerper(run, query, settings, deadline.signal));
+    await resolveSerperSearchLinks(run, settings, deadline.signal);
     assertResearchSettingsCurrent(settings);
     run.identity_resolution = resolveOfficialDomain(run.company_name, run.country, run.results);
     run.timeline.push({ at: now(), stage: 'resolution', status: run.identity_resolution.official_domain ? 'success' : 'skipped', message: run.identity_resolution.official_domain
       ? `Resolved official domain ${run.identity_resolution.official_domain} with ${run.identity_resolution.confidence} confidence`
       : 'No domain met the minimum company-ownership evidence threshold; directories remain evidence only' });
-    run.results.push(...await enrichHunter(run, run.identity_resolution.official_domain, settings));
+    run.results.push(...await enrichHunter(run, run.identity_resolution.official_domain, settings, deadline.signal));
     assertResearchSettingsCurrent(settings);
     const unique = [...new Map(run.results.filter(r => r.url&&!isSerperGoogleRedirect(r.url)).map(r => [r.url, r])).values()];
-    if (!bulk) await Promise.all(unique.filter(result => result.provider !== 'direct-http' && !result.text && !result.markdown).slice(0, MAX_SCRAPES).map(result => scrapeDirectFallback(run, result)));
+    if (!bulk) await Promise.all(unique.filter(result => result.provider !== 'direct-http' && !result.text && !result.markdown).slice(0, MAX_SCRAPES).map(result => scrapeDirectFallback(run, result, 12_000, undefined, 1, deadline.signal)));
+    throwIfRunAborted(deadline.signal);
     // Search providers may return the same URL for several queries. Fetch it
     // once, then project that captured page/failure onto every normalized row
-    // without collapsing the per-query result records.
-    const fetchedByUrl = new Map(unique.map(result => [result.url, result]));
+    // without collapsing the per-query result records. Redirected rows retain
+    // their requested URL as metadata and project the final URL consistently.
+    const fetchedByUrl = new Map(unique.map(result => [cleanText(result.metadata.original_url) || result.url, result]));
     for (const result of run.results) {
       const fetched = fetchedByUrl.get(result.url);
       if (!fetched || fetched === result || !fetched.metadata.scrape_status) continue;
       result.raw_record_id = `${result.raw_record_id},${fetched.raw_record_id.split(',').slice(-1)[0]}`;
+      result.url = fetched.url;
       result.text = fetched.text; result.markdown = fetched.markdown; result.html = fetched.html;
       result.links = fetched.links;
-      result.metadata = { ...result.metadata, ...Object.fromEntries(['scrape_status','direct_http_status','content_type']
+      result.metadata = { ...result.metadata, ...Object.fromEntries(['original_url','scrape_status','direct_http_status','content_type']
         .filter(key=>fetched.metadata[key]!==undefined).map(key=>[key,fetched.metadata[key]])) };
       result.scrape_latency_ms = fetched.scrape_latency_ms; result.status = fetched.status; result.error = fetched.error;
     }
-    await crawlOfficialWebsite(run, run.identity_resolution.official_domain);
-    await extractStructuredEvidence(run, profile, settings);
+    await crawlOfficialWebsite(run, run.identity_resolution.official_domain, deadline.signal);
+    await extractStructuredEvidence(run, profile, settings, deadline.signal);
+    throwIfRunAborted(deadline.signal);
     assertResearchSettingsCurrent(settings);
     const successfulSearchRequests = run.raw_records.filter(record => record.provider === 'serper' && record.kind === 'search' && record.response !== undefined && !record.failure).length;
     const usableCount=run.results.filter(result=>result.status==='success').length;
     run.status = run.results.length>0&&usableCount===0 ? 'FAILED'
       : classifyRunStatus(usableCount, run.timeline.some(e => e.status === 'failed'), successfulSearchRequests);
   } catch (error) {
+    const failure = deadline.signal.aborted ? safeError(deadline.signal.reason) : safeError(error);
     run.status = run.results.length ? 'PARTIAL' : 'FAILED';
-    run.timeline.push({ at: now(), stage: 'run', status: 'failed', message: error instanceof Error && error.message === 'RESEARCH_CONFIGURATION_CHANGED'
+    run.timeline.push({ at: now(), stage: 'run', status: 'failed', message: !deadline.signal.aborted && error instanceof Error && error.message === 'RESEARCH_CONFIGURATION_CHANGED'
       ? 'Provider settings changed; captured evidence was saved. Retry research using the current configuration.'
-      : 'Run stopped before all stages completed', error: safeError(error).message });
+      : 'Run stopped before all stages completed', error: failure.message });
   } finally {
     run.completed_at = now();
     run.timeline.push({ at: now(), stage: 'storage', status: 'success', message: `Persisting ${run.raw_records.length} raw records and ${run.results.length} normalized results` });
+    deadline.cleanup();
     persistV1Run(run);
   }
   return run;
 }
 
 export async function runV1Enrichment(companyName: string, country: string, options: V1RunOptions = {}): Promise<V1Run> {
-  const releaseIdentityWork = acquireCompanyIdentityWork();
-  try {
-    const company = cleanText(companyName); const nation = cleanText(country);
-    if (!company || !nation) throw new Error('Exact company name and country are required');
-    const profile = options.profile || 'interactive';
-    const key = `${profile}::${company.toLowerCase()}::${nation.toLowerCase()}`;
-    const existing = activeRuns.get(key); if (existing) return existing;
-    // Every outbound operation has its own hard timeout. Returning the actual
-    // execution promise avoids the former race where callers saw a timeout while
-    // the same run continued mutating and persisted later in the background.
-    const task = execute(company, nation, profile);
-    activeRuns.set(key, task);
-    try { return await task; } finally { activeRuns.delete(key); }
-  } finally { releaseIdentityWork(); }
+  return withBoundedConcurrency(6, async () => {
+    const releaseIdentityWork = acquireCompanyIdentityWork();
+    try {
+      const company = cleanText(companyName); const nation = cleanText(country);
+      if (!company || !nation) throw new Error('Exact company name and country are required');
+      const profile = options.profile || 'interactive';
+      const key = `${profile}::${company.toLowerCase()}::${nation.toLowerCase()}`;
+      cleanupActiveRuns();
+      const existing = activeRuns.get(key); if (existing) return existing.promise;
+      const task = execute(company, nation, profile, options);
+      activeRuns.set(key, { promise: task, startedAt: Date.now() });
+      try { return await task; } finally { activeRuns.delete(key); }
+    } finally { releaseIdentityWork(); }
+  });
 }
 
-export function getV1Run(runId: string): V1Run | null {
+export async function getV1Run(runId: string): Promise<V1Run | null> {
   if (!/^[a-z0-9-]+$/i.test(runId)) return null;
   const file = runPath(runId); if (!fs.existsSync(file)) return null;
   const persisted = JSON.parse(fs.readFileSync(file, 'utf8'));
-  return hydrateV1RunFromStorage(persisted, dataDir) as V1Run;
+  return hydrateV1RunFromStorage(persisted, dataDir) as Promise<V1Run>;
 }
 
 /** Activity-only projection: never hydrate raw/provider/page evidence blobs. */
@@ -1084,14 +1170,15 @@ export function listV1ActivityEvents(limit = 500): Array<V1TimelineEvent & { run
   return events.sort(newest).slice(0, maximum);
 }
 
-export function listV1Runs(): V1Run[] {
+export async function listV1Runs(): Promise<V1Run[]> {
   if (!fs.existsSync(dataDir)) return [];
-  return fs.readdirSync(dataDir).filter(name => /^run-[a-z0-9-]+\.json$/i.test(name)).map(name => {
+  const runs = await Promise.all(fs.readdirSync(dataDir).filter(name => /^run-[a-z0-9-]+\.json$/i.test(name)).map(async name => {
     try {
       const persisted = JSON.parse(fs.readFileSync(path.join(dataDir, name), 'utf8'));
-      return hydrateV1RunFromStorage(persisted, dataDir) as V1Run;
+      return await hydrateV1RunFromStorage(persisted, dataDir) as V1Run;
     } catch { return null; }
-  }).filter((run): run is V1Run => Boolean(run)).sort((a, b) => b.started_at.localeCompare(a.started_at));
+  }));
+  return runs.filter((run): run is V1Run => Boolean(run)).sort((a, b) => b.started_at.localeCompare(a.started_at));
 }
 
 export function listV1RunSummaries(limit = 200): V1RunSummary[] {

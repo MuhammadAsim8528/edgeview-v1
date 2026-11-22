@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { prototypePreflight, prototypeNpmArgs, prototypePackageVersion } from './build-msix-prototype.mjs';
+import { prototypePreflight, prototypeNpmArgs, prototypePackageVersion, prototypeArchitecture } from './build-msix-prototype.mjs';
 import { writeBuildMetadata } from './build-metadata.mjs';
 
 assert.equal(prototypePackageVersion(), '0.0.0.2');
@@ -13,6 +13,8 @@ assert.equal(prototypePackageVersion('3'), '0.0.0.3');
 for (const revision of ['1', '03', '65536', '3.0', '../3']) {
   assert.throws(() => prototypePackageVersion(revision), /MSIX_PROTOTYPE_INVALID_REVISION/);
 }
+assert.equal(prototypeArchitecture('x64'), 'x64');
+for (const arch of ['arm64', 'ia32', 'arm', 'x64-emulated']) assert.throws(() => prototypeArchitecture(arch), /MSIX_PROTOTYPE_ARCHITECTURE_MISMATCH/);
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-msix-preflight-'));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|USERPROFILE|TEMP|TMP|APPDATA|LOCALAPPDATA)$/i.test(key)));

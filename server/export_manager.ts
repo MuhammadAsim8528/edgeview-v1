@@ -16,9 +16,9 @@ import {
   BorderStyle,
   PageOrientation,
 } from 'docx';
-import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
+import { cleanMarkdown, formatReportSource, type ReportCompanyContact } from './docx_report';
 import { generateDocxReportStream, generateGenericDocxReportStream, generateInternationalImporterDirectoryDocx } from './docx_stream';
-import { generatePdfReport, generateInternationalImporterDirectoryPdf } from './pdf_report';
+import { createPdfFontRegistry, generatePdfReport, generateInternationalImporterDirectoryPdf } from './pdf_report';
 import { TradeRelationshipResolver } from './trade_relationship_resolver';
 import { captureMonitoringEvent, classifyMonitoringError } from './monitoring';
 import { buildContactReport, getReportColumnLabels, type ContactReport } from './contact_report_model';
@@ -52,6 +52,7 @@ export interface ColumnDef {
 }
 
 export interface NormalizedExportPayload {
+  contact_file_id?: string;
   dataset: string; // 'contacts' | 'files' | 'country' | 'outreach' | 'reports' | 'stats' | 'summary'
   title: string;
   records: any[];
@@ -280,11 +281,8 @@ export function transformFullDatasetRecords(records: any[]): Record<string, stri
 function sanitizeCell(val: any): string {
   if (val === null || val === undefined) return '';
   if (typeof val === 'object') {
-    try {
-      return JSON.stringify(val);
-    } catch {
-      return String(val);
-    }
+    try { return JSON.stringify(val); }
+    catch { return String(val); }
   }
   return String(val);
 }
@@ -499,16 +497,18 @@ export async function generateGenericDocxReport(
 async function generateSavedReportPdf(title: string, columns: ColumnDef[], records: Record<string, unknown>[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: 36 });
+    const fontRegistry = createPdfFontRegistry(doc);
     const buffers: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => buffers.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.on('error', reject);
     try {
-      doc.font('Helvetica-Bold').fontSize(14).text(title);
+      doc.font(fontRegistry.resolve('Helvetica-Bold', title)).fontSize(14).text(title);
       for (const record of records) {
         for (const column of columns) {
-          doc.moveDown(0.5).font('Helvetica-Bold').fontSize(10).text(column.header);
-          doc.font('Helvetica').fontSize(10).text(sanitizeCell(record[column.key] ?? ''), { width: 540 });
+          const value = sanitizeCell(record[column.key] ?? '');
+          doc.moveDown(0.5).font(fontRegistry.resolve('Helvetica-Bold', column.header)).fontSize(10).text(column.header);
+          doc.font(fontRegistry.resolve('Helvetica', value)).fontSize(10).text(value, { width: 540 });
         }
       }
       doc.end();
@@ -533,6 +533,7 @@ export async function generateGenericPdfReport(
         margin: 36,
         autoFirstPage: true,
       });
+      const fontRegistry = createPdfFontRegistry(doc);
 
       const buffers: Buffer[] = [];
       doc.on('data', (chunk) => buffers.push(chunk));
@@ -543,25 +544,18 @@ export async function generateGenericPdfReport(
       const PAGE_WIDTH = doc.page.width; // 792
       const PAGE_HEIGHT = doc.page.height; // 612
       const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2; // 720
+      const BOTTOM = PAGE_HEIGHT - MARGIN - 20;
+      const titleText = `EdgeView — ${title}`;
 
-      // Title Banner
       const titleBannerHeight = 32;
       const startY = doc.y;
-
       doc.rect(MARGIN, startY, CONTENT_WIDTH, titleBannerHeight).fillAndStroke('#0284C7', '#000000');
-
-      doc
-        .fillColor('#FFFFFF')
-        .font('Helvetica-Bold')
+      doc.fillColor('#FFFFFF')
+        .font(fontRegistry.resolve('Helvetica-Bold', titleText))
         .fontSize(12)
-        .text(`EdgeView — ${title}`, MARGIN, startY + 9, {
-          width: CONTENT_WIDTH,
-          align: 'center',
-        });
-
+        .text(titleText, MARGIN, startY + 9, { width: CONTENT_WIDTH, align: 'center' });
       doc.y = startY + titleBannerHeight + 12;
 
-      // Proportional widths for 8 columns on 720pt page width
       const colWidthsMap: Record<string, number> = {
         'Date': 60,
         'Importer': 110,
@@ -572,72 +566,125 @@ export async function generateGenericPdfReport(
         'NTN': 55,
         'HS Code': 55,
       };
-
       const displayCols = columns;
-      const getColWidth = (colHeader: string) => {
-        if (colWidthsMap[colHeader]) return colWidthsMap[colHeader];
-        return CONTENT_WIDTH / Math.max(displayCols.length, 1);
+      const getColWidth = (colHeader: string) =>
+        colWidthsMap[colHeader] ?? CONTENT_WIDTH / Math.max(displayCols.length, 1);
+
+      const lineHeight = (font: string, size: number, text = 'Ag'): number => {
+        doc.font(fontRegistry.resolve(font, text)).fontSize(size);
+        return doc.heightOfString('Ag', { width: 200 });
+      };
+
+      // Wrap by measured glyph width, including overlong URLs/product codes. Rows
+      // are paginated by these same lines, so measurement and drawing cannot drift.
+      const wrapText = (text: string, width: number, font: string, size: number): string[] => {
+        const lines: string[] = [];
+        const measure = (value: string) => doc.font(fontRegistry.resolve(font, value)).fontSize(size).widthOfString(value);
+        for (const sourceLine of String(text).replace(/\r\n?/g, '\n').split('\n')) {
+          const words = sourceLine.split(/\s+/).filter(Boolean);
+          if (words.length === 0) {
+            lines.push('');
+            continue;
+          }
+          let current = '';
+          for (const word of words) {
+            const candidate = current ? `${current} ${word}` : word;
+            if (measure(candidate) <= width) {
+              current = candidate;
+              continue;
+            }
+            if (current) lines.push(current);
+            let remainder = word;
+            while (measure(remainder) > width && Array.from(remainder).length > 1) {
+              const chars = Array.from(remainder);
+              let low = 1;
+              let high = chars.length;
+              while (low < high) {
+                const middle = Math.ceil((low + high) / 2);
+                if (measure(chars.slice(0, middle).join('')) <= width) low = middle;
+                else high = middle - 1;
+              }
+              const cut = low;
+              lines.push(chars.slice(0, cut).join(''));
+              remainder = chars.slice(cut).join('');
+            }
+            current = remainder;
+          }
+          if (current) lines.push(current);
+        }
+        return lines.length > 0 ? lines : [''];
       };
 
       const drawTableHeader = (yPos: number) => {
-        doc.rect(MARGIN, yPos, CONTENT_WIDTH, 20).fillAndStroke('#E5E7EB', '#000000');
-        doc.fillColor('#111827').font('Helvetica-Bold').fontSize(8);
-
+        const h = lineHeight('Helvetica-Bold', 8);
+        const wrapped = displayCols.map((col) => wrapText(col.header, getColWidth(col.header) - 6, 'Helvetica-Bold', 8));
+        const headerHeight = Math.max(20, Math.max(...wrapped.map((lines) => lines.length), 1) * h + 10);
+        doc.rect(MARGIN, yPos, CONTENT_WIDTH, headerHeight).fillAndStroke('#E5E7EB', '#000000');
+        doc.fillColor('#111827').fontSize(8);
         let curX = MARGIN;
-        displayCols.forEach((col) => {
+        displayCols.forEach((col, index) => {
           const w = getColWidth(col.header);
-          doc.text(col.header, curX + 3, yPos + 5, {
-            width: w - 6,
-            align: 'left',
+          wrapped[index].forEach((line, lineIndex) => {
+            if (!line) return;
+            doc.font(fontRegistry.resolve('Helvetica-Bold', line))
+              .text(line, curX + 3, yPos + 5 + lineIndex * h, { width: w - 6, align: 'left', lineBreak: false });
           });
           curX += w;
         });
-
-        return yPos + 20;
+        return yPos + headerHeight;
       };
 
       let currentY = drawTableHeader(doc.y);
+      const bodyLineHeight = lineHeight('Helvetica', 7.5);
 
-      records.forEach((rec) => {
-        // Estimate row height based on cell text lengths
-        let maxLines = 1;
-        displayCols.forEach((col) => {
-          const val = sanitizeCell(rec[col.key] ?? rec[col.header] ?? '');
+      for (const rec of records) {
+        const cells = displayCols.map((col, colIndex) => {
+          const value = sanitizeCell(rec[col.key] ?? rec[col.header] ?? '') || '—';
           const w = getColWidth(col.header);
-          const lines = Math.ceil(val.length / Math.max(Math.floor((w - 6) / 5), 4));
-          if (lines > maxLines) maxLines = lines;
+          let x = MARGIN;
+          for (const prior of displayCols.slice(0, colIndex)) x += getColWidth(prior.header);
+          return { lines: wrapText(value, w - 6, 'Helvetica', 7.5), x, w };
         });
+        const cursors = cells.map(() => 0);
 
-        const rowHeight = Math.min(Math.max(maxLines * 11 + 6, 18), 90);
+        while (cursors.some((cursor, index) => cursor < cells[index].lines.length)) {
+          const available = BOTTOM - currentY;
+          const capacity = Math.floor((available - 8) / bodyLineHeight);
+          if (available < 18 || capacity < 1) {
+            doc.addPage();
+            currentY = drawTableHeader(MARGIN);
+            continue;
+          }
 
-        if (currentY + rowHeight > PAGE_HEIGHT - MARGIN - 20) {
-          doc.addPage();
-          currentY = drawTableHeader(MARGIN);
+          const counts = cells.map((cell, index) => Math.min(capacity, cell.lines.length - cursors[index]));
+          const segmentLines = Math.max(...counts, 1);
+          const rowHeight = Math.max(18, segmentLines * bodyLineHeight + 8);
+          const rowStartY = currentY;
+          doc.rect(MARGIN, rowStartY, CONTENT_WIDTH, rowHeight).stroke('#E5E7EB');
+
+          cells.forEach((cell, index) => {
+            doc.fillColor('#374151').fontSize(7.5);
+            for (let offset = 0; offset < counts[index]; offset++) {
+              const line = cell.lines[cursors[index] + offset];
+              if (line) {
+                doc.font(fontRegistry.resolve('Helvetica', line))
+                  .text(line, cell.x + 3, rowStartY + 4 + offset * bodyLineHeight, {
+                    width: cell.w - 6,
+                    align: 'left',
+                    lineBreak: false,
+                  });
+              }
+            }
+            cursors[index] += counts[index];
+          });
+
+          currentY += rowHeight;
+          if (cursors.some((cursor, index) => cursor < cells[index].lines.length)) {
+            doc.addPage();
+            currentY = drawTableHeader(MARGIN);
+          }
         }
-
-        const rowStartY = currentY;
-
-        doc.rect(MARGIN, rowStartY, CONTENT_WIDTH, rowHeight).stroke('#E5E7EB');
-
-        let curX = MARGIN;
-        displayCols.forEach((col) => {
-          const val = sanitizeCell(rec[col.key] ?? rec[col.header] ?? '') || '—';
-          const w = getColWidth(col.header);
-
-          doc
-            .fillColor('#374151')
-            .font('Helvetica')
-            .fontSize(7.5)
-            .text(val, curX + 3, rowStartY + 4, {
-              width: w - 6,
-              height: rowHeight - 6,
-              align: 'left',
-            });
-          curX += w;
-        });
-
-        currentY += rowHeight;
-      });
+      }
 
       doc.end();
     } catch (err) {
@@ -773,7 +820,7 @@ export function flattenContactReportRows(
         .map((s) => `${s.platform}: ${cleanMarkdown(s.url)}`);
       if (socials.length > 0) contactLines.push(`Socials: ${socials.join(' | ')}`);
       if (ci.sources.length > 0) {
-        contactLines.push(`Sources: ${ci.sources.map((s) => cleanMarkdown(s.url)).join('; ')}`);
+        contactLines.push(`Sources: ${ci.sources.map(formatReportSource).join('; ')}`);
       }
 
       rows.push({
@@ -826,7 +873,7 @@ export async function processContactExport(payload: NormalizedExportPayload): Pr
   const contactsList = extractContactsList(rawRecords);
 
   // Build the trade index ONCE for the entire export (O(1) lookups per company).
-  const tradeIndex = await TradeRelationshipResolver.buildTradeIndex();
+  const tradeIndex = await TradeRelationshipResolver.buildTradeIndex(payload.contact_file_id);
   logMem('after buildTradeIndex');
 
   const currentDate = new Date().toISOString().split('T')[0];

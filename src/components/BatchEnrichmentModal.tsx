@@ -3,6 +3,8 @@ import { CompanyContact } from '../types';
 import { normalizeBatchJobSnapshot, observedBatchUsage, type BatchUsage, type ResearchJob, type CompanyResearchState } from '../utils/batchSnapshot';
 import { formatObservedCount } from '../utils/telemetryFormat';
 import { V1_REUSE_MAX_AGE_DAYS } from '../../shared/v1_contact_contract';
+import { isTerminalJobStatus, mergeJobProgress, MAX_POLL_FAILURES, nextPollDelay, POLL_TIMEOUT_MS } from '../utils/jobPolling';
+import { safeFetchJson } from '../utils/safeFetch';
 import { 
   Bot, Sparkles, Building2, CheckSquare, Square, X, RefreshCw, 
   Play, Pause, Sliders, AlertTriangle, Activity, CheckCircle2, 
@@ -15,6 +17,7 @@ interface BatchEnrichmentModalProps {
   contacts: CompanyContact[];
   refreshData?: () => void;
   evidenceOnly?: boolean;
+  initialIds?: string[] | null;
 }
 
 export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
@@ -22,7 +25,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   onClose,
   contacts: suppliedContacts,
   refreshData,
-  evidenceOnly = false,
+  evidenceOnly = false, initialIds,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'importers' | 'exporters'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -50,6 +53,9 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   const pollRequestRef = useRef<AbortController | null>(null);
   const openRef = useRef(isOpen);
   openRef.current = isOpen;
+  // Every job view owns a generation. Responses from a prior job, a closed
+  // modal, or a superseded restore must never populate the current job view.
+  const jobGenerationRef = useRef(0);
 
   // Filter contacts
   const filteredContacts = contacts.filter((c) => {
@@ -90,26 +96,28 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   };
 
   const reattachActiveJob = async (signal: AbortSignal) => {
+    const generation = ++jobGenerationRef.current;
+    stopPolling();
     try {
       const res = await fetch('/api/enrich/job/active', { signal });
-      if (!res.ok) return false;
+      if (!res.ok || generation !== jobGenerationRef.current) return false;
       const data = await res.json();
       const summary = data.success ? normalizeBatchJobSnapshot(data.job) : null;
-      if (!summary || signal.aborted || !openRef.current) return false;
+      if (!summary || signal.aborted || !openRef.current || generation !== jobGenerationRef.current) return false;
       // The active endpoint is intentionally a bounded summary. Hydrate the
       // complete job once before rendering so refresh does not present an empty
       // company table and then replace it with only the latest five results.
       const fullRes = await fetch(`/api/enrich/job/${encodeURIComponent(summary.id)}`, { signal });
-      if (!fullRes.ok) return false;
+      if (!fullRes.ok || generation !== jobGenerationRef.current) return false;
       const fullData = await fullRes.json();
       const job = fullData.success ? normalizeBatchJobSnapshot(fullData.job) : null;
-      if (!job || signal.aborted || !openRef.current) return false;
+      if (!job || job.id !== summary.id || signal.aborted || !openRef.current || generation !== jobGenerationRef.current) return false;
       setJobData(job);
       setReportMode(job.importer_exporter_mode);
-      startPolling(job.id);
+      startPolling(job.id, job);
       return true;
     } catch (err) {
-      if (!signal.aborted) console.error('Failed to restore active research job', err);
+      if (!signal.aborted && generation === jobGenerationRef.current) console.error('Failed to restore active research job', err);
       return false;
     }
   };
@@ -118,18 +126,23 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   useEffect(() => {
     const controller = new AbortController();
     if (isOpen) {
+      jobGenerationRef.current += 1;
+      stopPolling();
+      setActiveJobId(null);
+      setJobData(null);
       setResearchMode('recent');
       setControlError(null);
       setControlAction(null);
       fetchGovernorInfo(controller.signal);
       fetchHistoricalJobs(controller.signal);
-      void reattachActiveJob(controller.signal).then((restored) => {
-        if (!controller.signal.aborted && !restored) setSelectedIds(new Set());
-      });
+      setSelectedIds(new Set(initialIds ?? []));
+      void reattachActiveJob(controller.signal);
     } else {
+      jobGenerationRef.current += 1;
       stopPolling();
     }
     return () => {
+      jobGenerationRef.current += 1;
       controller.abort(); controlRequestRef.current?.abort(); controlRequestRef.current = null; stopPolling();
     };
   }, [isOpen]);
@@ -185,20 +198,14 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   const selectSelectedImporters = () => {
     setFilterType('importers');
     setReportMode('importer');
+    // "Selected" is an explicit checked-only preset. An empty checked set
+    // must stay empty rather than silently becoming an all-importers action.
     const currentImporters = Array.from(selectedIds).filter(id => {
       const c = contacts.find(co => co.id === id);
       const type = (c?.type || '').toLowerCase();
       return Boolean(c) && (type.includes('importer') || type === 'both');
     });
-    if (currentImporters.length === 0) {
-      const importers = contacts.filter(c => {
-        const type = (c.type || '').toLowerCase();
-        return type.includes('importer') || type === 'both';
-      });
-      setSelectedIds(new Set(importers.map(c => c.id)));
-    } else {
-      setSelectedIds(new Set(currentImporters));
-    }
+    setSelectedIds(new Set(currentImporters));
   };
 
   const selectSelectedExporters = () => {
@@ -209,123 +216,140 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       const type = (c?.type || '').toLowerCase();
       return Boolean(c) && (type.includes('exporter') || type === 'both');
     });
-    if (currentExporters.length === 0) {
-      const exporters = contacts.filter(c => {
-        const type = (c.type || '').toLowerCase();
-        return type.includes('exporter') || type === 'both';
-      });
-      setSelectedIds(new Set(exporters.map(c => c.id)));
-    } else {
-      setSelectedIds(new Set(currentExporters));
-    }
+    setSelectedIds(new Set(currentExporters));
   };
 
-  // Start polling
-  const startPolling = (jobId: string) => {
+  const startPolling = (jobId: string, initialSnapshot?: ResearchJob) => {
     stopPolling();
     if (!openRef.current) return;
-    const controller = new AbortController();
-    pollRequestRef.current = controller;
-    let busy = false;
+    const generation = ++jobGenerationRef.current;
+    const session = new AbortController();
+    pollRequestRef.current = session;
     setActiveJobId(jobId);
-    
+    setControlError(null);
+    // A different job must not render the previous job's rows while its first
+    // request is in flight. Same-job resume may retain its own last checkpoint.
+    setJobData(previous => initialSnapshot || (previous?.id === jobId ? previous : null));
+    let busy = false;
+    let failures = 0;
+    let hasFullSnapshot = Boolean(initialSnapshot);
+    const isCurrentRequest = () => openRef.current && !session.signal.aborted
+      && pollRequestRef.current === session && jobGenerationRef.current === generation;
     const poll = async () => {
-      if (busy || controller.signal.aborted) return;
+      if (busy || !isCurrentRequest()) return;
       busy = true;
+      const request = new AbortController();
+      const deadline = setTimeout(() => request.abort(), POLL_TIMEOUT_MS);
+      const signal = AbortSignal.any([session.signal, request.signal]);
       try {
-        const res = await fetch(`/api/enrich/job/${encodeURIComponent(jobId)}/progress`, { signal: controller.signal });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && !controller.signal.aborted) {
-            const progress = data.progress;
-            setJobData(previous => {
-              const priorStates = previous?.company_states || {};
-              const recentStates = Object.fromEntries((Array.isArray(progress.recent_results) ? progress.recent_results : [])
-                .filter((item: any) => item && typeof item.name === 'string')
-                .map((item: any, index: number) => {
-                  const existing = Object.entries(priorStates).find(([, state]) => state.name === item.name);
-                  const id = existing?.[0] || `recent-${index}-${item.name}`;
-                  return [id, { ...(existing?.[1] || {}), id, name: item.name, status: item.status, stage: item.stage,
-                    error: item.error, durationMs: item.durationMs, resourceUsage: observedBatchUsage(item.resourceUsage), metrics: item.metrics }];
-                }));
-              return normalizeBatchJobSnapshot({
-                ...(previous || {} as ResearchJob),
-                ...progress,
-                company_ids: previous?.company_ids || [],
-                // Progress is intentionally bounded. Preserve full hydration
-                // and merge the observed updates onto their existing rows.
-                company_states: { ...priorStates, ...recentStates },
-              }) || previous;
-            });
-            
-            // Check if job finished or hit limit
-            const status = progress.status;
-            if (['COMPLETED', 'FAILED', 'STOPPED', 'RESOURCE_LIMITED'].includes(status)) {
-              setControlError(null);
-              stopPolling();
-              // Trigger a background refetch on the parent to load newly enriched contacts on list
-              if (refreshData) refreshData();
-            }
-          }
+        const { ok, data, error } = await safeFetchJson<any>(`/api/enrich/job/${encodeURIComponent(jobId)}/progress`, { signal });
+        if (!isCurrentRequest()) return;
+        if (!ok || data?.success !== true) throw new Error(error || data?.error || 'Research progress is unavailable.');
+        const progress = normalizeBatchJobSnapshot(data.progress);
+        if (!progress || progress.id !== jobId) throw new Error('Research progress did not match the requested job.');
+        const recent = Array.isArray(data.progress.recent_results) ? data.progress.recent_results : [];
+        // Strip name-only recent results before using the shared merge helper.
+        // Its legacy name fallback is unsafe for same-named companies.
+        const idOnlyRecent = recent.flatMap((item: any) => {
+          const id = typeof item?.id === 'string' && item.id ? item.id
+            : typeof item?.company_id === 'string' && item.company_id ? item.company_id : null;
+          return id ? [{ ...item, id }] : [];
+        });
+
+        // The current bounded progress contract omits IDs from recent_results.
+        // Hydrate authoritative ID-keyed states instead of guessing by name.
+        let hydrated: ResearchJob | null = null;
+        if (!hasFullSnapshot || idOnlyRecent.length !== recent.length) {
+          const full = await safeFetchJson<any>(`/api/enrich/job/${encodeURIComponent(jobId)}`, { signal });
+          if (!isCurrentRequest()) return;
+          const fullJob = full.ok && full.data?.success ? normalizeBatchJobSnapshot(full.data.job) : null;
+          if (!fullJob || fullJob.id !== jobId) throw new Error(full.error || 'Complete research progress is unavailable.');
+          hydrated = fullJob;
+          hasFullSnapshot = true;
         }
-        // Also refresh governor metrics
-        if (!controller.signal.aborted) await fetchGovernorInfo(controller.signal);
-      } catch (err) {
-        if (!controller.signal.aborted) console.error('Polling error', err);
-      } finally { busy = false; }
+        if (!isCurrentRequest()) return;
+        failures = 0;
+        setJobData(previous => {
+          if (generation !== jobGenerationRef.current) return previous;
+          const prior = previous?.id === jobId ? previous : null;
+          const base = hydrated || prior || initialSnapshot || null;
+          const merged = mergeJobProgress(base, { ...data.progress, recent_results: idOnlyRecent });
+          if (merged?.id === jobId) return merged;
+          return prior || (initialSnapshot?.id === jobId ? initialSnapshot : null);
+        });
+        if (isTerminalJobStatus(progress.status)) {
+          setControlError(null);
+          stopPolling();
+          refreshData?.();
+          return;
+        }
+        setControlError(null);
+        await fetchGovernorInfo(session.signal);
+      } catch (error) {
+        if (isCurrentRequest()) {
+          failures++;
+          setControlError(failures >= MAX_POLL_FAILURES
+            ? `Research status could not be refreshed after ${MAX_POLL_FAILURES} attempts. Close this panel or use Retry. ${error instanceof Error ? error.message : ''}`
+            : 'Research status is temporarily unavailable. EdgeView is retrying with a bounded delay.');
+          if (failures >= MAX_POLL_FAILURES) stopPolling();
+        }
+      } finally {
+        clearTimeout(deadline);
+        busy = false;
+        if (isCurrentRequest()) {
+          pollIntervalRef.current = setTimeout(poll, nextPollDelay(failures));
+        }
+      }
     };
     void poll();
-    pollIntervalRef.current = setInterval(poll, 3000);
   };
 
   const stopPolling = () => {
     pollRequestRef.current?.abort();
     pollRequestRef.current = null;
     if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
+      clearTimeout(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
   };
 
-  // Actions
   const handleCreateAndStartJob = async (ids: string[]) => {
+    if (controlAction !== null) return;
+    const controller = new AbortController();
+    controlRequestRef.current = controller;
+    setControlAction('resume');
+    setControlError(null);
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
-      // 1. Create Job in backend
-      const resCreate = await fetch('/api/enrich/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const { ok, data, error } = await safeFetchJson<any>('/api/enrich/jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ company_ids: ids, mode: reportMode, reuseOnly: savedMode, forceFetch: !savedMode && researchMode === 'live' }),
       });
-      const createData = await resCreate.json();
-      if (!resCreate.ok || !createData.success) throw new Error(createData.message || createData.error || 'Failed to create job');
-
-      const jobId = createData.jobId;
-      setActiveJobId(jobId);
-
-      // 2. Start Job execution
-      const resStart = await fetch(`/api/enrich/job/${jobId}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ forceFetch: false }),
-      });
-      if (!resStart.ok) { const failure = await resStart.json(); throw new Error(failure.message || failure.error || 'Failed to start research job'); }
-
-      // 3. Start Polling
-      startPolling(jobId);
-    } catch (err: any) {
-      alert(err.message || 'Error occurred starting job');
+      if (controller.signal.aborted || !openRef.current) return;
+      if (!ok || !data?.success || typeof data.jobId !== 'string') throw new Error(data?.message || data?.error || error || 'Failed to create and start job');
+      startPolling(data.jobId);
+    } catch (error: any) {
+      if (!controller.signal.aborted && openRef.current) setControlError(error?.message || 'Error occurred starting job');
+    } finally {
+      clearTimeout(timeout);
+      if (controlRequestRef.current === controller) {
+        controlRequestRef.current = null;
+        if (openRef.current) setControlAction(null);
+      }
     }
   };
 
   const handlePauseJob = async () => {
     if (!activeJobId || controlAction !== null) return;
+    const jobId = activeJobId;
+    const generation = jobGenerationRef.current;
     const controller = new AbortController();
     controlRequestRef.current = controller;
     setControlAction('pause');
     setControlError(null);
     let acknowledged = false;
     const timeout = setTimeout(() => {
-      if (controller.signal.aborted || controlRequestRef.current !== controller) return;
+      if (controller.signal.aborted || controlRequestRef.current !== controller || generation !== jobGenerationRef.current) return;
       // Retire this request before cancellation. Transport/body settlement may
       // lag or never arrive; it must not own the UI deadline or a later retry.
       controlRequestRef.current = null;
@@ -335,37 +359,37 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
         setControlError(acknowledged
           ? 'Stop was requested, but its checkpoint could not be confirmed. EdgeView will keep checking.'
           : 'Pausing took too long. The stop result is unknown; EdgeView will keep checking.');
-        if (acknowledged) startPolling(activeJobId);
+        if (acknowledged) startPolling(jobId);
       }
     }, 15000);
     try {
-      const res = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}/stop`, {
+      const res = await fetch(`/api/enrich/job/${encodeURIComponent(jobId)}/stop`, {
         method: 'POST', signal: controller.signal,
       });
       const result = await res.json();
-      if (controller.signal.aborted || !openRef.current) return;
+      if (controller.signal.aborted || !openRef.current || generation !== jobGenerationRef.current) return;
       if (!res.ok || result.success !== true) throw new Error('Stop refused');
       acknowledged = true;
-      const checkpoint = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}`, { signal: controller.signal });
+      const checkpoint = await fetch(`/api/enrich/job/${encodeURIComponent(jobId)}`, { signal: controller.signal });
       if (!checkpoint.ok) throw new Error('Checkpoint unavailable');
       const data = await checkpoint.json();
       const job = data.success ? normalizeBatchJobSnapshot(data.job) : null;
-      if (!job) throw new Error('Checkpoint invalid');
-      if (controller.signal.aborted || !openRef.current) return;
+      if (!job || job.id !== jobId) throw new Error('Checkpoint invalid');
+      if (controller.signal.aborted || !openRef.current || generation !== jobGenerationRef.current) return;
       setJobData(job);
-      if (['STOPPED', 'COMPLETED', 'FAILED', 'RESOURCE_LIMITED'].includes(job.status)) {
+      if (isTerminalJobStatus(job.status)) {
         stopPolling();
         refreshData?.();
       } else {
         setControlError('Stop requested. Finishing current work; EdgeView is checking the checkpoint.');
-        startPolling(activeJobId);
+        startPolling(jobId);
       }
     } catch {
-      if (openRef.current && controlRequestRef.current === controller && !controller.signal.aborted) {
+      if (openRef.current && controlRequestRef.current === controller && !controller.signal.aborted && generation === jobGenerationRef.current) {
         setControlError(acknowledged
           ? 'Stop was requested, but its checkpoint could not be confirmed. EdgeView will keep checking.'
           : 'Could not pause research. Check that EdgeView is running and try again.');
-        if (acknowledged) startPolling(activeJobId);
+        if (acknowledged) startPolling(jobId);
       }
     } finally {
       clearTimeout(timeout);
@@ -378,12 +402,14 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
 
   const handleResumeJob = async () => {
     if (!activeJobId || controlAction !== null) return;
+    const jobId = activeJobId;
+    const generation = jobGenerationRef.current;
     const controller = new AbortController();
     controlRequestRef.current = controller;
     setControlAction('resume');
     setControlError(null);
     const timeout = setTimeout(() => {
-      if (controller.signal.aborted || controlRequestRef.current !== controller) return;
+      if (controller.signal.aborted || controlRequestRef.current !== controller || generation !== jobGenerationRef.current) return;
       controlRequestRef.current = null;
       controller.abort();
       if (openRef.current) {
@@ -392,22 +418,22 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       }
     }, 15000);
     try {
-      const res = await fetch(`/api/enrich/job/${encodeURIComponent(activeJobId)}/start`, {
+      const res = await fetch(`/api/enrich/job/${encodeURIComponent(jobId)}/start`, {
         method: 'POST', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ forceFetch: false }),
       });
       const result = await res.json();
-      if (!openRef.current || controller.signal.aborted) return;
+      if (!openRef.current || controller.signal.aborted || generation !== jobGenerationRef.current) return;
       if (!res.ok || result.success !== true) {
         setControlError(result.code === 'JOB_DRAINING'
           ? 'Previous research work is finishing. Try resuming shortly.'
           : 'Could not resume research. Check that EdgeView is running and try again.');
         return;
       }
-      startPolling(activeJobId);
+      startPolling(jobId);
     } catch {
-      if (openRef.current && controlRequestRef.current === controller && !controller.signal.aborted) {
+      if (openRef.current && controlRequestRef.current === controller && !controller.signal.aborted && generation === jobGenerationRef.current) {
         setControlError('Could not resume research. Check that EdgeView is running and try again.');
       }
     } finally {
@@ -603,6 +629,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                   
                   <button
                     onClick={() => {
+                      jobGenerationRef.current += 1;
                       controlRequestRef.current?.abort();
                       controlRequestRef.current = null;
                       setControlAction(null);
@@ -783,7 +810,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                 {/* Start buttons */}
                 <div className="pt-2 flex space-x-3">
                   <button
-                    disabled={selectedIds.size === 0}
+                    disabled={selectedIds.size === 0 || controlAction !== null}
                     onClick={() => handleCreateAndStartJob(Array.from(selectedIds))}
                     className="flex-1 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white rounded-lg flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
                   >
@@ -853,7 +880,13 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                     historicalJobs.map((hj) => (
                       <div 
                         key={hj.id}
-                        onClick={() => startPolling(hj.id)}
+                        onClick={() => {
+                          jobGenerationRef.current += 1;
+                          controlRequestRef.current?.abort();
+                          controlRequestRef.current = null;
+                          setControlAction(null);
+                          startPolling(hj.id);
+                        }}
                         className={`p-2 bg-[#1c1c1c] border rounded-md hover:bg-[#262626] cursor-pointer transition-colors ${
                           activeJobId === hj.id ? 'border-sky-500' : 'border-[#2d2d2d]'
                         }`}

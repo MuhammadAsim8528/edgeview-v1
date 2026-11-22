@@ -2,6 +2,8 @@ import assert from 'assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
 import { NvidiaProvider, GroqProvider, fetchProviderModels } from '../ai_providers';
 import { resolveApiKey, maskKey } from '../settings';
 import { validateHttpHeaderValue, assertSafeHeaderValue } from '../utils/header_encoder';
@@ -84,7 +86,25 @@ async function assertProviderGuard() {
   }
   console.log('✅ Test 5: Both provider listModels reject masked keys at the transport boundary');
 }
-await assertProviderGuard();
+const originalFetch = globalThis.fetch;
+const transports = [http, https].map(transport => ({ transport, request: transport.request, get: transport.get }));
+let maskedTransportCalls = 0;
+const denyMaskedTransport = () => {
+  maskedTransportCalls++;
+  throw new Error('SYNTHETIC_MASKED_CREDENTIAL_TRANSPORT_ATTEMPT');
+};
+try {
+  globalThis.fetch = denyMaskedTransport as typeof fetch;
+  for (const { transport } of transports) {
+    transport.request = denyMaskedTransport as typeof http.request;
+    transport.get = denyMaskedTransport as typeof http.get;
+  }
+  await assertProviderGuard();
+  assert.strictEqual(maskedTransportCalls, 0, 'masked-key negative controls must reject before every outbound transport');
+} finally {
+  globalThis.fetch = originalFetch;
+  for (const { transport, request, get } of transports) { transport.request = request; transport.get = get; }
+}
 
 // 6. Exercise the real settings resolver using synthetic storage only. A refused
 // request is not a successful resolution; every unexpected failure must fail CI.

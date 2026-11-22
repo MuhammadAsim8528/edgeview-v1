@@ -13,9 +13,9 @@ const destinationStage = path.join(deliverables, 'EdgeView-V1-Windows');
 const destinationZip = path.join(deliverables, 'EdgeView-V1-Windows.zip');
 const excludedNames = new Set([
   '.git', '.agent', '.antigravity', '.vscode', '.npm-cache', '.test-cache', 'node_modules', 'data', 'uploads', 'backups', 'logs', 'AGENTS.md', 'docs',
-  'config.json', 'edgeview.db', 'edgeview.db.lock', 'edgeview_db.json',
+  'config.json', 'config.prev.json', 'edgeview.db', 'edgeview.db.lock', 'edgeview_db.json', 'pharma_db.json',
 ]);
-const excludedPatterns = [/^\.env(?:\.|$)/i, /^edgeview\.db(?:[-.].*)?$/i, /\.log$/i, /\.tmp$/i];
+const excludedPatterns = [/^\.env(?:\.|$)/i, /^edgeview\.db(?:[-.].*)?$/i, /^pharma_db\.json$/i, /\.log$/i, /\.tmp$/i];
 // The internal docs tree is a developer map, not operator guidance; EDGEVIEW_OPERATIONS.md ships instead.
 const includedDirectories = ['assets', 'dist', 'public', 'server', 'shared', 'src'];
 const includedFiles = [
@@ -65,7 +65,7 @@ function audit(directory, relative = '') {
     const child = relative ? `${relative}/${entry.name}` : entry.name;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) audit(absolute, child);
-    else if (/(^|\/)config\.json$|(^|\/)\.env(?:\.|$)|\.db(?:[-.].*)?$|(^|\/)edgeview_db\.json$/i.test(child)) prohibited.push(child);
+    else if (/(^|\/)config(?:\.prev)?\.json$|(^|\/)\.env(?:\.|$)|\.db(?:[-.].*)?$|(^|\/)(?:edgeview_db|pharma_db)\.json$/i.test(child)) prohibited.push(child);
   }
 }
 audit(stage);

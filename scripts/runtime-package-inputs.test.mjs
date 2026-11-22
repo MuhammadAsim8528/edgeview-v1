@@ -12,6 +12,12 @@ const fixture={manifest:root,canonicalLock:{packages:{'':root,'node_modules/expr
 const good={lockfileVersion:3,packages:{'':root,'node_modules/express':item}};
 assert.equal(verifyRuntimeLock(fixture,good).components,1);
 assert.throws(()=>verifyRuntimeLock(fixture,{lockfileVersion:3,packages:{'':root}}), /RUNTIME_DIRECT_PACKAGE_MISSING/);
+const child={version:'1.0.0',resolved:'https://registry.npmjs.org/child/-/child-1.0.0.tgz',integrity:'sha512-child'};
+const withChild={...item,dependencies:{child:'1.0.0'}};
+const closureFixture={manifest:root,canonicalLock:{packages:{'':root,'node_modules/express':withChild,'node_modules/child':child}}};
+const closureGood={lockfileVersion:3,packages:{'':root,'node_modules/express':withChild,'node_modules/child':child}};
+assert.equal(verifyRuntimeLock(closureFixture,closureGood).components,2);
+assert.throws(()=>verifyRuntimeLock(closureFixture,{lockfileVersion:3,packages:{'':root,'node_modules/express':withChild}}),/RUNTIME_LOCK_INCOMPLETE/);
 for(const changed of [{...item,version:'2.0.0'},{...item,integrity:'different'},{...item,resolved:'https://unreviewed.test/pkg'},{...item,link:true},{...item,dev:true}]) assert.throws(()=>verifyRuntimeLock(fixture,{...good,packages:{...good.packages,'node_modules/express':changed}}));
 assert.throws(()=>verifyRuntimeLock(fixture,{...good,packages:{...good.packages,'':{dependencies:{react:'1'}}}}));
 assert.throws(()=>verifyRuntimeLock(fixture,{...good,packages:{...good.packages,'node_modules/../outside':item}}));

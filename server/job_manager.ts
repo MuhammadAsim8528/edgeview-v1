@@ -1,11 +1,12 @@
 import { acquireCompanyIdentityWork } from './company_identity_work';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { throwIfCancelled, waitForAbort } from './operation_control';
 import { getDb } from './sqlite';
 import { getV1Run, listV1RunIdentityHeaders, runV1Enrichment, assessV1FreshReuse, createV1ResearchContext, type V1ResearchContext, type V1Run } from './v1_engine';
 import { resolveOfficialDomain, sameDomainOrSubdomain } from './v1_identity';
 import { hasInstitutionalRole } from './corporate_validation';
 import { hasExplicitCountryCallingCode, isCountryCompatiblePhone } from './phone_country';
-import { canonicalCompanyIdentityKey, canonicalEntityIdentityKey } from './company_identity';
+import { canonicalCompanyIdentityKey, canonicalCountryIdentityKey, canonicalEntityIdentityKey } from './company_identity';
 import { normalizeV1ContactOverlay, V1_CONTACT_OVERLAY_VERSION } from '../shared/v1_contact_contract';
 import { OrderedFailureStreak } from './ordered_failure_tracker';
 import { contactFactScope, countryScopedFactSources, structuredContactFactScope } from './contact_country_scope';
@@ -81,6 +82,14 @@ function cleanLeadershipRole(value: string): string {
   return role;
 }
 
+function canonicalLeaderKey(value: unknown): string {
+  return canonicalCompanyIdentityKey(value);
+}
+
+function normalizedQuoteText(value: unknown): string {
+  return String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 function normalizeLeadershipPerson(nameValue: string, roleValue: string, companyName: string) {
   let name = nameValue.replace(/\s+/g, ' ').trim();
   let designation = cleanLeadershipRole(roleValue);
@@ -94,8 +103,8 @@ function normalizeLeadershipPerson(nameValue: string, roleValue: string, company
     designation = designation || suffix[2];
     name = suffix[1].trim();
   }
-  const personKey = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const companyKey = companyName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const personKey = canonicalLeaderKey(name);
+  const companyKey = canonicalCompanyIdentityKey(companyName);
   const companyTokens = new Set(companyKey.split(' ').filter(token => token.length >= 3 && !/^(?:the|and|pvt|ltd|limited|inc|llc)$/.test(token)));
   const personTokens = personKey.split(' ').filter(token => token.length >= 3);
   const companyOverlap = personTokens.length > 0 && personTokens.filter(token => companyTokens.has(token)).length / personTokens.length >= 0.6;
@@ -317,6 +326,35 @@ function preferGeneralContactEmail(emails: string[]): string[] {
   return [emails[index], ...emails.slice(0, index), ...emails.slice(index + 1)];
 }
 
+function projectionCitedClaims(run: Pick<V1Run, 'results' | 'evidence_workspace'>): any[] {
+  const claims = Array.isArray(run.evidence_workspace?.accepted_claims) ? run.evidence_workspace.accepted_claims : [];
+  return claims.filter((claim: any) => {
+    if (!claim || !['address', 'email', 'phone', 'leader'].includes(claim.field)
+      || !['official', 'linkedin'].includes(claim.source_type)) return false;
+    const value = normalizedQuoteText(claim.value), quote = normalizedQuoteText(claim.quote);
+    // accepted_claims is a persisted model proposal, not an authorization
+    // boundary. Revalidate both the value and any role against its exact quote.
+    if (!value || !quote || !quote.includes(value)) return false;
+    if (claim.field === 'leader' && claim.role) {
+      const role = normalizedQuoteText(cleanLeadershipRole(String(claim.role)));
+      if (!role || !quote.includes(role)) return false;
+    }
+    const source = run.results.find(result => result.id === claim.source_result_id);
+    if (source) {
+      if (source.status !== 'success' || (claim.source_url && source.url !== claim.source_url)) return false;
+      const carriers = [source.text, source.markdown, source.title, source.snippet,
+        typeof source.html === 'string' ? htmlText(source.html) : '', source.html];
+      if (!carriers.some(carrier => normalizedQuoteText(carrier).includes(quote))) return false;
+    } else {
+      const chunk = run.evidence_workspace?.chunks?.find(item => item.result_id === claim.source_result_id);
+      // Very old immutable runs may retain only their admitted quote. They stay
+      // subject to value/role/country checks; a present carrier must match it.
+      if (chunk && !normalizedQuoteText(chunk.text).includes(quote)) return false;
+    }
+    return true;
+  });
+}
+
 export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name' | 'results' | 'identity_resolution' | 'evidence_workspace'> & Partial<Pick<V1Run, 'country'>>) {
   const results = run.results;
   // Failure payloads remain in the immutable run, never as domain/contact proof.
@@ -379,7 +417,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     ...publicProfiles.map(result => String(result.url || '')),
     ...contactPages.flatMap(result => result.links || []),
   ].filter((url: string) => usefulSocialUrl(url, String(run.company_name || ''))).map(canonicalSocialUrl).filter(Boolean))].slice(0, 50);
-  const citedClaims = run.evidence_workspace?.accepted_claims || [];
+  const citedClaims = projectionCitedClaims(run);
   const citedEmails = citedClaims.filter(claim => claim.field === 'email' && claim.source_type === 'official').map(claim => claim.value.toLowerCase()).filter(value => attributableEmail(value, officialDomain));
   const citedPhones = citedClaims.filter(claim => claim.field === 'phone' && claim.source_type === 'official').map(claim => claim.value).filter(value => validPhone(value) && isCountryCompatiblePhone(value, String(run.country || '')));
   const targetCountry = String(run.country || '').trim().toLowerCase();
@@ -399,11 +437,11 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   const formalCards: FormalLeadershipCard[] = [];
   const linkedInLeaders = leadershipFromLinkedInResults(results, companyName);
   for (const leader of structuredLeadersFromOfficialPages(officialPages, companyName, formalCards)) {
-    leaderMap.set(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), leader);
+    leaderMap.set(canonicalLeaderKey(leader.name), leader);
   }
   for (const leader of linkedInLeaders) {
-    if (!leaderMap.has(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())) {
-      leaderMap.set(leader.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), leader);
+    if (!leaderMap.has(canonicalLeaderKey(leader.name))) {
+      leaderMap.set(canonicalLeaderKey(leader.name), leader);
     }
   }
   for (const claim of citedClaims.filter(item => item.field === 'leader' && Boolean(officialDomain))) {
@@ -415,7 +453,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     if (!role && claim.source_type === 'official' && !/(?:team|management|board|leadership|director|chief|ceo|founder|md[-_ ]?(?:s[-_ ]?)?message|our[-_ ]people|who[-_ ]we[-_ ]are)/i.test(claim.source_url)) continue;
     if (claim.source_type === 'linkedin' && !LEADERSHIP_ROLE.test(role)) continue;
     const existing = leaderMap.get(key);
-    const next = existing || { name: normalized.name, designation: role, source_url: claim.source_url };
+    const next: { name: string; designation: string; source_url: string; linkedin?: string } = existing || { name: normalized.name, designation: role, source_url: claim.source_url };
     if (!next.designation && role) next.designation = role;
     if (claim.source_type === 'official') next.source_url = claim.source_url;
     if (claim.source_type === 'linkedin') next.linkedin = claim.source_url;
@@ -423,7 +461,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
   }
   const linkedInProfiles = results.filter(result => /linkedin\.com\/in\//i.test(String(result.url || '')));
   for (const leader of leaderMap.values()) {
-    const nameTokens = leader.name.toLowerCase().split(/[^a-z0-9]+/).filter(token => token.length >= 2);
+    const nameTokens = canonicalLeaderKey(leader.name).split(' ').filter(token => token.length >= 2);
     const profile = linkedInProfiles.find(result => {
       const title = String(result.title || '').toLowerCase();
       return nameTokens.length >= 2 && nameTokens.every(token => title.includes(token));
@@ -517,9 +555,9 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
 
 /** Only a retained run for this exact company+country can replace a provider
  * request. Payload loading happens on an explicit action, never startup. */
-export function reusableContactRun(contact: { company_name?: string; country?: string; edgeview_v1_run_id?: string } | null | undefined): V1Run | null {
+export async function reusableContactRun(contact: { company_name?: string; country?: string; edgeview_v1_run_id?: string } | null | undefined): Promise<V1Run | null> {
   if (!contact?.edgeview_v1_run_id || !contact.company_name?.trim() || !contact.country?.trim()) return null;
-  const run = getV1Run(contact.edgeview_v1_run_id);
+  const run = await getV1Run(contact.edgeview_v1_run_id);
   return run && ['COMPLETED', 'PARTIAL'].includes(run.status)
     && canonicalEntityIdentityKey(run.company_name, run.country) === canonicalEntityIdentityKey(contact.company_name, contact.country)
     ? run : null;
@@ -544,7 +582,33 @@ export function reusableEvidenceSelection(contacts: Array<RetainedContact | null
   return contacts.length > 0 && reusableEvidenceContacts(contacts).size === contacts.length;
 }
 
-export function projectHistoricalContactFields(run: V1Run) {
+function normalizeProjectionOverlay(overlay: any) {
+  const normalized = normalizeV1ContactOverlay(overlay);
+  const normalizedPeople = new Map(normalized.contact_persons.map(person => [canonicalLeaderKey(person.name), person]));
+  const people: any[] = [];
+  const seen = new Set<string>();
+  for (const raw of Array.isArray(overlay?.contact_persons) ? overlay.contact_persons : []) {
+    const name = String(raw?.name || '').trim(), key = canonicalLeaderKey(name);
+    if (!name || !key || seen.has(key)) continue;
+    seen.add(key);
+    const person = normalizedPeople.get(key) || {
+      name,
+      ...(raw?.designation ? { designation: String(raw.designation).trim() } : {}),
+      ...(raw?.email ? { email: String(raw.email).trim() } : {}),
+      ...(raw?.phone ? { phone: String(raw.phone).trim() } : {}),
+      ...(raw?.department ? { department: String(raw.department).trim() } : {}),
+      ...(raw?.country ? { country: String(raw.country).trim() } : {}),
+      ...(raw?.branch ? { branch: String(raw.branch).trim() } : {}),
+      ...((raw?.linkedin_url || raw?.linkedin) ? { linkedin_url: String(raw.linkedin_url || raw.linkedin).trim() } : {}),
+      ...(raw?.source_url ? { source_url: String(raw.source_url).trim() } : {}),
+    };
+    people.push(person);
+    if (people.length >= 50) break;
+  }
+  return { ...normalized, contact_persons: people };
+}
+
+export async function projectHistoricalContactFields(run: V1Run) {
   const entityName = canonicalEntityIdentityKey(run.company_name, run.country);
   // A company can have an older high-quality run far beyond the most recent
   // 1,000 global runs. Search the complete summary index so a later weak or
@@ -554,16 +618,20 @@ export function projectHistoricalContactFields(run: V1Run) {
     if (summary.id === run.id || canonicalEntityIdentityKey(summary.company_name, summary.country) !== entityName) continue;
     // Project one payload at a time. Retaining all historical raw captures can
     // hold hundreds of MB; limiting to recent runs can erase older trusted facts.
-    const historical = getV1Run(summary.id);
+    const historical = await getV1Run(summary.id);
     if (historical) projections.push(projectDeterministicContactFields(historical));
   }
-  const strings = (field: string, scalar?: string) => [...new Set(projections.flatMap((projection: any) => [
+  // Field caps must not let a current noisy run starve older trusted facts.
+  // Immutable headers are newest-first; merge oldest evidence first for bounded
+  // fields while retaining current-first website/status and evidence ordering.
+  const preservationOrder = [...projections].reverse();
+  const strings = (field: string, scalar?: string) => [...new Set(preservationOrder.flatMap((projection: any) => [
     ...(Array.isArray(projection[field]) ? projection[field] : []),
     ...(scalar && projection[scalar] ? [projection[scalar]] : []),
   ]).map(value => String(value || '').trim()).filter(Boolean))];
   const people = new Map<string, any>();
-  for (const person of projections.flatMap((projection: any) => projection.contact_persons || [])) {
-    const key = String(person?.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  for (const person of preservationOrder.flatMap((projection: any) => projection.contact_persons || [])) {
+    const key = canonicalLeaderKey(person?.name);
     if (key && !people.has(key)) people.set(key, person);
   }
   const emails = preferGeneralContactEmail(strings('emails_list', 'email'));
@@ -573,7 +641,7 @@ export function projectHistoricalContactFields(run: V1Run) {
   const website = projections.find((projection: any) => projection.website)?.website || '';
   const hasChannel = emails.length > 0 || phones.length > 0;
   const hasOrganizationDetail = addresses.length > 0 || contactPersons.length > 0;
-  return normalizeV1ContactOverlay({
+  return normalizeProjectionOverlay({
     schema_version: V1_OVERLAY_VERSION,
     entity_key: canonicalEntityIdentityKey(run.company_name, run.country),
     emails_list: emails.slice(0, 50), email: emails[0] || '',
@@ -592,23 +660,29 @@ export function projectHistoricalContactFields(run: V1Run) {
 // Serialize projection + durable save + visible publication for the same contact.
 // Different contacts retain their existing parallelism; failed saves release the queue.
 const contactPublications = new Map<string, Promise<void>>();
+async function canonicalCompanyWorkId(companyId: string): Promise<string> {
+  const { db: pharmaDb } = await import('./db');
+  return pharmaDb.getContactById(companyId)?.id || String(companyId || '').trim().toLowerCase();
+}
 export async function withContactPublication<T>(companyId: string, operation: () => Promise<T>): Promise<T> {
   const releaseIdentityWork = acquireCompanyIdentityWork();
   try {
-    const previous = contactPublications.get(companyId) ?? Promise.resolve();
+    const publicationId = await canonicalCompanyWorkId(companyId);
+    const previous = contactPublications.get(publicationId) ?? Promise.resolve();
     const result = previous.catch(() => {}).then(operation);
     const settled = result.then(() => {}, () => {});
-    contactPublications.set(companyId, settled);
+    contactPublications.set(publicationId, settled);
     try { return await result; }
-    finally { if (contactPublications.get(companyId) === settled) contactPublications.delete(companyId); }
+    finally { if (contactPublications.get(publicationId) === settled) contactPublications.delete(publicationId); }
   } finally { releaseIdentityWork(); }
 }
 
 export async function persistV1ContactOverlay(companyId: string, runId: string, overlay: unknown, durable = false) {
   const releaseIdentityWork = acquireCompanyIdentityWork();
   try {
+    companyId = await canonicalCompanyWorkId(companyId);
     const database = await getDb();
-    const canonicalOverlay = normalizeV1ContactOverlay(overlay);
+    const canonicalOverlay = normalizeProjectionOverlay(overlay);
     if (durable) {
       await database.saveContactOverlayDurably(companyId, runId, JSON.stringify(canonicalOverlay), new Date().toISOString());
       return;
@@ -657,7 +731,7 @@ export async function hydrateV1ContactEnrichment(): Promise<number> {
       }
       // Normalize old persisted field aliases/shapes exactly once at the
       // storage boundary. Active UI/backend code sees only the V1 contract.
-      const overlay = normalizeV1ContactOverlay(storedOverlay);
+      const overlay = normalizeProjectionOverlay(storedOverlay);
       // Startup must only hydrate the small persisted projection. Replaying
       // multi-gigabyte immutable run history here kept port 3901 offline for
       // minutes. A fresh enrichment reprojects the complete indexed history
@@ -680,10 +754,12 @@ export interface CompanyResearchState {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   stage: string;
   error?: string;
+  completedAt?: string;
   reuse_only?: boolean;
   reuse_policy_version?: 1;
   force_live?: boolean;
   durationMs?: number;
+  updatedAt?: string;
   resourceUsage: Record<ResearchProvider, number>;
   metrics?: {
     emailsFound: number;
@@ -718,12 +794,14 @@ export interface ResearchJob {
 // In-memory registry of currently active background jobs to allow graceful stopping
 // activeJobs controls whether workers take more work; ownedJobs also covers draining workers.
 const activeJobs = new Set<string>();
+const jobControllers = new Map<string, AbortController>();
 const ownedJobs = new Set<string>();
 const runningTasks = new Set<Promise<void>>();
 let shuttingDown = false;
 export async function stopJobsForShutdown(): Promise<void> {
   shuttingDown = true;
-  activeJobs.clear(); // workers finish their current company, not the next one
+  for (const controller of jobControllers.values()) controller.abort(new Error('EDGEVIEW_SHUTTING_DOWN'));
+  activeJobs.clear(); // workers finish their current operation, not the next company
   const results = await Promise.allSettled([...runningTasks]);
   if (results.some(result => result.status === 'rejected')) throw new Error('Background job did not drain cleanly');
 }
@@ -740,6 +818,13 @@ export function isInternalId(name: string): boolean {
   return false;
 }
 
+export async function discardJob(jobId: string): Promise<void> {
+  if (ownedJobs.has(jobId)) throw Object.assign(new Error('Job is already running'), { code: 'JOB_ALREADY_RUNNING' });
+  const database = await getDb();
+  await database.run('DELETE FROM research_jobs WHERE id = ?', [jobId]);
+  await database.flush();
+}
+
 export async function createJob(companyIds: string[], mode: 'importer' | 'exporter', reuseOnly = false, forceLive = false): Promise<string> {
   const releaseIdentityWork = acquireCompanyIdentityWork();
   try {
@@ -751,8 +836,10 @@ export async function createJob(companyIds: string[], mode: 'importer' | 'export
     // Fetch actual company names for the state map
     const { db: pharmaDb } = await import('./db');
     const companyStates: Record<string, CompanyResearchState> = {};
-  
-    for (const id of companyIds) {
+    const canonicalCompanyIds = [...new Set(companyIds.map(id =>
+      pharmaDb.getContactById(id)?.id || String(id || '').trim().toLowerCase()))];
+
+    for (const id of canonicalCompanyIds) {
       const contact = pharmaDb.getContactById(id);
       const companyName = contact ? contact.company_name : `ID ${id}`;
       const isId = isInternalId(companyName);
@@ -766,6 +853,7 @@ export async function createJob(companyIds: string[], mode: 'importer' | 'export
         status: statusVal,
         stage: stageVal,
         error: errorVal,
+        ...(statusVal === 'failed' ? { completedAt: new Date().toISOString() } : {}),
         reuse_only: reuseOnly,
         reuse_policy_version: 1,
         force_live: forceLive,
@@ -777,11 +865,11 @@ export async function createJob(companyIds: string[], mode: 'importer' | 'export
       id: jobId,
       status: 'PENDING',
       importer_exporter_mode: mode,
-      total_companies: companyIds.length,
+      total_companies: canonicalCompanyIds.length,
       completed_companies: 0,
       current_company: '',
       current_stage: '',
-      company_ids: companyIds,
+      company_ids: canonicalCompanyIds,
       company_states: companyStates,
       resource_usage: emptyProviderUsage(),
       is_pilot: false,
@@ -856,9 +944,9 @@ export async function updateJob(jobId: string, updates: Partial<ResearchJob>, du
   const pilot_authorized = updates.pilot_authorized !== undefined ? (updates.pilot_authorized ? 1 : 0) : (current.pilot_authorized ? 1 : 0);
 
   await db.run(
-    `UPDATE research_jobs SET 
-      status = ?, 
-      completed_companies = ?, 
+    `UPDATE research_jobs SET
+      status = CASE WHEN research_jobs.status = 'STOPPED' AND ? = 'DISCOVERING' THEN 'STOPPED' ELSE ? END,
+      completed_companies = ?,
       current_company = ?, 
       current_stage = ?, 
       company_states = ?, 
@@ -869,6 +957,7 @@ export async function updateJob(jobId: string, updates: Partial<ResearchJob>, du
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?`,
     [
+      status,
       status,
       completed_companies,
       current_company,
@@ -886,6 +975,7 @@ export async function updateJob(jobId: string, updates: Partial<ResearchJob>, du
 
 export async function stopJob(jobId: string): Promise<void> {
   activeJobs.delete(jobId);
+  jobControllers.get(jobId)?.abort(new Error('JOB_STOP_REQUESTED'));
   await updateJob(jobId, { status: 'STOPPED' }, true);
 }
 
@@ -900,9 +990,11 @@ export function isJobActive(jobId: string): boolean {
 export async function runJobLoop(jobId: string, forceFetch = false, reviewRetainedOnly = false): Promise<boolean> {
   if (shuttingDown || ownedJobs.has(jobId)) return false;
   const releaseIdentityWork = acquireCompanyIdentityWork();
+  const jobController = new AbortController();
+  jobControllers.set(jobId, jobController);
   ownedJobs.add(jobId);
   activeJobs.add(jobId);
-  const releaseOwnership = () => { activeJobs.delete(jobId); ownedJobs.delete(jobId); releaseIdentityWork(); };
+  const releaseOwnership = () => { activeJobs.delete(jobId); ownedJobs.delete(jobId); jobControllers.delete(jobId); releaseIdentityWork(); };
   let job: ResearchJob | null;
   try {
     job = await getJob(jobId);
@@ -914,8 +1006,33 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
     // Permission changes happen only after ownership is acquired. A refused
     // duplicate/draining start must not alter the persisted job mode.
     if (reviewRetainedOnly) for (const state of queued) state.reuse_only = true;
-    if (forceFetch) for (const state of Object.values(job.company_states)) state.force_live = true;
-    await updateJob(jobId, { status: 'PENDING', company_states: job.company_states }, true);
+    if (forceFetch) {
+      job.completed_companies = 0;
+      job.resource_usage = emptyProviderUsage();
+      job.current_company = '';
+      job.current_stage = 'Queued for forced V1 re-enrichment';
+      job.error_message = undefined;
+      for (const state of Object.values(job.company_states)) {
+        state.force_live = true;
+        state.status = 'pending';
+        state.stage = 'Queued for forced V1 re-enrichment';
+        state.error = undefined;
+        delete state.completedAt;
+        state.durationMs = undefined;
+        state.metrics = undefined;
+        state.outcome = undefined;
+        state.resourceUsage = emptyProviderUsage();
+      }
+    }
+    // The forced reset and mode transition share one durable checkpoint. A
+    // crash after this write therefore resumes pending live work, never a row
+    // that only says force_live while all companies still look terminal.
+    await updateJob(jobId, {
+      status: 'PENDING', company_states: job.company_states,
+      completed_companies: job.completed_companies, current_company: job.current_company,
+      current_stage: job.current_stage, resource_usage: job.resource_usage,
+      error_message: job.error_message,
+    }, true);
     if (shuttingDown) { releaseOwnership(); return false; }
   } catch (error) {
     releaseOwnership();
@@ -927,19 +1044,6 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
   const task = (async () => {
     try {
       const { db: pharmaDb } = await import('./db');
-      if (forceFetch) {
-        job.completed_companies = 0;
-        job.resource_usage = emptyProviderUsage();
-        for (const state of Object.values(job.company_states)) {
-          state.status = 'pending';
-          state.stage = 'Queued for forced V1 re-enrichment';
-          state.error = undefined;
-          state.durationMs = undefined;
-          state.metrics = undefined;
-          state.outcome = undefined;
-          state.resourceUsage = emptyProviderUsage();
-        }
-      }
       // Completed and failed items are both terminal for this job. Only
       // pending/interrupted work is eligible when a stopped job resumes;
       // otherwise failures are counted twice and the progress total can exceed
@@ -950,12 +1054,12 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
       });
       const permittedIds = pendingIds;
       let cursor = 0;
-      const transportFailures = new OrderedFailureStreak(9);
+      const transportFailures = new OrderedFailureStreak(9, 5 * 60 * 1000);
       let pausedForTransport = false;
       let persistChain: Promise<void> = Promise.resolve();
       const checkpoint = (stage: string) => {
         persistChain = persistChain.then(() => updateJob(jobId, {
-          status: 'DISCOVERING',
+          status: activeJobs.has(jobId) ? 'DISCOVERING' : 'STOPPED',
           completed_companies: job.completed_companies,
           current_company: job.current_company,
           current_stage: stage,
@@ -972,6 +1076,21 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
           // between companies instead of waiting for the entire queue.
           await yieldToEventLoop();
           if (!activeJobs.has(jobId)) return;
+
+          // Check if transport failures tracker is paused and wait for cooldown
+          if (transportFailures.isPaused()) {
+            const remainingCooldown = transportFailures.getRemainingCooldown();
+            if (remainingCooldown > 0) {
+              job.current_stage = `Paused after transport failures; auto-resuming in ${Math.ceil(remainingCooldown / 1000)}s`;
+              await checkpoint(job.current_stage);
+              await new Promise(resolve => setTimeout(resolve, Math.min(remainingCooldown, 30_000)));
+              if (!activeJobs.has(jobId)) return;
+              continue;
+            }
+            // Cooldown elapsed, tracker auto-resumed
+            transportFailures.resume();
+          }
+
           const position = cursor++;
           if (position >= permittedIds.length) return;
           const companyId = permittedIds[position];
@@ -983,7 +1102,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
             const decision = transportFailures.record(position, false);
             if (decision.newlyPaused) {
               pausedForTransport = true;
-              activeJobs.delete(jobId);
+              // Don't delete from activeJobs immediately - wait for cooldown
             }
             continue;
           }
@@ -996,7 +1115,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
           const liveRequested = forceFetch || companyState.force_live === true;
           if (!liveRequested && contact?.edgeview_v1_run_id) {
             const reuseStarted = performance.now();
-            const cachedRun = reusableContactRun(contact);
+            const cachedRun = await reusableContactRun(contact);
             // Legacy jobs retain their already-authorized historical semantics.
             // New jobs cannot silently treat old/partial/incompatible runs as current.
             const historicalReview = companyState.reuse_only || companyState.reuse_policy_version !== 1;
@@ -1005,7 +1124,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
               const revalidated = contact.research_validation_status !== 'current';
               if (revalidated) {
                 await withContactPublication(companyId, async () => {
-                  const projected = projectHistoricalContactFields(cachedRun);
+                  const projected = await projectHistoricalContactFields(cachedRun);
                   // Reuse retained evidence without calling providers. Persist
                   // before claiming completion or replacing the live projection.
                   await persistV1ContactOverlay(companyId, cachedRun.id, projected, true);
@@ -1014,6 +1133,8 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
                 });
               }
               companyState.status = 'completed';
+              companyState.completedAt ||= new Date().toISOString();
+              companyState.updatedAt = new Date().toISOString();
               companyState.stage = revalidated ? 'Revalidated retained V1 evidence under current company-country rules; no provider calls'
                 : `Rechecked saved V1 ${cachedRun.status} evidence; not checked live`;
               companyState.error = undefined;
@@ -1036,6 +1157,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
           }
 
           companyState.status = 'processing';
+          delete companyState.completedAt;
           companyState.stage = 'V1 query generation and deterministic retrieval';
           job.current_company = companyName;
           job.current_stage = companyState.stage;
@@ -1045,16 +1167,19 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
             if (reuseNeedsChoice) throw new Error('SAVED_EVIDENCE_NEEDS_CHOICE: Recheck saved evidence or explicitly request live refresh.');
             if (companyState.reuse_only) throw new Error('RETAINED_EVIDENCE_UNAVAILABLE: Saved-evidence review cannot start provider requests.');
             if (!companyName || isInternalId(companyName)) throw new Error('INVALID_INPUT / UNRESOLVED_COMPANY');
-            if (!country) throw new Error('Exact country is required for identity-anchored V1 enrichment');
+            if (!country || !canonicalCountryIdentityKey(country)
+              || /^(?:none|not[ _-]*found|undefined|-|—)$/i.test(country)) {
+              throw new Error('Exact country is required for identity-anchored V1 enrichment');
+            }
             let run: V1Run | undefined;
             for (let attempt = 1; attempt <= 3; attempt++) {
-              run = await runV1Enrichment(companyName, country, { profile: 'bulk' });
+              run = await runV1Enrichment(companyName, country, { profile: 'bulk', signal: jobController.signal });
               const errors = run.timeline.map(event => String(event.error || '')).filter(Boolean);
               const transientTransportFailure = run.status === 'FAILED' && errors.length > 0
                 && errors.every(message => /fetch failed|aborted|timeout|econn|enotfound|socket|network/i.test(message));
               if (!transientTransportFailure || attempt === 3) break;
               companyState.stage = `Temporary network failure; retry ${attempt + 1} of 3`;
-              await new Promise(resolve => setTimeout(resolve, attempt * 2_000));
+              await waitForAbort(jobController.signal, attempt * 2_000);
             }
             if (!run) throw new Error('V1 run did not start');
             const runErrors = run.timeline.map(event => String(event.error || '')).filter(Boolean);
@@ -1067,7 +1192,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
             }, {});
             companyState.resourceUsage = emptyProviderUsage();
             for (const provider of RESEARCH_PROVIDERS) companyState.resourceUsage[provider] = providerCounts[provider] || 0;
-            const projected = projectHistoricalContactFields(run);
+            const projected = await projectHistoricalContactFields(run);
             companyState.metrics = {
               emailsFound: projected.emails_list.length,
               phonesFound: projected.phones_list.length,
@@ -1083,7 +1208,7 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
               // Match interactive/cached publication: an accepted raw run does
               // not prove that the operational contact projection is durable.
               await withContactPublication(companyId, async () => {
-                const latestProjection = projectHistoricalContactFields(run);
+                const latestProjection = await projectHistoricalContactFields(run);
                 await persistV1ContactOverlay(companyId, run.id, latestProjection, true);
                 Object.assign(contact, latestProjection, {
                   research_validation_status: 'current', edgeview_v1_run_id: run.id,
@@ -1103,10 +1228,11 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
             const decision = transportFailures.record(position, transportOutcome);
             if (decision.newlyPaused) {
               pausedForTransport = true;
-              activeJobs.delete(jobId);
-              companyState.stage = `${companyState.stage}; safety pause after ${decision.streak} ordered transport failures`;
+              companyState.stage = `${companyState.stage}; safety pause after ${decision.streak} ordered transport failures; auto-resume after cooldown`;
             }
             companyState.durationMs = Date.now() - startedAt;
+            companyState.completedAt ||= new Date().toISOString();
+            companyState.updatedAt = companyState.completedAt;
             job.completed_companies++;
             if (job.completed_companies % 5 === 0 || cursor >= permittedIds.length) await checkpoint(companyState.stage);
           }
@@ -1118,18 +1244,40 @@ export async function runJobLoop(jobId: string, forceFetch = false, reviewRetain
       // one event loop. Parallel workers cannot speed up that CPU work and can
       // queue several expensive projections before serving control requests.
       const workerLimit = permittedIds.every(id => job.company_states[id]?.reuse_only) ? 1 : 5;
-      await Promise.all(Array.from({ length: Math.min(workerLimit, permittedIds.length || 1) }, () => worker()));
+      const workerResults = await Promise.allSettled(Array.from(
+        { length: Math.min(workerLimit, permittedIds.length || 1) }, () => worker()));
+      // A rejected worker does not release job ownership while siblings can
+      // still mutate contacts or publish checkpoints. Drain every sibling and
+      // the persistence chain before surfacing the first failure.
       await persistChain;
-      if (!activeJobs.has(jobId)) {
+      const rejectedWorker = workerResults.find(result => result.status === 'rejected');
+      if (rejectedWorker) throw rejectedWorker.reason;
+      const allPermittedProcessed = cursor >= permittedIds.length;
+      const stillPaused = transportFailures.isPaused();
+
+      if (!allPermittedProcessed && stillPaused) {
+        // Job is paused mid-processing, will auto-resume
         await updateJob(jobId, {
-          status: pausedForTransport ? 'RESOURCE_LIMITED' : 'STOPPED',
-          current_stage: pausedForTransport ? 'Paused after repeated network failures; remaining companies stay queued' : job.current_stage,
-          error_message: pausedForTransport ? 'Repeated provider transport failures triggered an automatic safety pause.' : job.error_message,
+          status: 'RESOURCE_LIMITED',
+          current_stage: `Paused after transport failures; auto-resuming in ${Math.ceil(transportFailures.getRemainingCooldown() / 1000)}s`,
+          error_message: 'Repeated provider transport failures triggered an automatic safety pause.',
+          company_states: job.company_states,
+          completed_companies: job.completed_companies,
+          resource_usage: job.resource_usage,
+        }, true);
+      } else if (!activeJobs.has(jobId)) {
+        // External stop remains authoritative even when the final in-flight
+        // company finishes after the stop request.
+        await updateJob(jobId, {
+          status: 'STOPPED',
+          current_stage: job.current_stage,
+          error_message: job.error_message,
           company_states: job.company_states,
           completed_companies: job.completed_companies,
           resource_usage: job.resource_usage,
         }, true);
       } else {
+        // All permitted companies processed
         await updateJob(jobId, { status: 'COMPLETED', current_company: '', current_stage: 'All requested companies processed', company_states: job.company_states, completed_companies: job.completed_companies, resource_usage: job.resource_usage }, true);
       }
     } catch (err: any) {
@@ -1213,6 +1361,7 @@ export async function initializeJobsState(): Promise<void> {
       for (const cid of Object.keys(companyStates)) {
         if (companyStates[cid].status === 'processing') {
           companyStates[cid].status = 'pending';
+          delete companyStates[cid].completedAt;
           companyStates[cid].stage = 'Interrupted';
           updated = true;
         }
@@ -1237,37 +1386,25 @@ export async function initializeJobsState(): Promise<void> {
 }
 
 export async function getJobsCountByStatus(): Promise<{ active: number; completed: number; failed: number; partial: number }> {
-  try {
-    const db = await getDb();
-    const activeRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status IN ('PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING', 'VERIFYING')`);
-    const completedRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status = 'COMPLETED'`);
-    const failedRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status = 'FAILED'`);
-    const partialRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status IN ('STOPPED', 'PAUSED', 'RESOURCE_LIMITED')`);
-    return {
-      active: activeRow?.count || 0,
-      completed: completedRow?.count || 0,
-      failed: failedRow?.count || 0,
-      partial: partialRow?.count || 0,
-    };
-  } catch (err) {
-    console.error('[Job Manager] Error counting jobs:', err);
-    return { active: 0, completed: 0, failed: 0, partial: 0 };
-  }
+  const db = await getDb();
+  const activeRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status IN ('PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING', 'VERIFYING')`);
+  const completedRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status = 'COMPLETED'`);
+  const failedRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status = 'FAILED'`);
+  const partialRow = await db.get(`SELECT COUNT(*) as count FROM research_jobs WHERE status IN ('STOPPED', 'PAUSED', 'RESOURCE_LIMITED')`);
+  return {
+    active: activeRow?.count || 0,
+    completed: completedRow?.count || 0,
+    failed: failedRow?.count || 0,
+    partial: partialRow?.count || 0,
+  };
 }
 
 export async function getLatestActiveJob(): Promise<ResearchJob | null> {
-  try {
-    const db = await getDb();
-    const row = await db.get(`
-      SELECT id FROM research_jobs 
-      WHERE status IN ('PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING', 'VERIFYING')
-      ORDER BY updated_at DESC LIMIT 1
-    `);
-    if (row && row.id) {
-      return getJob(row.id);
-    }
-  } catch (err) {
-    console.error('[Job Manager] Error getting latest active job:', err);
-  }
-  return null;
+  const db = await getDb();
+  const row = await db.get(`
+    SELECT id FROM research_jobs
+    WHERE status IN ('PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING', 'VERIFYING')
+    ORDER BY updated_at DESC LIMIT 1
+  `);
+  return row?.id ? getJob(row.id) : null;
 }

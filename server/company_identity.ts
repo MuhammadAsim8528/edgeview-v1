@@ -1,4 +1,4 @@
-import { normalizeCountryName, normalizeCountryExact, detectExplicitCountryNames } from '../src/utils/countryNormalizer';
+import { normalizeCountryNameStrict, normalizeCountryExact, detectExplicitCountryNames } from '../src/utils/countryNormalizer';
 
 /**
  * Conservative company identity key used for dataset grouping and cache lookup.
@@ -19,10 +19,8 @@ export function canonicalCompanyIdentityKey(name: unknown): string {
 
 /** Canonical country component shared by contacts, cache, trade, and reports. */
 export function canonicalCountryIdentityKey(country: unknown): string {
-  const raw = String(country || '').trim();
-  if (!raw) return '';
-  if (/^(?:unknown|not specified|n\/?a|null|nan)$/i.test(raw)) return '';
-  return normalizeCountryName(raw).normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+  // An unresolved/mixed/negated label is unknown, not a new country identity.
+  return normalizeCountryNameStrict(String(country || '')).normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /** Minimum entity boundary when country comes from trusted source context. */

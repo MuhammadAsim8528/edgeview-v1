@@ -29,7 +29,7 @@ try {
   if (!reopened) assert.deepEqual(first.runs.map((run: any) => run.id), Array.from({ length: 50 }, (_, i) => `run-history-${String(1004 - i).padStart(4, '0')}`), 'equal timestamps require a stable ID tie-breaker');
   if (!reopened) {
     // An arrival after the first page must not shift the older-page boundary.
-    const template = engine.getV1Run('run-history-0000')!;
+    const template = (await engine.getV1Run('run-history-0000'))!;
     engine.persistV1Run({ ...template, id: 'run-new-arrival', started_at: '2026-10-31T00:00:00.000Z' });
   }
   const ids = first.runs.map((run: any) => run.id);
@@ -44,8 +44,8 @@ try {
   assert.equal(new Set(ids).size, ids.length, 'ties/concurrent arrival cannot duplicate records');
   assert.equal(ids.length, reopened ? 1006 : 1005);
   assert.ok(ids.includes('run-history-0000') && ids.includes('run-history-1004'), 'history beyond old UI cap stays discoverable');
-  assert.equal(engine.getV1Run('run-history-0001')!.country, 'Sudan');
-  assert.equal(engine.getV1Run('run-history-0000')!.country, 'South Sudan');
+  assert.equal((await engine.getV1Run('run-history-0001'))!.country, 'Sudan');
+  assert.equal((await engine.getV1Run('run-history-0000'))!.country, 'South Sudan');
   for (const limit of [0, -1, 201, 0.5, NaN, Infinity]) assert.throws(() => page(limit), /HISTORY_PAGE_INVALID/);
   for (const value of ['../escape', 'A'.repeat(2049), 'e30', [], 4, '']) {
     if (value !== '') assert.throws(() => page(50, value), /HISTORY_PAGE_INVALID/);

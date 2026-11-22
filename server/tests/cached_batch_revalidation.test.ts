@@ -54,10 +54,10 @@ try {
   const row = await database.get('SELECT run_id, overlay_json, updated_at FROM v1_contact_enrichment WHERE company_id = ?', [contact.id]);
   assert.equal(JSON.parse(row.overlay_json).entity_key, canonicalEntityIdentityKey(contact.company_name, contact.country));
   const originalSave = database.saveContactOverlayDurably.bind(database);
-  const previousRun = getV1Run('run-revalidate')!;
+  const previousRun = (await getV1Run('run-revalidate'))!;
   persistV1Run({ ...previousRun, id: 'run-revalidate-later', started_at: '2026-02-01T00:00:00Z',
     results: [{ ...previousRun.results[0], id: 'new-local-contact', run_id: 'run-revalidate-later', url: 'https://scopeanchor.test/kenya-later', text: 'Kenya office\nnew@scopeanchor.test' }] });
-  assert.ok(projectHistoricalContactFields(previousRun).emails_list.includes('new@scopeanchor.test'), 'failed-write candidate must differ from the existing overlay, or rollback assertion could be vacuous');
+  assert.ok((await projectHistoricalContactFields(previousRun)).emails_list.includes('new@scopeanchor.test'), 'failed-write candidate must differ from the existing overlay, or rollback assertion could be vacuous');
   let deniedWrites = 0;
   contact.research_validation_status = 'needs_revalidation';
   contact.email = 'dataset-seed@scopeanchor.test';

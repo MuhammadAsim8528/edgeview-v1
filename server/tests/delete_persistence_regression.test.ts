@@ -1,21 +1,32 @@
-import { db } from '../db';
-import { loadAllFilesFromDb, deleteFileFromHistory, saveFileToDb, computeFileHash } from '../sqlite_persistence';
-import { computeSummary } from '../summary';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-function assert(condition: boolean, msg: string) {
-  if (!condition) {
-    throw new Error(`Delete & File Lookup Regression Test Failed: ${msg}`);
-  }
-}
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-delete-persistence-'));
+process.env.EDGEVIEW_TEST_MODE = '1';
+process.env.EDGEVIEW_TEST_DB_DIR = scratch;
+process.env.EDGEVIEW_SQLITE_DB = path.join(scratch, 'operational.db');
+const jsonPath = path.join(scratch, 'dataset.json'), configPath = path.join(scratch, 'config.json');
+process.env.EDGEVIEW_JSON_DB = jsonPath;
+process.env.EDGEVIEW_CONFIG = configPath;
+process.env.EDGEVIEW_V1_DATA_DIR = path.join(scratch, 'runs');
+process.env.EDGEVIEW_MONITORING_ENABLED = '0';
+fs.writeFileSync(jsonPath, '[]');
+fs.writeFileSync(configPath, '{}');
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+// Runtime paths must be selected before any application module is imported.
+const { db } = await import('../db');
+const { loadAllFilesFromDb, deleteFileFromHistory, saveFileToDb, computeFileHash } = await import('../sqlite_persistence');
+const { flushInitializedDatabase, resetDbInstanceForTests } = await import('../sqlite');
+const { computeSummary } = await import('../summary');
 
 async function runDeletePersistenceRegressionTest() {
-  console.log('--- RUNNING DELETE PERSISTENCE & FILE LOOKUP REGRESSION TEST ---');
-
   const fileId = `file-delreg-${Date.now()}`;
+  const rows = [
+    { Importer: 'Synthetic ImpA', Exporter: 'Synthetic ExpA', Item: 'Drug A', Country: 'Pakistan' },
+    { Importer: 'Synthetic ImpB', Exporter: 'Synthetic ExpB', Item: 'Drug B', Country: 'Pakistan' },
+  ];
   const fileRecord = {
     id: fileId,
     name: 'delete_regression_test.csv',
@@ -23,57 +34,36 @@ async function runDeletePersistenceRegressionTest() {
     size: 100,
     upload_time: new Date().toISOString(),
     columns: ['Importer', 'Exporter', 'Item', 'Country'],
-    rows: [
-      { Importer: 'ImpA', Exporter: 'ExpA', Item: 'Drug A', Country: 'Pakistan' },
-      { Importer: 'ImpB', Exporter: 'ExpB', Item: 'Drug B', Country: 'Pakistan' },
-    ],
-    summary: computeSummary(
-      ['Importer', 'Exporter', 'Item', 'Country'],
-      [
-        { Importer: 'ImpA', Exporter: 'ExpA', Item: 'Drug A', Country: 'Pakistan' },
-        { Importer: 'ImpB', Exporter: 'ExpB', Item: 'Drug B', Country: 'Pakistan' },
-      ]
-    ),
+    rows,
+    summary: computeSummary(['Importer', 'Exporter', 'Item', 'Country'], rows),
   };
+  try {
+    const hash = computeFileHash(Buffer.from(JSON.stringify(fileRecord.rows)));
+    await saveFileToDb(fileRecord as any, hash, 'real');
+    let loaded = await loadAllFilesFromDb();
+    assert.ok(loaded.some(file => file.id === fileId), 'owned saved file must be loadable from the isolated DB');
 
-  // Phase 1: Save to disk DB, load back, verify present
-  const hash = computeFileHash(Buffer.from(JSON.stringify(fileRecord.rows)));
-  await saveFileToDb(fileRecord as any, hash, 'real');
-  await sleep(150);
+    db.files.set(fileId, fileRecord as any);
+    assert.equal(db.getFileById(fileId)?.id, fileId, 'the owned known-id control must resolve independently of sample data');
+    assert.equal(db.getFileById('file-does-not-exist-xyz'), undefined, 'unknown id must not fall back to another file');
 
-  let loaded = await loadAllFilesFromDb();
-  assert(loaded.some((f) => f.id === fileId), 'Saved file must be loadable from disk DB');
-  console.log(`   ✅ [Phase 1] File persisted to disk DB (found ${loaded.length} total records).`);
-
-  // Phase 2: getFileById returns undefined for unknown / typo'd ids (no wrong-file 200)
-  const unknown = db.getFileById('file-does-not-exist-xyz');
-  assert(unknown === undefined, 'Unknown id must return undefined (so routes 404), got: ' + JSON.stringify(unknown?.name));
-  console.log('   ✅ [Phase 2] getFileById returns undefined for unknown id (no wrong-file fallback).');
-
-  const deletedSampleLookup = db.getFileById('file-sample-csv-1');
-  console.log(`   ℹ️  sample lookup (present in seed) -> ${deletedSampleLookup?.name || 'undefined'}`);
-  assert(deletedSampleLookup !== undefined, 'Existing seeded sample should still resolve');
-
-  // Phase 3: deleteFileFromHistory removes the record from disk DB
-  const deleted = await deleteFileFromHistory(fileId);
-  assert(deleted === true, 'deleteFileFromHistory must return true when a record was removed');
-  await sleep(150);
-
-  loaded = await loadAllFilesFromDb();
-  assert(!loaded.some((f) => f.id === fileId), 'Deleted file must NOT be present in disk DB after delete');
-  console.log(`   ✅ [Phase 3] deleteFileFromHistory removed record from disk DB (${loaded.length} records remain).`);
-
-  // Phase 4: deleting an already-deleted id returns false and is a no-op
-  const deletedAgain = await deleteFileFromHistory(fileId);
-  assert(deletedAgain === false, 'Second delete of same id must return false (no-op)');
-  console.log('   ✅ [Phase 4] Idempotent delete confirmed (second delete is a no-op).');
-
-  // Cleanup: in-memory only
-  db.files.delete(fileId);
-  console.log('\n✅ DELETE PERSISTENCE & FILE LOOKUP REGRESSION PASSED 100%.');
+    const deleted = await deleteFileFromHistory(fileId);
+    assert.equal(deleted, true, 'deleteFileFromHistory must report removal of the owned record');
+    loaded = await loadAllFilesFromDb();
+    assert.equal(loaded.some(file => file.id === fileId), false, 'deleted file must be absent from the isolated DB');
+    assert.equal(await deleteFileFromHistory(fileId), false, 'second delete must be a no-op');
+    console.log('PASS isolated delete persistence and known/unknown file lookup; no seeded sample assumption');
+  } finally {
+    db.files.delete(fileId);
+  }
 }
 
-runDeletePersistenceRegressionTest().catch((err) => {
-  console.error('❌ Delete persistence regression test failed:', err);
-  process.exit(1);
+runDeletePersistenceRegressionTest().catch(error => {
+  console.error('Delete persistence regression failed:', error instanceof Error ? error.message : 'unknown failure');
+  process.exitCode = 1;
+}).finally(async () => {
+  await flushInitializedDatabase();
+  resetDbInstanceForTests();
+  assert.equal(path.dirname(fs.realpathSync(scratch)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(scratch, { recursive: true, force: true });
 });

@@ -1,7 +1,139 @@
 import PDFDocument from 'pdfkit';
-import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
+import fs from 'node:fs';
+import path from 'node:path';
+import { cleanMarkdown, formatReportSource, type ReportCompanyContact } from './docx_report';
 import { buildContactReport, getReportColumnLabels, getReportTitle, type NormalizedImporterReport, type TradeIndex, type ContactReport } from './contact_report_model';
 import { getInternationalImporterDirectory, type InternationalImporterDirectory, type InternationalImporterRow } from './international_importer_directory';
+
+type PdfFontStyle = 'regular' | 'bold' | 'italic' | 'boldItalic';
+
+interface FontCandidate {
+  styles: Partial<Record<PdfFontStyle, string>>;
+  family?: string;
+}
+
+interface LoadedFontFamily {
+  aliases: Partial<Record<PdfFontStyle, string>>;
+  supports: (text: string) => boolean;
+}
+
+// These are fixed OS font faces, never request-supplied paths. The fonts are not
+// copied into the application; PDFKit embeds a subset only when the font's OS/2
+// embedding permissions allow it. Other platforms retain built-in fonts for
+// ASCII and fail explicitly for text that would otherwise lose characters.
+const WINDOWS_UNICODE_FONTS: FontCandidate[] = [
+  { styles: { regular: 'arial.ttf', bold: 'arialbd.ttf', italic: 'ariali.ttf', boldItalic: 'arialbi.ttf' } },
+  { styles: { regular: 'tahoma.ttf', bold: 'tahomabd.ttf' } },
+  { styles: { regular: 'simsun.ttc' }, family: 'SimSun' },
+];
+
+export interface PdfFontRegistry {
+  resolve: (requested: string, text?: string) => string;
+}
+
+function safeWindowsFontPath(filename: string): string | undefined {
+  if (process.platform !== 'win32' || !/^[a-z0-9.-]+\.(?:ttf|ttc)$/i.test(filename)) return undefined;
+  try {
+    const root = path.win32.resolve(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'Fonts');
+    const candidate = path.win32.resolve(root, filename);
+    if (path.win32.dirname(candidate).toLowerCase() !== root.toLowerCase()) return undefined;
+    const realRoot = fs.realpathSync(root);
+    const realCandidate = fs.realpathSync(candidate);
+    const relative = path.win32.relative(realRoot, realCandidate);
+    if (!relative || relative.startsWith('..') || path.win32.isAbsolute(relative) || !fs.statSync(realCandidate).isFile()) return undefined;
+    return realCandidate;
+  } catch {
+    return undefined;
+  }
+}
+
+function unicodeError(): Error {
+  const error = new Error(
+    'PDF export cannot preserve this Unicode text with a permitted embedded font. ' +
+    'Use a system with a permitted Unicode font, or export CSV/XLSX instead.'
+  );
+  error.name = 'PDF_UNICODE_FONT_UNAVAILABLE';
+  return error;
+}
+
+/**
+ * Resolves built-in font names to embeddable fonts on demand. Coverage is checked
+ * for every non-ASCII text run; mixed runs with no single covering font fail
+ * truthfully instead of being written with .notdef glyphs.
+ */
+const WIN_ANSI_EXTRA = new Set([
+  402, 8211, 8212, 8216, 8217, 8218, 8220, 8221, 8222, 8224, 8225, 8226,
+  8230, 8364, 8240, 8249, 8250, 710, 8482, 338, 339, 732, 352, 353, 376, 381, 382,
+]);
+
+function isWinAnsi(text: string): boolean {
+  return Array.from(text).every((char) => {
+    const cp = char.codePointAt(0)!;
+    return cp === 0x09 || cp === 0x0a || cp === 0x0d ||
+      (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || WIN_ANSI_EXTRA.has(cp);
+  });
+}
+
+export function createPdfFontRegistry(doc: InstanceType<typeof PDFDocument>): PdfFontRegistry {
+  let families: LoadedFontFamily[] | undefined;
+
+  const loadFamilies = (): LoadedFontFamily[] => {
+    if (families) return families;
+    families = [];
+    WINDOWS_UNICODE_FONTS.forEach((candidate, familyIndex) => {
+      const aliases: Partial<Record<PdfFontStyle, string>> = {};
+      let font: any;
+      for (const style of ['regular', 'bold', 'italic', 'boldItalic'] as const) {
+        const filename = candidate.styles[style];
+        if (!filename) continue;
+        const fontPath = safeWindowsFontPath(filename);
+        if (!fontPath) continue;
+        const alias = `EdgeViewUnicode${familyIndex}${style}`;
+        try {
+          doc.registerFont(alias, fontPath, candidate.family);
+          doc.font(alias);
+          const loaded = (doc as any)._font?.font;
+          const permissions = loaded?.['OS/2']?.fsType;
+          if (!loaded || typeof loaded.hasGlyphForCodePoint !== 'function' || !permissions ||
+              permissions.noEmbedding || permissions.noSubsetting || permissions.bitmapOnly) continue;
+          aliases[style] = alias;
+          if (style === 'regular') font = loaded;
+        } catch {
+          // An unavailable face falls back to the regular face or another family.
+        }
+      }
+      if (font && aliases.regular) {
+        families!.push({
+          aliases,
+          supports: (text: string) => Array.from(text).every((char) => {
+            const cp = char.codePointAt(0)!;
+            return cp === 0x09 || cp === 0x0a || cp === 0x0d || font.hasGlyphForCodePoint(cp);
+          }),
+        });
+      }
+    });
+    return families;
+  };
+
+  return {
+    resolve(requested: string, text = ''): string {
+      // Keep extractable built-in fonts for characters PDFKit can really encode;
+      // every non-WinAnsi run requires a permitted embedded Unicode font.
+      if (/^[\u0009\u000a\u000d\u0020-\u007e]*$/.test(text)) return requested;
+      if (isWinAnsi(text)) return requested;
+      const style: PdfFontStyle = requested.includes('BoldOblique') ? 'boldItalic'
+        : requested.includes('Bold') ? 'bold'
+        : requested.includes('Oblique') || requested.includes('Italic') ? 'italic'
+        : 'regular';
+      for (const family of loadFamilies()) {
+        if (!family.supports(text)) continue;
+        const alias = family.aliases[style] ?? family.aliases.regular;
+        if (alias) return alias;
+      }
+      throw unicodeError();
+    },
+  };
+}
 
 interface PDFCellLine {
   text: string;
@@ -40,6 +172,7 @@ export async function generatePdfReport(
         autoFirstPage: true,
       });
 
+      const fontRegistry = createPdfFontRegistry(doc);
       const buffers: Buffer[] = [];
       doc.on('data', (chunk) => buffers.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -72,7 +205,7 @@ export async function generatePdfReport(
            .rect(MARGIN, MARGIN - 18, CONTENT_WIDTH, 26)
            .stroke();
         doc.fillColor('#0F172A')
-           .font('Helvetica-Bold')
+           .font(fontRegistry.resolve('Helvetica-Bold', reportTitle))
            .fontSize(9)
            .text(reportTitle, MARGIN, MARGIN - 10, {
              width: CONTENT_WIDTH,
@@ -99,7 +232,7 @@ export async function generatePdfReport(
 
       // Big document title on first page
       doc.fillColor('#0284C7')
-         .font('Helvetica-Bold')
+         .font(fontRegistry.resolve('Helvetica-Bold', reportTitle))
          .fontSize(14)
          .text(reportTitle, MARGIN, currentY, { align: 'center' });
       currentY += 28;
@@ -109,7 +242,7 @@ export async function generatePdfReport(
         const words = String(text).split(/\s+/).filter(Boolean);
         const lines: string[] = [];
         let current = '';
-        const measure = (t: string) => doc.font(font).fontSize(size).widthOfString(t);
+        const measure = (t: string) => doc.font(fontRegistry.resolve(font, t)).fontSize(size).widthOfString(t);
         for (const word of words) {
           const candidate = current ? `${current} ${word}` : word;
           if (measure(candidate) <= width) {
@@ -143,13 +276,13 @@ export async function generatePdfReport(
         return lines;
       };
 
-      const lineHeight = (font: string, size: number): number => {
-        doc.font(font).fontSize(size);
+      const lineHeight = (font: string, size: number, text = 'Ag'): number => {
+        doc.font(fontRegistry.resolve(font, text)).fontSize(size);
         return doc.heightOfString('Ag', { width: 200 });
       };
 
       const toLines = (text: string, width: number, font: string, size: number, color: string, align?: 'left' | 'center' | 'right'): PDFCellLine[] => {
-        const h = lineHeight(font, size);
+        const h = lineHeight(font, size, text);
         return wrapLines(text, width - PADDING * 2, font, size).map((t) => ({
           text: t,
           font,
@@ -177,7 +310,8 @@ export async function generatePdfReport(
           ['Contact Information & Address', COLS.contactInfo.x, COLS.contactInfo.w, 'left'],
         ];
         headers.forEach(([text, x, w, align]) => {
-          doc.text(text, x + PADDING, startY + 6, { width: w - PADDING * 2, align });
+          doc.font(fontRegistry.resolve('Helvetica-Bold', text))
+             .text(text, x + PADDING, startY + 6, { width: w - PADDING * 2, align });
         });
 
         doc.lineWidth(0.5)
@@ -188,7 +322,7 @@ export async function generatePdfReport(
       };
 
       const drawLineAt = (line: PDFCellLine, x: number, w: number, y: number) => {
-        doc.font(line.font)
+        doc.font(fontRegistry.resolve(line.font, line.text))
            .fontSize(line.size)
            .fillColor(line.color)
            .text(line.text, x + PADDING, y, { width: w - PADDING * 2, align: line.align || 'left' });
@@ -274,7 +408,7 @@ export async function generatePdfReport(
           col4.push(...toLines(`Socials: ${socials.join(' | ')}`, COLS.contactInfo.w, 'Helvetica', 7, '#334155'));
         }
         if (ci.sources.length > 0) {
-          col4.push(...toLines(`Sources: ${ci.sources.map((s) => stripMd(s.url)).join('; ')}`, COLS.contactInfo.w, 'Helvetica', 6, '#64748B'));
+          col4.push(...toLines(`Sources: ${ci.sources.map(formatReportSource).join('; ')}`, COLS.contactInfo.w, 'Helvetica', 6, '#64748B'));
         }
 
         return [
@@ -292,7 +426,7 @@ export async function generatePdfReport(
         const cursors = [0, 0, 0, 0, 0];
         let firstSeg = true;
         const contName = stripMd(imp.companyName).toUpperCase();
-        const contH = lineHeight('Helvetica-Bold', 7);
+        const contH = lineHeight('Helvetica-Bold', 7, contName);
 
         const drawVerticalGrid = (y: number, h: number) => {
           doc.lineWidth(0.5).strokeColor('#CBD5E1');
@@ -332,7 +466,7 @@ export async function generatePdfReport(
             let y = currentY;
             if (ci === 1 && !firstSeg) {
               const label = `${contName} (continued)`;
-              doc.font('Helvetica-Bold').fontSize(7).fillColor('#0F172A')
+              doc.font(fontRegistry.resolve('Helvetica-Bold', label)).fontSize(7).fillColor('#0F172A')
                  .text(label, cols[1].x + PADDING, y, { width: cols[1].w - PADDING * 2 });
               used[1] += contH;
               y += contH;
@@ -392,7 +526,7 @@ export async function generatePdfReport(
         }
 
         doc.fillColor('#0F172A')
-           .font('Helvetica-Bold')
+           .font(fontRegistry.resolve('Helvetica-Bold', section.country.toUpperCase()))
            .fontSize(11)
            .text(section.country.toUpperCase(), MARGIN, currentY + 4);
         currentY += 24;
@@ -451,6 +585,7 @@ export async function generateInternationalImporterDirectoryPdf(
         autoFirstPage: true,
       });
 
+      const fontRegistry = createPdfFontRegistry(doc);
       const buffers: Buffer[] = [];
       doc.on('data', (chunk) => buffers.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -474,15 +609,11 @@ export async function generateInternationalImporterDirectoryPdf(
            .strokeColor('#CBD5E1')
            .rect(MARGIN, MARGIN - 18, CONTENT_WIDTH, 26)
            .stroke();
+        const headerText = `EDGEVIEW — INTERNATIONAL IMPORTER DIRECTORY / Country: ${activeCountry || ''}${continued ? ' — Continued' : ''}`;
         doc.fillColor('#0F172A')
-           .font('Helvetica-Bold')
+           .font(fontRegistry.resolve('Helvetica-Bold', headerText))
            .fontSize(9)
-           .text(
-             `EDGEVIEW — INTERNATIONAL IMPORTER DIRECTORY / Country: ${activeCountry || ''}${continued ? ' — Continued' : ''}`,
-             MARGIN,
-             MARGIN - 10,
-             { width: CONTENT_WIDTH, align: 'center' }
-           );
+           .text(headerText, MARGIN, MARGIN - 10, { width: CONTENT_WIDTH, align: 'center' });
         doc.y = MARGIN + 25;
       };
 
@@ -502,7 +633,7 @@ export async function generateInternationalImporterDirectoryPdf(
         const words = String(text).split(/\s+/).filter(Boolean);
         const lines: string[] = [];
         let current = '';
-        const measure = (t: string) => doc.font(font).fontSize(size).widthOfString(t);
+        const measure = (t: string) => doc.font(fontRegistry.resolve(font, t)).fontSize(size).widthOfString(t);
         for (const word of words) {
           const candidate = current ? `${current} ${word}` : word;
           if (measure(candidate) <= width) {
@@ -523,8 +654,8 @@ export async function generateInternationalImporterDirectoryPdf(
         return lines;
       };
 
-      const lineHeight = (font: string, size: number): number => {
-        doc.font(font).fontSize(size);
+      const lineHeight = (font: string, size: number, text = 'Ag'): number => {
+        doc.font(fontRegistry.resolve(font, text)).fontSize(size);
         return doc.heightOfString('Ag', { width: 200 });
       };
 
@@ -534,7 +665,7 @@ export async function generateInternationalImporterDirectoryPdf(
 
       // Big document title on first page.
       doc.fillColor('#0284C7')
-         .font('Helvetica-Bold')
+         .font(fontRegistry.resolve('Helvetica-Bold', directory.title))
          .fontSize(13)
          .text(directory.title, MARGIN, currentY, { align: 'center' });
       currentY += 28;
@@ -564,10 +695,11 @@ export async function generateInternationalImporterDirectoryPdf(
            .strokeColor('#0284C7')
            .rect(MARGIN, currentY, CONTENT_WIDTH, 18)
            .stroke();
+        const sectionHeading = `INTERNATIONAL IMPORTERS — ${section.country.toUpperCase()}`;
         doc.fillColor('#0F172A')
-           .font('Helvetica-Bold')
+           .font(fontRegistry.resolve('Helvetica-Bold', sectionHeading))
            .fontSize(10)
-           .text(`INTERNATIONAL IMPORTERS — ${section.country.toUpperCase()}`, MARGIN + 6, currentY + 4);
+           .text(sectionHeading, MARGIN + 6, currentY + 4);
         currentY += headingH;
 
         for (const imp of section.importers) {
@@ -611,7 +743,7 @@ export async function generateInternationalImporterDirectoryPdf(
             if (line.beforeSpace) currentY += line.beforeSpace;
             const indent = line.indent || 0;
             const wrapped = wrapLines(line.text, CONTENT_WIDTH - indent - PADDING * 2, line.font, line.size);
-            const h = lineHeight(line.font, line.size);
+            const h = lineHeight(line.font, line.size, line.text);
             for (const w of wrapped) {
               if (currentY + h > BOTTOM) {
                 doc.addPage();
@@ -619,16 +751,17 @@ export async function generateInternationalImporterDirectoryPdf(
                 addPageHeader(true);
                 addPageFooter();
                 currentY = doc.y;
+                const continuedText = `${section.country.toUpperCase()} — continued`;
                 doc.fillColor('#64748B')
-                   .font('Helvetica-Oblique')
+                   .font(fontRegistry.resolve('Helvetica-Oblique', continuedText))
                    .fontSize(6.5)
-                   .text(`${section.country.toUpperCase()} — continued`, MARGIN, currentY, {
+                   .text(continuedText, MARGIN, currentY, {
                      width: CONTENT_WIDTH,
                      align: 'right',
                    });
                 currentY += 10;
               }
-              doc.font(line.font).fontSize(line.size).fillColor(line.color).text(w, MARGIN + indent + PADDING, currentY, {
+              doc.font(fontRegistry.resolve(line.font, w)).fontSize(line.size).fillColor(line.color).text(w, MARGIN + indent + PADDING, currentY, {
                 width: CONTENT_WIDTH - indent - PADDING * 2,
               });
               currentY += h;

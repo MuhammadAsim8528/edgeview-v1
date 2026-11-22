@@ -10,6 +10,7 @@
 
 import * as assert from 'assert';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
@@ -36,8 +37,7 @@ import {
 import { processExportRequest } from '../export_manager';
 import { countPdfPages, extractPdfText, pdfTextContains } from './pdf_inspect';
 
-const SCRATCH = 'C:/Users/asimh/AppData/Local/Temp/opencode/edgeview_tests';
-fs.mkdirSync(SCRATCH, { recursive: true });
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-international-directory-'));
 
 const fixture: any[] = [
   // Pakistan importer → must be excluded.
@@ -411,7 +411,11 @@ async function main() {
   console.log('international_importer_directory OK');
 }
 
-main().catch((err) => {
+main().finally(() => {
+  db.files.delete('trade-index-international');
+  assert.equal(path.dirname(fs.realpathSync(SCRATCH)), fs.realpathSync(os.tmpdir()));
+  fs.rmSync(SCRATCH, { recursive: true, force: true });
+}).catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });

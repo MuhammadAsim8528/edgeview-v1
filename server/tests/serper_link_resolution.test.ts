@@ -56,9 +56,9 @@ try{
    assert.ok(run.raw_records.filter(record=>record.provider==='serper-resolve').every(record=>record.failure));
    assert.ok(!getV1EngineDiagnostics().suppressed_providers.some(item=>item.provider==='serper'),'independent resolver quota must not disable search');
    if(mode==='partial')assert.ok(run.raw_records.some(record=>(record.response as any)?.retryAfter===30));
-   if(mode==='opaque-only-fail'){assert.equal(run.status,'FAILED','unusable opaque links are not successful empty search');assert.equal(projectHistoricalContactFields(run).quality_status,'FAILED','transport failure cannot certify absence of a company');}
+   if(mode==='opaque-only-fail'){assert.equal(run.status,'FAILED','unusable opaque links are not successful empty search');assert.equal((await projectHistoricalContactFields(run)).quality_status,'FAILED','transport failure cannot certify absence of a company');}
   }
-  assert.deepEqual(getV1Run(run.id),JSON.parse(JSON.stringify(run)),'original/resolved captures survive actual immutable storage');
+  assert.deepEqual(await getV1Run(run.id),JSON.parse(JSON.stringify(run)),'original/resolved captures survive actual immutable storage');
  }
  console.log('PASS actual V1 Serper deferred fixed-endpoint resolution, two-worker bound, provenance, no-key capture, real-link preservation, quota/malformed/private/partial abstention and storage; synthetic provider responses');
 }finally{restoreTransport();global.fetch=nativeFetch;assert.equal(path.dirname(fs.realpathSync(root)),fs.realpathSync(os.tmpdir()));fs.rmSync(root,{recursive:true,force:true});}

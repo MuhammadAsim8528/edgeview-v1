@@ -4,6 +4,8 @@ import { getHistoryFilesFromDb, deleteFileFromHistory, archivedFileRows } from '
 import { hasTradeParties } from '../shared/dataset_columns';
 import { getSafeContentDisposition } from './utils/header_encoder';
 import { hasUnattributedHistory, HISTORY_RECONCILIATION_REQUIRED } from './history_ownership';
+import { standardizeDate } from './parsers';
+import { parseTradeNumeric } from './value_normalization';
 
 export const statsRouter = Router();
 
@@ -29,7 +31,15 @@ function sanitizeCSVValue(val: any): string {
   if (/^[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
-  return str;
+  return str.replace(/"/g, '""');
+}
+
+function tradeNumericOrZero(...values: unknown[]): number {
+  for (const value of values) {
+    const parsed = parseTradeNumeric(value);
+    if (parsed !== null) return parsed;
+  }
+  return 0;
 }
 
 function normalizeCountry(val: any): string {
@@ -54,18 +64,10 @@ export function extractRowData(row: Record<string, any>) {
   const invoiceNo = row.LC_NO || row.BE_LINK || row.BE_NO || row.Invoice || row.INVOICE || row.INVOICE_NO || row.be_no || row.be_link || row.lc_no || row.Bill_No || 'N/A';
   const hsCode = row.HS_CODE || row.hs_code || row.HSCode || row.hscode || '';
 
-  const fcVal = row['Total Value (USD)'] || row['Total FC (USD)'] || row.TOT_FC || row.VAL_USD || row.total_cost_usd || row.AMOUNT || 0;
-  const total_value = typeof fcVal === 'number' ? fcVal : (parseFloat(String(fcVal)) || 0);
-
-  const qtyVal = row.QTY || row.qty || row.Qty || row.QUANTITY || row.GROSS || row.NET || 0;
-  const quantity = typeof qtyVal === 'number' ? qtyVal : (parseFloat(String(qtyVal)) || 0);
-
+  const total_value = tradeNumericOrZero(row['Total Value (USD)'], row['Total FC (USD)'], row.TOT_FC, row.VAL_USD, row.total_cost_usd, row.AMOUNT);
+  const quantity = tradeNumericOrZero(row.QTY, row.qty, row.Qty, row.QUANTITY, row.GROSS, row.NET);
   const unit = row.UNT || row.unit || row.UNIT || row.UOM || row.qty_unit || 'KG';
-
-  let dStr = String(dateVal).trim();
-  if (dStr.length === 8 && /^\d+$/.test(dStr)) {
-    dStr = `${dStr.slice(0, 4)}-${dStr.slice(4, 6)}-${dStr.slice(6)}`;
-  }
+  const dStr = standardizeDate(dateVal);
 
   return {
     country: normalizeCountry(country),
@@ -97,11 +99,13 @@ function getAllDatasetRows(fileId?: string) {
 }
 
 function filterByDate(rows: ReturnType<typeof extractRowData>[], start?: string, end?: string) {
-  if (!start && !end) return rows;
+  const normalizedStart = start ? standardizeDate(start) : '';
+  const normalizedEnd = end ? standardizeDate(end) : '';
+  if (!normalizedStart && !normalizedEnd) return rows;
   return rows.filter((r) => {
     if (!r.date) return true;
-    if (start && r.date < start) return false;
-    if (end && r.date > end) return false;
+    if (normalizedStart && r.date < normalizedStart) return false;
+    if (normalizedEnd && r.date > normalizedEnd) return false;
     return true;
   });
 }
@@ -117,7 +121,7 @@ statsRouter.get('/summary', (req: Request, res: Response) => {
 
   for (const r of rows) {
     if (r.country && r.country !== 'Unknown') countries.add(r.country);
-    if (r.importer && r.importer !== 'Unknown Importer') companies.add(r.importer);
+    if (r.importer && r.importer !== 'Unknown Importer') companies.add(`${r.country.toLowerCase()}\0${r.importer.toLowerCase()}`);
     totalValue += r.total_value;
   }
 
@@ -534,38 +538,59 @@ statsRouter.delete('/history-files/:id', async (req: Request, res: Response) => 
     const fileName = fileInMem?.name ?? (await getHistoryFilesFromDb()).find(file => file.id === fileId)?.file_name;
     if (!fileName) return res.status(404).json({ success: false, code: 'FILE_NOT_FOUND', message: 'File not found.' });
     if (await hasUnattributedHistory(fileName)) return res.status(409).json(HISTORY_RECONCILIATION_REQUIRED);
-    const deletedFromDisk = await deleteFileFromHistory(fileId);
-    let historyCleanupError: string | null = null;
-
-    // Purge the file's shipment rows and flush the derived index before making
-    // a full-cleanup claim. The primary JSON deletion above is already durable.
+    // Derived history is purged first. If this step fails, the primary record
+    // and its name remain available so the same delete request can be retried.
     try {
       const { getDb } = await import('./sqlite');
       const sqliteDb = await getDb();
-      if (fileName && fileName !== 'Uploaded file') {
-        await sqliteDb.run('DELETE FROM history_data WHERE file_id = ?', [fileId]);
-        await sqliteDb.flush();
-      }
-    } catch (sqlErr: any) {
-      historyCleanupError = String(sqlErr?.message || sqlErr);
+      await sqliteDb.run('DELETE FROM history_data WHERE file_id = ?', [fileId]);
+      await sqliteDb.flush();
+    } catch (sqlErr) {
       console.warn('Failed to durably purge history_data rows during delete:', sqlErr);
+      return res.status(503).json({
+        success: false,
+        code: 'HISTORY_CLEANUP_FAILED',
+        message: `File "${fileName}" was not deleted because associated history cleanup failed. Retry deletion.`,
+        recoverable: true,
+        retryable: true,
+        deleted: false,
+      });
     }
 
+    let deletedFromDisk: boolean;
+    try {
+      deletedFromDisk = await deleteFileFromHistory(fileId);
+    } catch (primaryErr) {
+      console.error('Failed to delete primary history record after derived cleanup:', primaryErr);
+      return res.status(500).json({
+        success: false,
+        partial: true,
+        code: 'PRIMARY_FILE_DELETE_FAILED',
+        message: `Associated history was removed, but file "${fileName}" could not be deleted. Retry deletion.`,
+        recoverable: true,
+        retryable: true,
+        deleted: false,
+      });
+    }
     db.files.delete(fileId);
 
     // Re-sync company contacts and prune contacts that no longer have a
     // source file so stale companies do not persist until restart.
-    db.syncCompaniesFromFiles();
-    db.pruneOrphanedContacts();
-
-    if (historyCleanupError) {
+    try {
+      db.syncCompaniesFromFiles();
+      db.pruneOrphanedContacts();
+    } catch (projectionErr) {
+      console.warn('Company projection refresh warning during delete:', projectionErr);
       return res.status(207).json({
         success: true,
         partial: true,
-        message: `File "${fileName}" was deleted durably, but derived history cleanup needs retry.`,
+        code: 'FILE_DELETED_PROJECTION_REFRESH_FAILED',
+        message: `File "${fileName}" was permanently deleted, but the current company projection needs to be reloaded.`,
+        recoverable: true,
+        retryable: false,
+        remediation: 'Reload the file and company views. The deleted file does not need to be deleted again.',
         deleted_id: fileId,
         persisted: deletedFromDisk,
-        warning: historyCleanupError,
       });
     }
     return res.json({

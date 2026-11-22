@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { ensureDependencies, nodeVersionSupported, assertSupportedNode, NODE_RANGE } from './ensure-dependencies.mjs';
+import { ensureDependencies, nodeVersionSupported, assertSupportedNode, NODE_RANGE, lockedDependencyClosure, productionLockIntegrityGaps } from './ensure-dependencies.mjs';
 
 // These cases include versions accepted by the old Vite-only guard but rejected
 // by the actual locked monitoring/development toolchain. Prereleases abstain.
@@ -22,19 +22,45 @@ assert.throws(() => assertSupportedNode('20.18.3'), (err) => {
   return true;
 });
 
+const integrityFixture = { lockfileVersion: 3, packages: {
+  '': { dependencies: { parent: '1.0.0' } },
+  'node_modules/parent': { version: '1.0.0', dependencies: { child: '1.0.0' } },
+  'node_modules/child': { version: '1.0.0' },
+} };
+assert.deepEqual([...lockedDependencyClosure(integrityFixture).keys()], ['node_modules/parent', 'node_modules/child']);
+assert.deepEqual(productionLockIntegrityGaps(integrityFixture), ['node_modules/parent', 'node_modules/child']);
+for (const item of Object.values(integrityFixture.packages)) {
+  if (item.version) Object.assign(item, { resolved: `https://registry.npmjs.org/fixture/-/fixture-${item.version}.tgz`, integrity: 'sha512-synthetic' });
+}
+assert.deepEqual(productionLockIntegrityGaps(integrityFixture), []);
+const nestedFixture = structuredClone(integrityFixture);
+nestedFixture.packages['node_modules/parent'].dependencies.child = '2.0.0';
+nestedFixture.packages['node_modules/parent/node_modules/child'] = { version: '2.0.0', resolved: 'https://registry.npmjs.org/child/-/child-2.0.0.tgz', integrity: 'sha512-nested' };
+assert.ok(lockedDependencyClosure(nestedFixture).has('node_modules/parent/node_modules/child'), 'nested dependency resolution must precede the root version');
+const incomplete = structuredClone(nestedFixture);
+delete incomplete.packages['node_modules/parent/node_modules/child'];
+delete incomplete.packages['node_modules/child'];
+assert.throws(() => lockedDependencyClosure(incomplete), /DEPENDENCY_LOCK_INCOMPLETE/);
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-install-recovery-'));
 const marker = path.join(root, 'node_modules', '.edgeview-install.json');
 let installs = 0;
 const write = (name, value) => fs.writeFileSync(path.join(root, name), JSON.stringify(value));
 const install = () => {
   installs++;
-  fs.mkdirSync(path.join(root, 'node_modules', 'fixture'), { recursive: true });
-  write('node_modules/fixture/package.json', { version: '1.0.0' });
+  for (const name of ['fixture', 'child']) {
+    fs.mkdirSync(path.join(root, 'node_modules', name), { recursive: true });
+    write(`node_modules/${name}/package.json`, { version: '1.0.0' });
+  }
   return { status: 0 };
 };
 try {
   write('package.json', { dependencies: { fixture: '1.0.0' } });
-  write('package-lock.json', { packages: { 'node_modules/fixture': { version: '1.0.0' } } });
+  write('package-lock.json', { lockfileVersion: 3, packages: {
+    '': { dependencies: { fixture: '1.0.0' } },
+    'node_modules/fixture': { version: '1.0.0', dependencies: { child: '1.0.0' } },
+    'node_modules/child': { version: '1.0.0' },
+  } });
   fs.mkdirSync(path.join(root, 'node_modules'));
   assert.throws(() => ensureDependencies(root, () => ({ status: 1 })), /failed/);
   assert.equal(fs.existsSync(marker), false, 'failed installation cannot certify an existing node_modules folder');
@@ -57,7 +83,13 @@ try {
   fs.writeFileSync(marker, '{broken');
   ensureDependencies(root, install);
   assert.equal(installs, 6, 'corrupt completion marker is repaired');
-  console.log('PASS dependency installation retries partial/changed/corrupt installs and reuses verified completion');
+  fs.unlinkSync(path.join(root, 'node_modules/child/package.json'));
+  ensureDependencies(root, install);
+  assert.equal(installs, 7, 'a missing transitive dependency invalidates an otherwise matching marker');
+  write('node_modules/child/package.json', { version: '9.9.9' });
+  ensureDependencies(root, install);
+  assert.equal(installs, 8, 'a wrong transitive version is repaired');
+  console.log('PASS dependency closure, nested resolution, integrity reporting and installation recovery controls');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
 
 // End-to-end: an unsupported runtime must be refused before npm is spawned, not after it fails.

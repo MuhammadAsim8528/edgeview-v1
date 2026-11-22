@@ -1,9 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Upload, FileCode, Table, FileSpreadsheet, FileText, CheckCircle, Loader2, AlertTriangle, RefreshCw, X } from 'lucide-react';
 import { ParsedFile } from '../types';
 
 interface UploadAreaProps {
-  onFileUpload: (file: File) => Promise<any>;
+  onFileUpload: (file: File, replaceFileId?: string) => Promise<any>;
   uploading: boolean;
   error: string | null;
   onDismissError?: () => void;
@@ -20,12 +20,19 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [duplicateFile, setDuplicateFile] = useState<File | null>(null);
+  const [duplicateTargetId, setDuplicateTargetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadPending = useRef(false);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compact = existingFiles.length > 0;
+
+  useEffect(() => () => {
+    if (successTimer.current) clearTimeout(successTimer.current);
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    if (!uploading && !uploadPending.current) setIsDragging(true);
   };
 
   const handleDragLeave = () => {
@@ -33,12 +40,14 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   };
 
   const checkAndProcessFile = async (file: File) => {
+    if (uploading || uploadPending.current) return;
     // Check if a file with exact name already exists in existingFiles
-    const isDup = existingFiles.some(
+    const duplicate = existingFiles.find(
       (f) => f.name.toLowerCase().trim() === file.name.toLowerCase().trim()
     );
 
-    if (isDup) {
+    if (duplicate) {
+      setDuplicateTargetId(duplicate.id);
       setDuplicateFile(file);
       return;
     }
@@ -46,21 +55,28 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
     await executeUpload(file);
   };
 
-  const executeUpload = async (file: File) => {
+  const executeUpload = async (file: File, replaceFileId?: string) => {
+    if (uploading || uploadPending.current) return;
+    uploadPending.current = true;
+    setDuplicateFile(null);
+    setDuplicateTargetId(null);
+    setUploadSuccess(null);
+    if (successTimer.current) clearTimeout(successTimer.current);
     try {
-      setDuplicateFile(null);
-      await onFileUpload(file);
+      await onFileUpload(file, replaceFileId);
       setUploadSuccess(`Successfully parsed ${file.name}`);
-      setTimeout(() => setUploadSuccess(null), 4000);
+      successTimer.current = setTimeout(() => setUploadSuccess(null), 4000);
     } catch (err) {
-      // Error handled in store state
+      // Error handled in store state; superseded uploads never announce success.
+    } finally {
+      uploadPending.current = false;
     }
   };
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (!uploading && !uploadPending.current && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       await checkAndProcessFile(e.dataTransfer.files[0]);
     }
   };
@@ -99,6 +115,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
           type="file"
           accept=".nvl,.dbf,.csv,.xlsx,.docx,.txt"
           onChange={handleFileSelect}
+          disabled={uploading}
           className="hidden"
           id="file-upload-input"
         />
@@ -136,7 +153,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
           <div className="bg-[#141b26] border border-amber-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-left">
             <button
-              onClick={() => setDuplicateFile(null)}
+              onClick={() => { setDuplicateFile(null); setDuplicateTargetId(null); }}
               className="absolute top-4 right-4 text-gray-400 hover:text-white"
             >
               <X className="w-5 h-5" />
@@ -160,14 +177,15 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
 
             <div className="flex items-center justify-end gap-3">
               <button
-                onClick={() => setDuplicateFile(null)}
+                onClick={() => { setDuplicateFile(null); setDuplicateTargetId(null); }}
                 className="px-4 py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-gray-300 font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={() => executeUpload(duplicateFile)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-xs text-black font-semibold shadow-md transition-colors"
+                onClick={() => executeUpload(duplicateFile, duplicateTargetId || undefined)}
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-xs text-black font-semibold shadow-md transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Re-upload & Update</span>

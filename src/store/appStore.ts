@@ -1,8 +1,55 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ParsedFile, CompanyContact, EdgeViewReport, ActiveTab } from '../types';
 import { ToastMessage } from '../components/Toast';
 import { safeFetchJson } from '../utils/safeFetch';
 import { GlobalExportPayload } from '../components/GlobalExportModal';
+
+export interface LatestRequestToken {
+  generation: number;
+  controller: AbortController;
+}
+
+/** Latest-wins request ownership; aborted/superseded responses cannot commit state. */
+export function createLatestRequestGuard() {
+  let generation = 0;
+  let current: LatestRequestToken | null = null;
+  return {
+    begin(): LatestRequestToken {
+      current?.controller.abort();
+      const token = { generation: ++generation, controller: new AbortController() };
+      current = token;
+      return token;
+    },
+    isCurrent(token: LatestRequestToken) {
+      return current === token;
+    },
+    finish(token: LatestRequestToken) {
+      if (current !== token) return false;
+      current = null;
+      return true;
+    },
+    cancel() {
+      current?.controller.abort();
+      current = null;
+    },
+  };
+}
+
+export function reconcileSelectedFile<T extends { id: string }>(selected: T | null, files: readonly { id: string }[]): T | null {
+  return selected && !files.some(file => file.id === selected.id) ? null : selected;
+}
+
+export function replacedUploadFileIds(files: readonly Pick<ParsedFile, 'id' | 'name'>[], newFile: Pick<ParsedFile, 'id' | 'name'>, replaceFileId?: string): string[] {
+  if (!replaceFileId || replaceFileId === newFile.id) return [];
+  const name = newFile.name.trim().toLowerCase();
+  return files.filter(file => file.id === replaceFileId && file.name.trim().toLowerCase() === name).map(file => file.id);
+}
+
+function supersededRequestError() {
+  const error = new Error('The request was superseded by a newer operation.');
+  error.name = 'AbortError';
+  return error;
+}
 
 export function useAppStore() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => localStorage.getItem('edgeview_sidebarOpen') !== 'false');
@@ -18,6 +65,8 @@ export function useAppStore() {
   const [selectedFileId, setSelectedFileId] = useState<string | null>(() => {
     return localStorage.getItem('edgeview_selectedFileId') || sessionStorage.getItem('edgeview_selectedFileId') || null;
   });
+  const selectedFileIdRef = useRef(selectedFileId);
+  selectedFileIdRef.current = selectedFileId;
 
   useEffect(() => {
     localStorage.setItem('edgeview_activeTab', activeTab);
@@ -37,6 +86,34 @@ export function useAppStore() {
   const [loading, setLoading] = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const fileListRequestRef = useRef<ReturnType<typeof createLatestRequestGuard> | null>(null);
+  const fileDetailRequestRef = useRef<ReturnType<typeof createLatestRequestGuard> | null>(null);
+  const uploadRequestRef = useRef<ReturnType<typeof createLatestRequestGuard> | null>(null);
+  const fileListRequests = fileListRequestRef.current ??= createLatestRequestGuard();
+  const fileDetailRequests = fileDetailRequestRef.current ??= createLatestRequestGuard();
+  const uploadRequests = uploadRequestRef.current ??= createLatestRequestGuard();
+  const loadingOperations = useRef(0);
+  const mounted = useRef(true);
+  const beginLoading = useCallback(() => {
+    loadingOperations.current += 1;
+    if (mounted.current) setLoading(true);
+  }, []);
+  const endLoading = useCallback(() => {
+    loadingOperations.current = Math.max(0, loadingOperations.current - 1);
+    if (mounted.current) setLoading(loadingOperations.current > 0);
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      fileListRequests.cancel();
+      fileDetailRequests.cancel();
+      uploadRequests.cancel();
+    };
+  }, [fileListRequests, fileDetailRequests, uploadRequests]);
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -50,13 +127,16 @@ export function useAppStore() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch file list
+  // Fetch file list. Only the newest response may reconcile selection/details.
   const fetchFiles = useCallback(async () => {
+    const token = fileListRequests.begin();
+    beginLoading();
     try {
-      setLoading(true);
-      const { ok, data } = await safeFetchJson<ParsedFile[]>('/api/files');
+      const { ok, data } = await safeFetchJson<ParsedFile[]>('/api/files', { signal: token.controller.signal });
+      if (!fileListRequests.isCurrent(token)) return;
       if (ok && Array.isArray(data)) {
         setFiles(data);
+        setSelectedFile(current => reconcileSelectedFile(current, data));
 
         if (data.length > 0) {
           setSelectedFileId((currentId) => {
@@ -73,33 +153,39 @@ export function useAppStore() {
         }
       }
     } catch (err: any) {
-      console.error('Error fetching file list:', err);
+      if (fileListRequests.isCurrent(token)) console.error('Error fetching file list:', err);
     } finally {
-      setLoading(false);
+      fileListRequests.finish(token);
+      endLoading();
     }
-  }, []);
+  }, [beginLoading, endLoading, fileListRequests]);
 
   // Fetch full details of selected file
   const fetchFileDetails = useCallback(async (fileId: string) => {
+    const token = fileDetailRequests.begin();
+    beginLoading();
+    setSelectedFile(current => current?.id === fileId ? current : null);
     try {
-      setLoading(true);
-      const { ok, data, error: fetchErr } = await safeFetchJson<ParsedFile>(`/api/files/${encodeURIComponent(fileId)}`);
+      const { ok, data, error: fetchErr } = await safeFetchJson<ParsedFile>(`/api/files/${encodeURIComponent(fileId)}`, { signal: token.controller.signal });
+      if (!fileDetailRequests.isCurrent(token)) return;
 
-      if (!ok || !data) {
+      if (!ok || !data || data.id !== fileId) {
         throw new Error(fetchErr || 'Failed to load file content');
       }
 
       setSelectedFile(data);
     } catch (err: any) {
+      if (!fileDetailRequests.isCurrent(token)) return;
       console.error('Error fetching file details:', err);
       // Do NOT silently switch to a different file. Keep the requested selection
       // but surface the error so the user knows the requested file could not load.
       setError(err?.message || 'Failed to load file content');
       setSelectedFile(null);
     } finally {
-      setLoading(false);
+      fileDetailRequests.finish(token);
+      endLoading();
     }
-  }, []);
+  }, [beginLoading, endLoading, fileDetailRequests]);
 
   // Fetch contacts
   const fetchContacts = useCallback(async () => {
@@ -157,9 +243,10 @@ export function useAppStore() {
     if (selectedFileId) {
       fetchFileDetails(selectedFileId);
     } else {
+      fileDetailRequests.cancel();
       setSelectedFile(null);
     }
-  }, [selectedFileId, fetchFileDetails]);
+  }, [selectedFileId, fetchFileDetails, fileDetailRequests]);
 
   // Actions
   const toggleSidebar = () => setSidebarOpen((prev) => !prev);
@@ -170,9 +257,10 @@ export function useAppStore() {
     setActiveTab('files');
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (file: File, replaceFileId?: string) => {
+    const token = uploadRequests.begin();
+    setUploading(true);
     try {
-      setUploading(true);
       setError(null);
       const formData = new FormData();
       formData.append('file', file);
@@ -180,7 +268,9 @@ export function useAppStore() {
       const { ok, data, error: uploadErr } = await safeFetchJson<any>('/api/files/upload', {
         method: 'POST',
         body: formData,
+        signal: token.controller.signal,
       });
+      if (!uploadRequests.isCurrent(token)) throw supersededRequestError();
 
       if (!ok || !data) {
         throw new Error(uploadErr || 'File upload failed or returned an invalid server response.');
@@ -192,58 +282,75 @@ export function useAppStore() {
       }
 
       const newFile: ParsedFile = data.data || data;
-      await fetchFiles();
-      await fetchContacts();
+      if (newFile && newFile.id) {
+        // Publish only the newest upload. Ordinary same-name datasets remain
+        // distinct; only an explicit Re-upload & Update target is cleaned up,
+        // and only after the server has durably accepted the replacement.
+        fileListRequests.cancel();
+        setSelectedFileId(newFile.id);
+        setSelectedFile(newFile);
+        const previousFileIds = replacedUploadFileIds(filesRef.current, { id: newFile.id, name: file.name }, replaceFileId);
+        for (const previousFileId of previousFileIds) {
+          const deleted = await safeFetchJson(`/api/files/${encodeURIComponent(previousFileId)}?keep_history=true`, {
+            method: 'DELETE', signal: token.controller.signal,
+          });
+          if (!uploadRequests.isCurrent(token)) throw supersededRequestError();
+          if (!deleted.ok) throw new Error(`Uploaded ${file.name}, but cleanup of the previous dataset failed: ${deleted.error || 'unknown deletion error'}`);
+        }
+      }
 
+      await fetchFiles();
+      if (!uploadRequests.isCurrent(token)) throw supersededRequestError();
       if (newFile && newFile.id) {
         setSelectedFileId(newFile.id);
         setSelectedFile(newFile);
       }
+      await fetchContacts();
+      if (!uploadRequests.isCurrent(token)) throw supersededRequestError();
+
       // Upload starts in Files. Completion may update its selected dataset, but
       // must not override a tab the user chose while parsing/persistence finished.
       showToast(`Successfully uploaded ${file.name}`, 'success');
       return newFile;
     } catch (err: any) {
+      if (!uploadRequests.isCurrent(token)) throw err;
       const msg = err?.message || 'Failed to upload file';
       setError(msg);
       showToast(msg, 'error');
       throw err;
     } finally {
-      setUploading(false);
+      if (uploadRequests.finish(token)) setUploading(false);
     }
   };
 
   const deleteFile = async (fileId: string) => {
+    beginLoading();
     try {
-      setLoading(true);
-      const targetFile = files.find((f) => f.id === fileId);
-      const { ok, error: delErr } = await safeFetchJson(`/api/files/${fileId}?keep_history=true`, { method: 'DELETE' });
+      const targetFile = filesRef.current.find((f) => f.id === fileId);
+      const { ok, error: delErr } = await safeFetchJson(`/api/files/${encodeURIComponent(fileId)}?keep_history=true`, { method: 'DELETE' });
       if (!ok) throw new Error(delErr || 'Failed to delete file');
 
+      if (selectedFileIdRef.current === fileId) fileDetailRequests.cancel();
+      setFiles(current => current.filter(file => file.id !== fileId));
+      setSelectedFile(current => current?.id === fileId ? null : current);
+      setSelectedFileId(currentId => {
+        if (currentId !== fileId) return currentId;
+        return filesRef.current.find(file => file.id !== fileId)?.id || null;
+      });
       await fetchFiles();
       await fetchContacts();
-
-      if (selectedFileId === fileId) {
-        const remaining = files.filter((f) => f.id !== fileId);
-        if (remaining.length > 0) {
-          setSelectedFileId(remaining[0].id);
-        } else {
-          setSelectedFileId(null);
-          setSelectedFile(null);
-        }
-      }
       showToast(`Removed ${targetFile?.name || 'file'} from Files. Saved history retained.`, 'info');
     } catch (err: any) {
       setError(err?.message || 'Failed to delete file');
       showToast(err?.message || 'Failed to delete file', 'error');
     } finally {
-      setLoading(false);
+      endLoading();
     }
   };
 
   const seedSampleData = async () => {
+    beginLoading();
     try {
-      setLoading(true);
       const { ok, error: seedErr } = await safeFetchJson('/api/sample-data/seed', { method: 'POST' });
       if (!ok) throw new Error(seedErr || 'Failed to reseed sample data');
 
@@ -255,7 +362,7 @@ export function useAppStore() {
       setError(err?.message || 'Failed to load sample data');
       showToast(err?.message || 'Failed to load sample data', 'error');
     } finally {
-      setLoading(false);
+      endLoading();
     }
   };
 

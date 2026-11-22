@@ -25,12 +25,12 @@ const row: CompanyAliasRow = { ...plan.row, created_at: '2026-11-08T01:00:00.000
 const original = JSON.stringify({ contacts, row, run });
 const load = (id: string) => id === run.id ? run : null;
 const expected = { status: 'verified', alias_id: alias.id, canonical_id: canonical.id, country: 'kenya' };
-assert.deepEqual(validateCompanyAliasRegistration(row, contacts, [], load), expected);
+assert.deepEqual(await validateCompanyAliasRegistration(row, contacts, [], load), expected);
 for (const current of [[], [alias], [canonical], [alias, canonical, alias],
   [{ ...alias, company_name: 'Unrelated Medical' }, canonical],
   [{ ...alias, country: 'Pakistan' }, canonical], [alias, { ...canonical, country: 'South Sudan' }],
   [{ ...alias, type: 'Exporter' as const }, canonical]]) {
-  assert.equal(validateCompanyAliasRegistration(row, current, [], load).status, 'invalid');
+  assert.equal((await validateCompanyAliasRegistration(row, current, [], load)).status, 'invalid');
 }
 for (const change of [
   { alias_id: 'alias-other' }, { canonical_id: 'canonical-other' }, { alias_key: 'other__kenya' },
@@ -39,33 +39,33 @@ for (const change of [
   { proof_json: JSON.stringify({ ...JSON.parse(row.proof_json), policy_version: 999 }) },
   { proof_json: JSON.stringify({ ...JSON.parse(row.proof_json), run_id: '../run-readback' }) },
   { proof_json: JSON.stringify({ ...JSON.parse(row.proof_json), quote_sha256: '0'.repeat(64) }) },
-]) assert.equal(validateCompanyAliasRegistration({ ...row, ...change }, contacts, [], load).status, 'invalid');
+]) assert.equal((await validateCompanyAliasRegistration({ ...row, ...change }, contacts, [], load)).status, 'invalid');
 const relatedCases: CompanyAliasRow[] = [
   { ...row, alias_id: canonical.id, alias_key: row.canonical_key, canonical_id: 'third', canonical_key: 'third__kenya' },
   { ...row, alias_id: 'third', alias_key: 'third__kenya', canonical_id: alias.id, canonical_key: row.alias_key },
   { ...row, alias_id: canonical.id, alias_key: row.canonical_key, canonical_id: alias.id, canonical_key: row.alias_key },
   { ...row, canonical_id: 'other' },
 ];
-for (const related of relatedCases) assert.equal(validateCompanyAliasRegistration(row, contacts, [related], load).status, 'invalid');
-assert.deepEqual(validateCompanyAliasRegistration(row, contacts,
+for (const related of relatedCases) assert.equal((await validateCompanyAliasRegistration(row, contacts, [related], load)).status, 'invalid');
+assert.deepEqual(await validateCompanyAliasRegistration(row, contacts,
   [{ ...row, alias_id: 'another-alias', alias_key: 'another alias__kenya' }], load), expected,
   'a different alias may share the same canonical target');
-assert.deepEqual(validateCompanyAliasRegistration(row, contacts, [], () => null),
+assert.deepEqual(await validateCompanyAliasRegistration(row, contacts, [], () => null),
   { status: 'unavailable', code: 'ALIAS_REGISTRATION_UNAVAILABLE' });
-const unavailable = validateCompanyAliasRegistration(row, contacts, [], () => { throw new Error('PRIVATE_SOURCE_PATH'); });
+const unavailable = await validateCompanyAliasRegistration(row, contacts, [], () => { throw new Error('PRIVATE_SOURCE_PATH'); });
 assert.equal(unavailable.status, 'unavailable'); assert.doesNotMatch(JSON.stringify(unavailable), /PRIVATE_SOURCE_PATH/);
 const tampered = structuredClone(run);
 (tampered.raw_records[0].response as any).body = '<p>Global Pharma is also known as Global Pharma Ltd in Pakistan.</p>';
 tampered.raw_records[0].sha256 = crypto.createHash('sha256').update(JSON.stringify(tampered.raw_records[0].response)).digest('hex');
-assert.equal(validateCompanyAliasRegistration(row, contacts, [], () => tampered).status, 'invalid', 'valid-hash foreign proof cannot revive the mapping');
+assert.equal((await validateCompanyAliasRegistration(row, contacts, [], () => tampered)).status, 'invalid', 'valid-hash foreign proof cannot revive the mapping');
 assert.equal(JSON.stringify({ contacts, row, run }), original, 'read validation preserves source objects');
 
-assert.deepEqual([...resolveVerifiedCompanyAliasIds(contacts, [row], load)], [[alias.id, canonical.id]]);
+assert.deepEqual([...await resolveVerifiedCompanyAliasIds(contacts, [row], load)], [[alias.id, canonical.id]]);
 for (const conflicting of [[row, row], ...relatedCases.map(related => [row, related])]) {
-  assert.equal(resolveVerifiedCompanyAliasIds(contacts, conflicting, load).size, 0);
+  assert.equal((await resolveVerifiedCompanyAliasIds(contacts, conflicting, load)).size, 0);
 }
-assert.equal(resolveVerifiedCompanyAliasIds([alias], [row], load).size, 0);
-assert.equal(resolveVerifiedCompanyAliasIds(contacts, [row], () => tampered).size, 0);
+assert.equal((await resolveVerifiedCompanyAliasIds([alias], [row], load)).size, 0);
+assert.equal((await resolveVerifiedCompanyAliasIds(contacts, [row], () => tampered)).size, 0);
 assert.equal(JSON.stringify({ contacts, row, run }), original);
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-alias-readback-'));

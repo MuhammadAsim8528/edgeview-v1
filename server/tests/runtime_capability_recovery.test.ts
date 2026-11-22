@@ -26,11 +26,13 @@ try {
   const [initial, duplicate] = await Promise.all([first, second]);
   assert.equal(initial, duplicate);
   assert.equal(initial.capabilities.company_enrichment.available, true);
+  assert.equal(initial.connection.status, 'ONLINE');
   assert.equal(initial.usageScope, 'persisted_completed_provider_calls', 'validated scope must reach the UI state');
   globalThis.fetch = (async () => { throw new Error('Controlled offline fixture'); }) as typeof fetch;
   const offline = await fetchRuntimeState();
   assert.equal(offline.capabilities.company_enrichment.available, false);
   assert.equal(offline.capabilities.company_enrichment.status, 'UNAVAILABLE');
+  assert.equal(offline.connection.status, 'OFFLINE');
   assert.match(offline.capabilities.company_enrichment.reason, /Cannot reach/);
   assert.equal(offline.resources.serper, 42, 'offline status must not erase previously loaded data');
   assert.equal(offline.usageScope, 'persisted_completed_provider_calls');
@@ -59,12 +61,24 @@ try {
   globalThis.fetch = (async () => Response.json(snapshot)) as typeof fetch;
   assert.equal((await fetchRuntimeState()).capabilities.company_enrichment.available, true, 'valid monitoring restores runtime capability');
   let observedAbort = false;
-  globalThis.fetch = ((_input, options) => new Promise<Response>((_resolve, reject) => {
-    options?.signal?.addEventListener('abort', () => { observedAbort = true; reject(new DOMException('Controlled abort', 'AbortError')); }, { once: true });
+  let finishStalled: (response: Response) => void = () => {};
+  globalThis.fetch = ((_input, options) => new Promise<Response>(resolve => {
+    finishStalled = resolve;
+    // Deliberately uncooperative transport: the UI deadline cannot depend on
+    // AbortSignal rejecting or resolving this promise.
+    options?.signal?.addEventListener('abort', () => { observedAbort = true; }, { once: true });
   })) as typeof fetch;
   const timeout = await fetchRuntimeState();
   assert.equal(observedAbort, true, 'a stalled status request must be aborted');
   assert.match(timeout.capabilities.company_enrichment.reason, /timed out/);
+  assert.equal(timeout.connection.status, 'OFFLINE');
+  assert.equal(timeout.enrichment.status, snapshot.enrichment.status);
   assert.equal(timeout.resources.serper, 42);
-  console.log('PASS shared runtime refresh coalescing, visible offline capability state, data retention and automatic recovery.');
+  globalThis.fetch = (async () => Response.json(snapshot)) as typeof fetch;
+  const recoveredRequest = fetchRuntimeState();
+  finishStalled(Response.json({ ...snapshot, resources: { ...snapshot.resources, serper: 999 } }));
+  const recoveredAfterTimeout = await recoveredRequest;
+  assert.equal(recoveredAfterTimeout.connection.status, 'ONLINE');
+  assert.equal(recoveredAfterTimeout.resources.serper, 42, 'a late pre-deadline response must not overwrite the new request');
+  console.log('PASS shared runtime refresh coalescing, truthful offline state, finite deadlines, data retention and automatic recovery.');
 } finally { globalThis.fetch = originalFetch; }

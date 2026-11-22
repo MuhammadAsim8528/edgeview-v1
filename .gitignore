@@ -16,6 +16,7 @@ config.prev.json
 *.db.tmp
 *.db.corrupt*
 edgeview_db.json
+pharma_db.json
 .test-cache/
 
 # Local AI-agent laboratory/state is not product source and may contain private history.

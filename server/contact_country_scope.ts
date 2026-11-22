@@ -1,4 +1,4 @@
-import { detectExplicitCountryNames, normalizeCountryName, normalizeCountryExact } from '../src/utils/countryNormalizer';
+import { detectAffirmedCountryNames, detectExplicitCountryNames, normalizeCountryName, normalizeCountryExact } from '../src/utils/countryNormalizer';
 import { stripHtmlComments, hiddenOnlyHtmlCarrier } from './html_evidence';
 
 type Source = { id: string; status?: string; url: string; title?: string; snippet?: string;
@@ -6,7 +6,7 @@ type Source = { id: string; status?: string; url: string; title?: string; snippe
 export type ContactFactScope = 'local' | 'foreign' | 'ambiguous' | 'related_entity' | 'unknown';
 
 function visible(value: string, field?: string) {
-  const withoutHidden = stripHtmlComments(value).replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, ' ');
+  const withoutHidden = stripHtmlComments(value).replace(/<(?:script|style|template)\b[\s\S]*?<\/(?:script|style|template)>/gi, ' ');
   // A social URL is often carried only by href, while the visible label is
   // "LinkedIn". Retain that carrier at its actual office position rather than
   // assigning every entry in the provider's links array the page-wide country.
@@ -31,7 +31,7 @@ function visible(value: string, field?: string) {
 }
 function countryScope(text: string, country: string): ContactFactScope {
   const prose = text.replace(/\bhttps?:\/\/\S+/gi, ' ').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, ' ');
-  const countries = detectExplicitCountryNames(prose).map(value => normalizeCountryName(value).toLowerCase());
+  const countries = detectAffirmedCountryNames(prose).map(value => normalizeCountryName(value).toLowerCase());
   if (!countries.length) return 'unknown';
   if (countries.length > 1) return 'ambiguous';
   return countries[0] === normalizeCountryName(country).toLowerCase() ? 'local' : 'foreign';
@@ -132,7 +132,7 @@ export function contactFactScope(source: Source, value: string, country: string,
   // summary must not confer Kenyan scope on a Pakistan-only HTML contact.
   // Direct retrieval may flatten every office into one text line. Prefer the
   // full HTML's visible block boundaries when they actually carry this fact.
-  const body = source.html ? htmlContext
+  const body = source.html ? (field === 'address' && contains(visibleHtml) ? visibleHtml : htmlContext)
     : source.text && contains(source.text) ? source.text
     : source.markdown && contains(source.markdown) ? source.markdown
     : source.html && contains(source.html) ? htmlContext
@@ -147,23 +147,37 @@ export function contactFactScope(source: Source, value: string, country: string,
   const valueScope = field === 'leader' ? 'unknown' : countryScope(value, country);
   if (valueScope === 'foreign') return { scope: 'foreign' as const, quote: value };
   let active: ContactFactScope = whole;
+  let addressContext: ContactFactScope = 'unknown';
   let relatedEntity = false;
   const matches: Array<{ scope: ContactFactScope; quote: string }> = [];
   for (const rawLine of body.split(/\r?\n/)) {
     const line = rawLine.replace(/\s+/g, ' ').trim();
     if (!line) continue;
     const lineScope = contextualScope(line);
+    const priorAddressContext = addressContext;
     if (lineScope !== 'unknown') active = lineScope;
+    if (lineScope !== 'unknown') addressContext = /\b(?:office|headquarters|branch|registered|postal[\s-]+address|address)\b/i.test(line)
+      ? lineScope : 'unknown';
     // A named distributor/partner contact is not automatically the company.
     // This does not reject an entity merely because it is itself a distributor.
     if (/\b(?:distributor|partner|agent|supplier)\s*[:=]/i.test(line)) relatedEntity = true;
-    if (relatedEntity) active = 'related_entity';
-    if (sought && line.toLowerCase().includes(sought)) matches.push({ scope: active, quote: line });
+    if (relatedEntity) { active = 'related_entity'; addressContext = 'related_entity'; }
+    if (sought && line.toLowerCase().includes(sought)) matches.push({
+      // An address can use its own country or an explicit office/address label.
+      // A bare navigation/country heading cannot lend it a location.
+      scope: field === 'address' && active !== 'related_entity'
+        ? lineScope !== 'unknown' ? lineScope : priorAddressContext : active,
+      quote: line,
+    });
   }
   if (matches.some(match => match.scope === 'local')) return matches.find(match => match.scope === 'local')!;
   if (matches.length) return matches.find(match => match.scope !== 'unknown') || matches[0];
   // Structured addresses can combine several JSON fields and need not appear
   // as one contiguous string. An explicitly foreign value still failed above.
+  if (field === 'address') return {
+    scope: valueScope === 'local' ? 'local' : valueScope === 'ambiguous' ? 'ambiguous' : 'unknown',
+    quote: contains(body) ? value : '',
+  };
   return { scope: valueScope === 'local' && whole !== 'foreign' ? 'local' as const : whole,
     quote: contains(body) ? value : '' };
 }

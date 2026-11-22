@@ -80,16 +80,21 @@ async function main() {
 
   const text = extractPdfText(buf);
 
-  // Every leadership person must appear (30/30) â€” content is never dropped.
+  // Assert every intermediate record, not only the last page's final markers.
   for (let i = 1; i <= 30; i++) {
-    assert.ok(pdfTextContains(text, `Executive ${i}`), `missing leadership person Executive ${i}`);
+    for (const fragment of [`Executive ${i}`, `Role ${i}`, `executive${i}@megapharma.pk`]) {
+      assert.ok(pdfTextContains(text, fragment), `missing leadership content ${fragment}`);
+    }
   }
-
-  // The final (hardest-to-reach) trade partner must appear â€” nothing clipped.
-  assert.ok(pdfTextContains(text, 'SUPPLIER 40'), 'missing last trade partner SUPPLIER 40');
-
-  // The last source URL (the one the old renderer clipped) must appear.
-  assert.ok(pdfTextContains(text, 'https://source-15.example.com/report'), 'missing last source URL');
+  for (let i = 1; i <= 40; i++) {
+    const supplier = `SUPPLIER ${String(i).padStart(2, '0')}`;
+    assert.ok(pdfTextContains(text, supplier), `missing trade partner ${supplier}`);
+  }
+  for (let i = 1; i <= 15; i++) {
+    for (const fragment of [`Report ${i}`, `https://source-${i}.example.com/report`]) {
+      assert.ok(pdfTextContains(text, fragment), `missing source content ${fragment}`);
+    }
+  }
 
   // Company name and continuation marker.
   assert.ok(pdfTextContains(text, 'MEGA PHARMA'), 'missing company name');

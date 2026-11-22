@@ -9,7 +9,7 @@ test('research choices send saved-only or explicit live intent and never retain 
     body.capabilities.evidence_revalidation.available = true;
     await route.fulfill({ response, json: body });
   });
-  await page.route('**/api/companies', async route => {
+  await page.route(url => url.pathname === '/api/companies', async route => {
     const response = await route.fetch(), contacts = await response.json();
     await route.fulfill({ response, json: contacts.map(contact => ({ ...contact, can_revalidate_evidence: contact.company_name === 'Synthetic Choice Buyer' })) });
   });

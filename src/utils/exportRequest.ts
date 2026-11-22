@@ -35,7 +35,7 @@ export function buildExportRequest(payload: GlobalExportPayload, format: ExportF
     if (new Set(ids).size !== ids.length || ids.some(id => !scope.has(id))) throw new Error('Refresh contacts before exporting an unavailable selection.');
     // This existing server contract resolves these IDs to stored contacts.
     // Never serialize enrichment/trade/evidence objects back to the server.
-    return { url: '/api/export', body: { ...common, records: ids.map(id => ({ id })),
+    return { url: '/api/export', body: { ...common, records: ids.map(id => ({ id })), ...(payload.contactFileId ? { contact_file_id: payload.contactFileId } : {}),
       report_type: reportType ?? payload.defaultReportType ?? 'importer' } };
   }
   return { url: '/api/export', body: { ...common, records: payload.records, columns: payload.columns,

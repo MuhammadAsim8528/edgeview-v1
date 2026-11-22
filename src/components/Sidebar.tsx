@@ -40,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteFile,
 }) => {
   const { state } = useEdgeViewRuntimeState();
+  const researchOffline = state.connection.status === 'OFFLINE';
   const completedCompanies = state.enrichment.completedCompanies || 0;
   const totalCompanies = state.enrichment.totalCompanies || 0;
   const jobPercent = totalCompanies > 0
@@ -191,18 +192,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Real-time Enrichment Status Monitor inside Sidebar */}
         {sidebarOpen && state.enrichment.status !== 'IDLE' && (
-          <div className="pt-4 border-t border-[#333333] mt-4">
-            <div className="px-1 pb-2 flex items-center space-x-1.5 text-[10px] font-bold text-[#10b981] uppercase tracking-widest">
-              <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-ping" />
-              <span>Company Research Running</span>
+          <div className="pt-4 border-t border-[#333333] mt-4" aria-live="polite">
+            <div className={`px-1 pb-2 flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-widest ${researchOffline ? 'text-amber-300' : 'text-[#10b981]'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${researchOffline ? 'bg-amber-400' : 'bg-[#10b981] animate-ping'}`} />
+              <span>{researchOffline ? 'Research Status Unavailable' : 'Company Research Running'}</span>
             </div>
-            <div className="p-3 bg-[#1e2a22] border border-[#10b981]/30 rounded-lg space-y-2">
+            <div className={`p-3 rounded-lg space-y-2 border ${researchOffline ? 'bg-amber-950/20 border-amber-800' : 'bg-[#1e2a22] border-[#10b981]/30'}`}>
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-white truncate max-w-[140px]" title={state.enrichment.currentCompany || 'Unknown Company'}>
-                  {state.enrichment.currentCompany || 'Initializing...'}
+                  {state.enrichment.currentCompany || (researchOffline ? 'Last status unavailable' : 'Initializing...')}
                 </span>
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded uppercase border border-emerald-800">
-                  {state.enrichment.status}
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded uppercase border ${researchOffline ? 'text-amber-300 bg-amber-950/60 border-amber-800' : 'text-emerald-400 bg-emerald-950/60 border-emerald-800'}`}>
+                  {researchOffline ? 'OFFLINE' : state.enrichment.status}
                 </span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-gray-300">
@@ -210,10 +211,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>{jobPercent}%</span>
               </div>
               <div className="w-full bg-[#141414] h-1.5 rounded-full overflow-hidden">
-                <div className="h-full bg-[#10b981] rounded-full transition-[width] duration-500" style={{ width: `${jobPercent}%` }} />
+                <div className={`h-full rounded-full transition-[width] duration-500 ${researchOffline ? 'bg-amber-500' : 'bg-[#10b981]'}`} style={{ width: `${jobPercent}%` }} />
               </div>
               <p className="text-[10px] text-gray-300 leading-snug">
-                Retrieved evidence is saved after every company, so progress survives refreshes.
+                {researchOffline
+                  ? `${state.connection.reason || 'Backend connection lost.'} Counts above are the last confirmed snapshot, not live running status.`
+                  : 'Retrieved evidence is saved after every company, so progress survives refreshes.'}
               </p>
             </div>
           </div>

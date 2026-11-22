@@ -34,11 +34,19 @@ export async function fetchAllFileRows(fileId: string, signal?: AbortSignal, fil
 
 export async function safeFetchJson<T = any>(
   input: RequestInfo | URL,
-  init?: RequestInit
+  init?: RequestInit & { timeoutMs?: number }
 ): Promise<SafeFetchResult<T>> {
   const path = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const { timeoutMs = 30_000, ...requestInit } = init ?? {};
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort(requestInit.signal?.reason);
+  if (requestInit.signal?.aborted) onParentAbort();
+  else requestInit.signal?.addEventListener('abort', onParentAbort, { once: true });
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) throw new Error('Invalid request timeout.');
+  let timedOut = false;
+  const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   try {
-    const res = await fetch(input, init);
+    const res = await fetch(input, { ...requestInit, signal: controller.signal });
     const requestId = res.headers.get('x-request-id') || undefined;
     const text = await res.text();
     let data: any = null;
@@ -104,9 +112,12 @@ export async function safeFetchJson<T = any>(
       ok: false,
       status: 0,
       data: null,
-      error: `Cannot reach the EdgeView backend at ${backend}. Open EdgeView from the URL printed by the running server.`,
-      code: 'EDGEVIEW_BACKEND_UNREACHABLE',
+      error: requestInit.signal?.aborted && !timedOut ? 'Request cancelled.' : timedOut ? 'Request timed out. Check the EdgeView backend and retry.' : `Cannot reach the EdgeView backend at ${backend}. Open EdgeView from the URL printed by the running server.`,
+      code: requestInit.signal?.aborted && !timedOut ? 'REQUEST_CANCELLED' : timedOut ? 'REQUEST_TIMEOUT' : 'EDGEVIEW_BACKEND_UNREACHABLE',
       path,
     };
+  } finally {
+    clearTimeout(deadline);
+    requestInit.signal?.removeEventListener('abort', onParentAbort);
   }
 }

@@ -107,7 +107,7 @@ try{
   assert.equal(interrupted.status,'PARTIAL','changed configuration cannot be published as a completed compatible capture');
   assert.equal(requests.length-beforeChange,1,'no later request may use the changed provider selection');
   assert.ok(interrupted.timeline.some(event=>event.stage==='run'&&event.status==='failed'&&event.error?.includes('RESEARCH_CONFIGURATION_CHANGED')));
-  assert.equal(getV1Run(interrupted.id)?.status,'PARTIAL','captured evidence and interruption must persist together');
+  assert.equal((await getV1Run(interrupted.id))?.status,'PARTIAL','captured evidence and interruption must persist together');
  } finally { onProviderResponse=undefined;fs.writeFileSync(process.env.EDGEVIEW_CONFIG,originalConfig); }
  for(const scenario of ['key_rotation','model_change','resolver','hunter','query_generation','extraction','preference_only']){
   const baseConfig={...JSON.parse(originalConfig),...(scenario==='query_generation'||scenario==='extraction'?{groq_enabled:true,groq_api_key:'synthetic-ai-key',groq_model:'synthetic-model'}:{})};
@@ -134,16 +134,16 @@ try{
     }else{
       assert.equal(result.status,scenario==='query_generation'?'FAILED':'PARTIAL',scenario);
       assert.ok(result.timeline.some(event=>event.stage==='run'&&event.error==='RESEARCH_CONFIGURATION_CHANGED'),scenario);
-      assert.equal(getV1Run(result.id)?.status,result.status,'interruption is durable');
+      assert.equal((await getV1Run(result.id))?.status,result.status,'interruption is durable');
       if(scenario==='key_rotation'||scenario==='model_change')assert.equal(calls.length,1,'no follow-on provider request');
       if(scenario==='query_generation')assert.equal(calls.length,1,'query configuration change stops before search');
       if(scenario==='resolver'){
         const resolving=calls.filter(call=>call.options.path==='/resolve');
         assert.ok(resolving.length>=1&&resolving.length<=2,'only the already-issued pair may finish');
-        const returned=JSON.stringify(result), persisted=JSON.stringify(getV1Run(result.id));
+        const returned=JSON.stringify(result), persisted=JSON.stringify(await getV1Run(result.id));
         await new Promise(resolve=>setTimeout(resolve,120));
         assert.equal(JSON.stringify(result),returned,'resolver sibling cannot mutate the returned run after persistence');
-        assert.equal(JSON.stringify(getV1Run(result.id)),persisted,'immutable bytes remain stable after worker drain');
+        assert.equal(JSON.stringify(await getV1Run(result.id)),persisted,'immutable bytes remain stable after worker drain');
         assert.ok(!calls.some(call=>call.options.servername==='api.hunter.io'));
       }
       if(scenario==='hunter')assert.ok(!calls.some(call=>call.options.servername==='scopeanchor.test'),'stop before public crawl');

@@ -9,13 +9,34 @@ import {
   saveFileToDb,
   computeFileHash,
   findFileByHash,
-  deleteFileFromHistory,
+  computeTotalValue,
   PersistenceReadError,
 } from '../sqlite_persistence';
 import { captureMonitoringEvent, classifyMonitoringError } from '../monitoring';
 import { historyInsertValues } from '../history_row_projection';
 
 export const uploadRouter = express.Router();
+
+// A single-process backend may still interleave asynchronous parser work. Keep
+// duplicate discovery through durable publication in one per-content queue.
+const uploadAdmissions = new Map<string, Promise<void>>();
+async function acquireUploadAdmission(fileHash: string): Promise<() => void> {
+  const previous = uploadAdmissions.get(fileHash) || Promise.resolve();
+  let openGate!: () => void;
+  const gate = new Promise<void>(resolve => { openGate = resolve; });
+  const tail = previous.then(() => gate);
+  uploadAdmissions.set(fileHash, tail);
+  await previous;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    openGate();
+    if (uploadAdmissions.get(fileHash) === tail) {
+      void tail.then(() => { if (uploadAdmissions.get(fileHash) === tail) uploadAdmissions.delete(fileHash); });
+    }
+  };
+}
 
 const ALLOWED_EXTENSIONS = ['nvl', 'dbf', 'csv', 'tsv', 'xlsx', 'docx', 'txt'];
 
@@ -118,7 +139,8 @@ async function handleUpload(req: express.Request, res: express.Response) {
 
     const buffer = req.file.buffer;
     const fileHash = computeFileHash(buffer);
-
+    const releaseUploadAdmission = await acquireUploadAdmission(fileHash);
+    try {
     // 4. Check for Duplicate Files
     try {
       const existingFile = await findFileByHash(fileHash, true);
@@ -126,12 +148,13 @@ async function handleUpload(req: express.Request, res: express.Response) {
         db.files.set(existingFile.id, existingFile);
         db.syncCompaniesFromFiles();
         void captureMonitoringEvent('dataset_import_completed', { stage: 'import', outcome: 'skipped', duration_ms: Date.now() - monitoringStartedAt });
+        const duplicateResponse = { ...existingFile, rows: [], raw_text: undefined };
         return res.status(200).json({
           success: true,
-          data: existingFile,
+          data: duplicateResponse,
           duplicate: true,
           message: 'File already exists in database',
-          ...existingFile,
+          ...duplicateResponse,
         });
       }
     } catch (hashErr) {
@@ -162,6 +185,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
     let summary: any;
     try {
       summary = computeSummary(parsed.columns, parsed.rows);
+      summary.total_cost_usd = computeTotalValue(parsed.rows);
     } catch (sumErr) {
       console.warn('Compute summary warning:', sumErr);
       summary = {
@@ -190,34 +214,24 @@ async function handleUpload(req: express.Request, res: express.Response) {
     // 7. Durable persistence must succeed before the in-memory dataset is
     // published or a 201 response is returned. Otherwise a disk-full/permission
     // failure could look successful until the next restart.
-    let jsonPersisted = false;
-    let sqlDb: any = null;
+    let historyTransaction: { rollback: () => Promise<void> } | null = null;
     try {
-      await saveFileToDb(fileRecord, fileHash, 'real');
-      jsonPersisted = true;
-
-      // Filename is a display label, not ownership. Hash duplicates returned
-      // above; new datasets and failed-upload cleanup are scoped to their ID.
       const { getDb } = await import('../sqlite');
-      sqlDb = await getDb();
-      await sqlDb.run('DELETE FROM history_data WHERE file_id = ?', [fileRecord.id]);
-      if (parsed.rows && parsed.rows.length > 0 && hasTradeParties(fileRecord.columns ?? [])) {
-        const stmt = await sqlDb.prepare(`
-          INSERT INTO history_data (
-            be_link, be_date, hs_code, item, importer, exporter, country, tot_fc, qty, unit, agent_name, file_name, file_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        try {
-          for (const r of parsed.rows) {
-            await stmt.run(...historyInsertValues(r, originalName, fileRecord.id));
-          }
-        } finally {
-          await stmt.finalize();
-        }
-      }
-
+      const sqlDb = await getDb();
+      const historyRows = parsed.rows.length > 0 && hasTradeParties(fileRecord.columns ?? [])
+        ? parsed.rows.map(row => historyInsertValues(row, originalName, fileRecord.id))
+        : [];
+      historyTransaction = await sqlDb.replaceFileHistoryDurably(fileRecord.id, historyRows);
+      // Publish the primary JSON record only after the derived batch is durable.
+      // A JSON failure invokes the exact history inverse before any error reply.
+      await saveFileToDb(fileRecord, fileHash, 'real');
     } catch (dbErr: any) {
-      if (dbErr instanceof PersistenceReadError) {
+      let rollbackError: any = null;
+      if (historyTransaction) {
+        try { await historyTransaction.rollback(); }
+        catch (error) { rollbackError = error; console.error('Failed to roll back uploaded history batch:', error); }
+      }
+      if (dbErr instanceof PersistenceReadError && !rollbackError) {
         const duration_ms = Date.now() - monitoringStartedAt;
         void captureMonitoringEvent('dataset_import_failed', { stage: 'import', outcome: 'failed', duration_ms });
         void captureMonitoringEvent('runtime_error', { stage: 'storage', outcome: 'failed', duration_ms,
@@ -227,21 +241,9 @@ async function handleUpload(req: express.Request, res: express.Response) {
           recoverable: false });
       }
       console.error('Durable save error during upload:', dbErr);
-      // Prevent a half-saved JSON record from turning the next retry into a
-      // false duplicate success when history_data was not durably completed.
-      if (jsonPersisted) {
-        try { await deleteFileFromHistory(fileRecord.id); }
-        catch (rollbackErr) { console.error('Failed to roll back primary upload record:', rollbackErr); }
-      }
-      if (sqlDb) {
-        try {
-          await sqlDb.run('DELETE FROM history_data WHERE file_id = ?', [fileRecord.id]);
-          await sqlDb.flush();
-        } catch (cleanupErr) {
-          console.error('Failed to clean partial history_data upload state:', cleanupErr);
-        }
-      }
-      const code = dbErr?.code === 'DISK_FULL' ? 'DISK_FULL' : 'PERSISTENCE_WRITE_FAILED';
+      const code = rollbackError?.code === 'PERSISTENCE_ROLLBACK_FAILED'
+        ? 'PERSISTENCE_ROLLBACK_FAILED'
+        : dbErr?.code === 'DISK_FULL' ? 'DISK_FULL' : 'PERSISTENCE_WRITE_FAILED';
       const duration_ms = Date.now() - monitoringStartedAt;
       void captureMonitoringEvent('dataset_import_failed', { stage: 'import', outcome: 'failed', duration_ms });
       void captureMonitoringEvent('runtime_error', { stage: 'storage', outcome: 'failed', duration_ms, error_code: code });
@@ -251,7 +253,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
         error: code === 'DISK_FULL'
           ? 'EdgeView could not save the uploaded dataset because storage is full.'
           : 'EdgeView could not durably save the uploaded dataset.',
-        recoverable: true,
+        recoverable: code !== 'PERSISTENCE_ROLLBACK_FAILED',
         remediation: code === 'DISK_FULL' ? 'Free disk space and retry the upload.' : 'Check file permissions/storage health and retry.',
       });
     }
@@ -284,6 +286,9 @@ async function handleUpload(req: express.Request, res: express.Response) {
       warning: warningMessage,
       ...fileRecordResponse,
     });
+    } finally {
+      releaseUploadAdmission();
+    }
   } catch (err: any) {
     console.error('File upload route error:', err);
     const duration_ms = Date.now() - monitoringStartedAt;

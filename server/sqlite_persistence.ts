@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { FileRecord } from './db';
 import { computeSummary } from './summary';
 import { getJsonPersistencePath, getJsonLegacyPersistencePath, isTestProcess } from './db_paths';
+import { parseTradeNumeric } from './value_normalization';
 
 function getJsonPaths(): { main: string; legacy: string } {
   return { main: getJsonPersistencePath(), legacy: getJsonLegacyPersistencePath() };
@@ -197,13 +198,23 @@ function writeRecordsToDisk(records: UploadedFileRecord[]): void {
   }
 }
 
-function computeTotalValue(rows: any[]): number {
+export function computeTotalValue(rows: any[]): number {
   if (!Array.isArray(rows)) return 0;
+  const aliases = ['Total Value (USD)', 'Total FC (USD)', 'TOT_FC', 'tot_fc', 'VAL_USD', 'total_cost_usd',
+    'total_fc_usd', 'Total Cost (USD)', 'Total Cost', 'Invoice_Value', 'invoice_val', 'AMOUNT', 'Amount'];
   let total = 0;
-  for (const r of rows) {
-    const v = r['Total Value (USD)'] || r['Total FC (USD)'] || r.TOT_FC || r.VAL_USD || r.total_cost_usd || r.AMOUNT || 0;
-    const num = typeof v === 'number' ? v : parseFloat(String(v)) || 0;
-    total += num;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    for (const alias of aliases) {
+      const value = row[alias];
+      if (value === undefined || value === null || (typeof value === 'string' && !value.trim())) continue;
+      const numeric = parseTradeNumeric(value);
+      if (numeric !== null) {
+        total += numeric;
+        if (!Number.isFinite(total)) throw new RangeError('Dataset value total exceeds the finite numeric range.');
+      }
+      break;
+    }
   }
   return Math.round(total * 100) / 100;
 }
@@ -233,7 +244,7 @@ function computeUniqueImporters(rows: any[]): number {
 }
 
 export function computeFileHash(buffer: Buffer): string {
-  return crypto.createHash('md5').update(buffer).digest('hex');
+  return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
 export async function saveFileToDb(fileRecord: FileRecord, fileHash: string, explicitSource?: 'real' | 'test'): Promise<UploadedFileRecord> {
@@ -333,8 +344,11 @@ export function archivedFileRows(id: string) {
 }
 
 export async function findFileByHash(fileHash: string, reopen = false): Promise<FileRecord | null> {
+  // Legacy MD5 records remain readable, but an MD5 match alone can never
+  // authorize substituting a different uploaded byte stream.
+  if (!/^[a-f0-9]{64}$/.test(fileHash)) return null;
   const records = readRecordsFromDisk();
-  const found = records.find((r) => r.file_hash === fileHash);
+  const found = records.find((r) => /^[a-f0-9]{64}$/.test(r.file_hash) && r.file_hash === fileHash);
 
   if (!found) return null;
   if (found.archived && reopen) {

@@ -11,10 +11,22 @@
 import JSZip from 'jszip';
 import { buildContactReport, getReportColumnLabels, getReportTitle, type ContactReport } from './contact_report_model';
 import { getInternationalImporterDirectory, type InternationalImporterDirectory } from './international_importer_directory';
-import { cleanMarkdown, type ReportCompanyContact } from './docx_report';
+import { cleanMarkdown, formatReportSource, type ReportCompanyContact } from './docx_report';
+import { protectSpreadsheetText } from './spreadsheet_cells';
 
 function escXml(s: string): string {
-  return String(s)
+  let validXml = '';
+  for (const char of String(s)) {
+    const cp = char.codePointAt(0)!;
+    // XML 1.0 permits tab/LF/CR, most of Unicode, and excludes lone surrogates.
+    if (cp === 0x09 || cp === 0x0a || cp === 0x0d ||
+        (cp >= 0x20 && cp <= 0xd7ff) ||
+        (cp >= 0xe000 && cp <= 0xfffd) ||
+        (cp >= 0x10000 && cp <= 0x10ffff)) {
+      validXml += char;
+    }
+  }
+  return validXml
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -47,8 +59,8 @@ function run(text: string, opts: { size?: number; bold?: boolean; italics?: bool
 
 function paragraph(runs: string, opts: { after?: number; before?: number; center?: boolean } = {}): string {
   const spacing: string[] = [];
-  if (opts.before) spacing.push(`<w:before w:val="${opts.before}"/>`);
-  if (opts.after !== undefined) spacing.push(`<w:after w:val="${opts.after}"/>`);
+  if (opts.before !== undefined) spacing.push(`w:before="${opts.before}"`);
+  if (opts.after !== undefined) spacing.push(`w:after="${opts.after}"`);
   const jc = opts.center ? '<w:jc w:val="center"/>' : '';
   return `<w:p><w:pPr><w:spacing${spacing.length ? ' ' + spacing.join(' ') : ''}/>${jc}</w:pPr>${runs}</w:p>`;
 }
@@ -76,7 +88,8 @@ function cell(
 
 const COL_WIDTHS = { sNo: 600, companyName: 2000, tradeHistory: 2200, leadership: 2280, contactInfo: 2280 };
 
-function cellText(text: string, opts: { size?: number; bold?: boolean; italics?: boolean; color?: string } = {}): string {
+function cellText(value: string, opts: { size?: number; bold?: boolean; italics?: boolean; color?: string } = {}): string {
+  const text = protectSpreadsheetText(value);
   const clean = cleanMarkdown(text);
   return run(clean || 'Not found', opts);
 }
@@ -126,7 +139,7 @@ function buildContactCellHtml(imp: any): string {
   if (ci.whatsapp) paras.push(paragraph(label('WhatsApp: ') + cellText(ci.whatsapp, { color: '059669' })));
   const socials = (ci.socials || []).filter((s: any) => s && s.url);
   if (socials.length) paras.push(paragraph(label('Socials: ') + cellText(socials.map((s: any) => `${s.platform}: ${s.url}`).join(' | '))));
-  if (ci.sources.length) paras.push(paragraph(label('Sources: ') + cellText(ci.sources.map((s: any) => s.url).join('; '), { size: 26, color: '64748B' })));
+  if (ci.sources.length) paras.push(paragraph(label('Sources: ') + cellText(ci.sources.map(formatReportSource).join('; '), { size: 26, color: '64748B' })));
 
   return cell(paras.join(''), { width: COL_WIDTHS.contactInfo, valign: 'top' });
 }
@@ -359,7 +372,7 @@ export async function generateInternationalImporterDirectoryDocx(
 
   for (const section of directory.countrySections) {
     parts.push(
-      paragraph(run(`INTERNATIONAL IMPORTERS — ${escXml(section.country.toUpperCase())}`, { size: HPS.countryHeading, bold: true, color: '0F172A' }), {
+      paragraph(run(`INTERNATIONAL IMPORTERS — ${section.country.toUpperCase()}`, { size: HPS.countryHeading, bold: true, color: '0F172A' }), {
         before: 300,
         after: 120,
       })
@@ -550,7 +563,7 @@ export async function generateGenericDocxReportStream(
 
   // Blue title banner (single-cell table).
   const banner = borderCell(
-    paragraph(run(`EdgeView — ${escXml(title)}`, { size: 52, bold: true, color: 'FFFFFF' }), { after: 0, center: true }),
+    paragraph(run(`EdgeView — ${title}`, { size: 52, bold: true, color: 'FFFFFF' }), { after: 0, center: true }),
     { width: TOTAL_DXA, fill: '0284C7', margins: [180, 180, 180, 180] }
   );
   parts.push(
@@ -562,7 +575,7 @@ export async function generateGenericDocxReportStream(
   const headerCells = columns
     .map((col) =>
       borderCell(
-        paragraph(run(escXml(col.header), { size: 32, bold: true, color: '111827' }), { after: 0 }),
+        paragraph(run(col.header, { size: 32, bold: true, color: '111827' }), { after: 0 }),
         { width: getColDxa(col.header), fill: 'E5E7EB', margins: [120, 120, 100, 100] }
       )
     )
@@ -574,7 +587,7 @@ export async function generateGenericDocxReportStream(
       .map((col) => {
         const val = sanitizeCellStr(rec[col.key] ?? rec[col.header] ?? '');
         return borderCell(
-          paragraph(run(escXml(val || '\u2014'), { size: 28, color: '374151' }), { after: 0 }),
+          paragraph(run(val || '\u2014', { size: 28, color: '374151' }), { after: 0 }),
           { width: getColDxa(col.header), margins: [100, 100, 100, 100] }
         );
       })

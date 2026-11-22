@@ -8,13 +8,14 @@ interface ExportReportModalProps {
   onClose: () => void;
   contacts: CompanyContact[];
   selectedIds: string[];
+  fileId?: string;
 }
 
 export const ExportReportModal: React.FC<ExportReportModalProps> = ({
   isOpen,
   onClose,
   contacts,
-  selectedIds,
+  selectedIds, fileId,
 }) => {
   const [format, setFormat] = useState<'docx' | 'pdf' | 'xlsx' | 'csv' | 'all'>('docx');
   const [reportType, setReportType] = useState<'importer' | 'exporter' | 'both' | 'international_importer'>('importer');
@@ -45,15 +46,22 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
       setExportProgress(70);
       setExportStep(`Compiling professional ${format.toUpperCase()} report...`);
 
-      const res = await fetch('/api/export/report', {
+      const controller = new AbortController();
+      const deadline = setTimeout(() => controller.abort(), 120_000);
+      let res: Response;
+      try {
+        res = await fetch('/api/export/report', {
+        signal: controller.signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          contact_file_id: fileId,
           company_ids: targetContacts.map(c => c.id),
           format,
           report_type: reportType,
         }),
-      });
+        });
+      } finally { clearTimeout(deadline); }
 
       setExportProgress(90);
       setExportStep('Validating document payload...');

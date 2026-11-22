@@ -28,8 +28,8 @@ companyAliasReviewRouter.post('/:id/alias-review', async (req, res) => {
       code: registration.status === 'invalid' ? 'ALIAS_REGISTRATION_REVIEW_REQUIRED' : 'ALIAS_MAPPING_CONFLICT',
       message: 'The saved alias decision needs review. Existing records remain unchanged.' });
   }
-  let run: ReturnType<typeof getV1Run>;
-  try { run = getV1Run(body.run_id); }
+  let run: Awaited<ReturnType<typeof getV1Run>>;
+  try { run = await getV1Run(body.run_id); }
   catch {
     return res.status(503).json({ success: false, code: 'ALIAS_EVIDENCE_UNREADABLE',
       message: 'Saved evidence could not be read. Inspect the research history or diagnostics.' });

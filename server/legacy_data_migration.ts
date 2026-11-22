@@ -106,7 +106,9 @@ async function validateCopiedState(root: string) {
   const primary = ['edgeview_db.json', 'pharma_db.json'].find(name => !missing(path.join(root, name)));
   if (!primary) throw fail();
   decodePersistenceRecords(inspectSmall(path.join(root, primary), MAX_FILE), false);
-  const SQL = await initSqlJs(), db = new SQL.Database(inspectSmall(path.join(root, 'edgeview.db'), MAX_FILE));
+  const databaseBytes = inspectSmall(path.join(root, 'edgeview.db'), MAX_FILE);
+  if (!databaseBytes.length) throw fail();
+  const SQL = await initSqlJs(), db = new SQL.Database(databaseBytes);
   let schema: number;
   try {
     schema = Number(db.exec('PRAGMA user_version')[0]?.values[0]?.[0]);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import { buildExportRequest } from '../utils/exportRequest';
 import {
@@ -29,6 +29,7 @@ export interface GlobalExportPayload {
   sourceView?: Record<string, string>;
   detectedSourceColumns?: string[];
   sourceRowPositions?: number[];
+  contactFileId?: string;
   sourceColumns?: { key: string; header: string }[];
   recordCount?: number;
   defaultReportType?: ExportReportType;
@@ -36,6 +37,8 @@ export interface GlobalExportPayload {
 
 export type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'all';
 export type ExportReportType = 'importer' | 'exporter' | 'both' | 'international_importer';
+
+const EXPORT_DEADLINE_MS = 120_000;
 
 interface GlobalExportModalProps {
   isOpen: boolean;
@@ -55,25 +58,65 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportStep, setExportStep] = useState<string>('');
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
+  const exportGenerationRef = useRef(0);
+  const exportControllerRef = useRef<AbortController | null>(null);
+  const exportDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    exportGenerationRef.current += 1;
+    exportControllerRef.current?.abort();
+    exportControllerRef.current = null;
+    if (exportDeadlineRef.current) clearTimeout(exportDeadlineRef.current);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }, []);
 
   const totalRecords = payload.recordCount ?? payload.records.length;
   const selectedCount = payload.selectedRows ? payload.selectedRows.length : 0;
   const effectiveCount = selectedCount > 0 ? selectedCount : totalRecords;
 
   const handleStartExport = async () => {
+    if (isExporting) return;
+    const generation = ++exportGenerationRef.current;
+    const controller = new AbortController();
+    exportControllerRef.current?.abort();
+    exportControllerRef.current = controller;
+    if (exportDeadlineRef.current) clearTimeout(exportDeadlineRef.current);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      if (exportGenerationRef.current !== generation || exportControllerRef.current !== controller) return;
+      timedOut = true;
+      exportControllerRef.current = null;
+      controller.abort();
+      // Release the controls from the deadline itself. Abort is a best-effort
+      // transport signal and a stalled fetch is not required to settle.
+      setIsExporting(false);
+      setExportProgress(0);
+      setExportStep('');
+      setExportNotice(null);
+      setExportError('Export timed out after 2 minutes. No download was saved. Try a smaller selection or a single format.');
+    }, EXPORT_DEADLINE_MS);
+    exportDeadlineRef.current = deadline;
+    const isCurrentRequest = () => exportGenerationRef.current === generation
+      && exportControllerRef.current === controller && !controller.signal.aborted;
+
     setIsExporting(true);
     setExportError(null);
+    setExportNotice(null);
     setExportSuccess(false);
     setExportProgress(15);
     setExportStep('Preparing dataset and format specifications...');
 
     try {
-      await new Promise((r) => setTimeout(r, 200));
       setExportProgress(40);
       setExportStep(`Processing ${effectiveCount} record${effectiveCount === 1 ? '' : 's'} for ${selectedFormat.toUpperCase()} export...`);
 
       const request = buildExportRequest({ ...payload, sourceColumns: customColumns ? sourceColumns : undefined }, selectedFormat, reportType);
+      if (!isCurrentRequest()) return;
 
       setExportProgress(65);
       setExportStep(
@@ -88,14 +131,18 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(request.body),
+        signal: controller.signal,
       });
+      if (!isCurrentRequest()) return;
 
       setExportProgress(85);
       setExportStep('Validating & finalizing download payload...');
 
       const { blob, filename } = await processAndValidateExportResponse(response, selectedFormat);
+      if (!isCurrentRequest()) return;
 
-      // Trigger automatic browser download
+      // Trigger automatic browser download only while this exact request owns
+      // the dialog. A cancelled/superseded response has no download side effect.
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -105,26 +152,62 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
 
+      if (!isCurrentRequest()) return;
+      exportControllerRef.current = null;
       setExportProgress(100);
       setExportStep('Export completed successfully!');
       setExportSuccess(true);
+      setIsExporting(false);
 
-      setTimeout(() => {
-        setIsExporting(false);
+      closeTimerRef.current = setTimeout(() => {
+        if (exportGenerationRef.current !== generation) return;
+        closeTimerRef.current = null;
         setExportSuccess(false);
         onClose();
       }, 800);
     } catch (err: any) {
+      if (exportGenerationRef.current !== generation || timedOut || controller.signal.aborted) return;
       console.error('Export error:', err);
       setExportError(err?.message || 'Export failed. Please try again.');
+      setExportNotice(null);
       setIsExporting(false);
       setExportProgress(0);
+      setExportStep('');
+    } finally {
+      clearTimeout(deadline);
+      if (exportDeadlineRef.current === deadline) exportDeadlineRef.current = null;
+      if (exportControllerRef.current === controller) exportControllerRef.current = null;
     }
   };
 
-  const handleClose = () => {
-    if (isExporting) return;
+  const cancelExport = (closeAfterCancel: boolean) => {
+    exportGenerationRef.current += 1;
+    const controller = exportControllerRef.current;
+    exportControllerRef.current = null;
+    controller?.abort();
+    if (exportDeadlineRef.current) clearTimeout(exportDeadlineRef.current);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    exportDeadlineRef.current = null;
+    closeTimerRef.current = null;
+    setIsExporting(false);
+    setExportProgress(0);
+    setExportStep('');
+    setExportSuccess(false);
     setExportError(null);
+    setExportNotice(closeAfterCancel ? null : 'Export cancelled. No download was saved. You can adjust the export options or retry.');
+    if (closeAfterCancel) onClose();
+  };
+
+  const handleClose = () => {
+    if (isExporting) {
+      cancelExport(true);
+      return;
+    }
+    exportGenerationRef.current += 1;
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+    setExportError(null);
+    setExportNotice(null);
     setExportSuccess(false);
     onClose();
   };
@@ -183,8 +266,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
           </div>
           <button
             onClick={handleClose}
-            disabled={isExporting}
-            className="text-[#9ca3af] hover:text-white transition-colors disabled:opacity-50 cursor-pointer p-1 rounded-md hover:bg-[#333333]"
+            className="text-[#9ca3af] hover:text-white transition-colors cursor-pointer p-1 rounded-md hover:bg-[#333333]"
             aria-label="Close export dialog"
           >
             <X className="w-5 h-5" />
@@ -319,6 +401,13 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
           </div>
 
           {/* Progress & Error States */}
+          {exportNotice && (
+            <div role="status" className="p-3 bg-amber-950/40 border border-amber-800 rounded-lg text-amber-200 flex items-start space-x-2 text-xs">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <span>{exportNotice}</span>
+            </div>
+          )}
+
           {exportError && (
             <div className="p-3 bg-red-950/60 border border-red-800 rounded-lg text-red-300 flex items-start space-x-2 text-xs">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
@@ -359,11 +448,10 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
         <div className="px-4 py-3 bg-[#262626] border-t border-[#333333] flex items-center justify-between shrink-0 mt-auto">
           <button
             type="button"
-            onClick={handleClose}
-            disabled={isExporting}
-            className="px-4 py-2 rounded-lg bg-[#1a1a1a] hover:bg-[#333333] border border-[#333333] text-[#9ca3af] hover:text-white font-medium text-xs transition-colors disabled:opacity-50 cursor-pointer"
+            onClick={() => isExporting ? cancelExport(false) : handleClose()}
+            className="px-4 py-2 rounded-lg bg-[#1a1a1a] hover:bg-[#333333] border border-[#333333] text-[#9ca3af] hover:text-white font-medium text-xs transition-colors cursor-pointer"
           >
-            Cancel
+            {isExporting ? 'Cancel Export' : 'Cancel'}
           </button>
 
           <button

@@ -21,14 +21,16 @@ const syntheticKeys = Object.fromEntries(['serper','hunter','nvidia','groq','gem
 const syntheticConfig = { ...syntheticKeys, serper_enabled: false, hunter_enabled: false, nvidia_enabled: false, groq_enabled: false };
 fs.writeFileSync(path.join(app, 'config.json'), JSON.stringify(syntheticConfig));
 fs.writeFileSync(path.join(app, 'config.prev.json'), JSON.stringify(syntheticConfig));
+const outboundAudit = path.join(root, 'outbound-attempts.txt');
 const env = { ...process.env, NODE_ENV: 'production', PORT: String(port), HOST: '127.0.0.1',
   NODE_PATH: path.join(source, 'node_modules'), EDGEVIEW_CONFIG: path.join(app, 'config.json'), EDGEVIEW_V1_DATA_DIR: path.join(app, 'data/runs'),
+  EDGEVIEW_MONITORING_ENABLED: '0', EDGEVIEW_SENTRY_DSN: '', EDGEVIEW_POSTHOG_KEY: '', EDGEVIEW_POSTHOG_HOST: '', EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit,
   SERPER_API_KEY: '', HUNTER_API_KEY: '', NVIDIA_API_KEY: '', GROQ_API_KEY: '' };
 for (const key of ['EDGEVIEW_TEST_MODE','EDGEVIEW_TEST_DB_DIR','EDGEVIEW_JSON_DB','EDGEVIEW_SQLITE_DB','EDGEVIEW_DEV_SERVER','EDGEVIEW_ENABLE_SAMPLE_DATA']) delete env[key];
 
 async function start() {
   output = '';
-  child = spawn(process.execPath, ['--import', pathToFileURL(path.join(source, 'scripts/test-fixtures/normal-shutdown.mjs')).href, 'dist/server.cjs'], { cwd: app, env, stdio: ['ignore','pipe','pipe','ipc'] });
+  child = spawn(process.execPath, ['--require', path.join(source, 'scripts/test-no-egress.cjs'), '--import', pathToFileURL(path.join(source, 'scripts/test-fixtures/normal-shutdown.mjs')).href, 'dist/server.cjs'], { cwd: app, env, stdio: ['ignore','pipe','pipe','ipc'] });
   const collect = chunk => { output = (output + chunk).slice(-8000); };
   child.stdout.on('data', collect); child.stderr.on('data', collect);
   const deadline = Date.now() + 30000;
@@ -124,7 +126,8 @@ try {
     const intact = JSON.parse(fs.readFileSync(path.join(app, 'edgeview_db.json'), 'utf8'));
     assert.equal(intact.length, 2, 'credential failure must not erase saved records');
   }
-  console.log('PASS production-mode upload/history provenance survives restart without touching live installation');
+  assert.equal(fs.existsSync(outboundAudit), false, 'production history runtime attempted provider, monitoring or other outbound transport');
+  console.log('PASS production-mode upload/history provenance survives restart without touching live installation or outbound transport');
 } finally {
   await stop();
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

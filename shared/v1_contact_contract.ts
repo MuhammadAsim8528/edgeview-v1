@@ -1,4 +1,4 @@
-export const V1_CONTACT_OVERLAY_VERSION = 31;
+export const V1_CONTACT_OVERLAY_VERSION = 33;
 // Operational reuse limit only; never a claim that external facts stay true.
 export const V1_REUSE_MAX_AGE_DAYS = 7;
 
@@ -147,11 +147,10 @@ export function normalizeV1ContactPeople(value: unknown): V1ContactPerson[] {
   for (const raw of value) {
     if (!raw || typeof raw !== 'object') continue;
     const item = raw as any;
-    const name = String(item.name || '').trim();
-    const key = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!name || !key || seen.has(key)) continue;
-    seen.add(key);
-    out.push({
+    const name = String(item.name || '').normalize('NFKC').trim();
+    const nameKey = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (!name || !nameKey) continue;
+    const person: V1ContactPerson = {
       name,
       ...(item.designation ? { designation: String(item.designation).trim() } : {}),
       ...(item.email ? { email: String(item.email).trim() } : {}),
@@ -161,7 +160,15 @@ export function normalizeV1ContactPeople(value: unknown): V1ContactPerson[] {
       ...(item.branch ? { branch: String(item.branch).trim() } : {}),
       ...((item.linkedin_url || item.linkedin) ? { linkedin_url: String(item.linkedin_url || item.linkedin).trim() } : {}),
       ...(item.source_url ? { source_url: String(item.source_url).trim() } : {}),
-    });
+    };
+    // A shared name is not proof that two people are identical. Deduplicate only
+    // a fully identical normalized record; differing profiles remain separate
+    // rather than silently inheriting each other's role or contact details.
+    const key = JSON.stringify([nameKey, person.designation, person.email, person.phone, person.department,
+      person.country, person.branch, person.linkedin_url, person.source_url]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(person);
     if (out.length >= 50) break;
   }
   return out;

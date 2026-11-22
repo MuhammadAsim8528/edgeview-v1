@@ -24,6 +24,91 @@ export function assertSupportedNode(version = process.versions.node) {
   throw new Error(`EdgeView needs ${NODE_RANGE} (found ${version}). Install a current Node.js LTS from https://nodejs.org and launch EdgeView again.`);
 }
 
+function compatible(item, platform, arch) {
+  return (!Array.isArray(item.os) || item.os.includes(platform)) && (!Array.isArray(item.cpu) || item.cpu.includes(arch));
+}
+
+function resolveLocked(lock, from, name) {
+  let base = from;
+  while (base) {
+    const nested = `${base}/node_modules/${name}`;
+    if (lock.packages?.[nested]) return nested;
+    const parent = base.lastIndexOf('/node_modules/');
+    base = parent >= 0 ? base.slice(0, parent) : '';
+  }
+  const root = `node_modules/${name}`;
+  return lock.packages?.[root] ? root : null;
+}
+
+// Resolve the actual lock graph, including nested dependencies and non-optional
+// peers. A direct-root version check alone can certify an incomplete installation.
+export function lockedDependencyClosure(lock, roots = Object.keys(lock.packages?.['']?.dependencies || {}), { platform = process.platform, arch = process.arch } = {}) {
+  if (lock?.lockfileVersion !== 3 || !lock.packages?.['']) throw new Error('DEPENDENCY_LOCK_FORMAT');
+  const pending = roots.map(name => ({ from: '', name }));
+  const closure = new Map();
+  while (pending.length) {
+    const { from, name } = pending.shift();
+    const location = resolveLocked(lock, from, name);
+    if (!location) throw new Error('DEPENDENCY_LOCK_INCOMPLETE');
+    if (closure.has(location)) continue;
+    const item = lock.packages[location];
+    closure.set(location, item);
+    const required = { ...(item.dependencies || {}) };
+    for (const [peer] of Object.entries(item.peerDependencies || {})) {
+      if (item.peerDependenciesMeta?.[peer]?.optional !== true && !Object.hasOwn(required, peer)) required[peer] = true;
+    }
+    for (const dependency of Object.keys(required)) {
+      if (!resolveLocked(lock, location, dependency)) throw new Error('DEPENDENCY_LOCK_INCOMPLETE');
+      pending.push({ from: location, name: dependency });
+    }
+    for (const [dependency] of Object.entries(item.optionalDependencies || {})) {
+      const resolved = resolveLocked(lock, location, dependency);
+      if (resolved && compatible(lock.packages[resolved], platform, arch)) pending.push({ from: location, name: dependency });
+    }
+  }
+  return closure;
+}
+
+export function productionLockIntegrityGaps(lock) {
+  const gaps = [];
+  for (const [location, item] of lockedDependencyClosure(lock)) {
+    if (!item.link && (!item.resolved || !item.integrity)) gaps.push(location);
+  }
+  return gaps;
+}
+
+export function installedEsbuildBinariesMatch(root, lock, closure, execute = file => spawnSync(file, ['--version'], { encoding: 'utf8', timeout: 10_000, windowsHide: true })) {
+  for (const [location, item] of closure) {
+    if (location.split('/node_modules/').pop() !== 'esbuild') continue;
+    const nativeName = Object.keys(item.optionalDependencies || {}).find(name => {
+      const resolved = resolveLocked(lock, location, name);
+      return resolved && compatible(lock.packages[resolved], process.platform, process.arch);
+    });
+    if (!nativeName) return false;
+    const nativeLocation = resolveLocked(lock, location, nativeName);
+    if (!nativeLocation || lock.packages[nativeLocation].version !== item.version) return false;
+    const executable = path.join(root, nativeLocation, process.platform === 'win32' ? 'esbuild.exe' : 'bin/esbuild');
+    const stat = fs.lstatSync(executable);
+    if (!stat.isFile() || stat.isSymbolicLink()) return false;
+    const result = execute(executable);
+    if (result.error || result.status !== 0 || String(result.stdout || '').trim() !== item.version) return false;
+  }
+  return true;
+}
+
+export function installedProductionDependenciesMatch(root, options, execute) {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+    const closure = lockedDependencyClosure(lock, Object.keys(manifest.dependencies || {}), options);
+    for (const [location, item] of closure) {
+      const actual = JSON.parse(fs.readFileSync(path.join(root, location, 'package.json'), 'utf8'));
+      if (actual.version !== item.version) return false;
+    }
+    return installedEsbuildBinariesMatch(root, lock, closure, execute);
+  } catch { return false; }
+}
+
 export function dependencyFingerprint(root) {
   return crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'package-lock.json')))
     .update(fs.readFileSync(path.join(root, 'package.json')))
@@ -55,14 +140,7 @@ export function ensureDependencies(root, install = () => {
 }) {
   const marker = path.join(root, 'node_modules', '.edgeview-install.json');
   const fingerprint = dependencyFingerprint(root);
-  const dependenciesExist = () => {
-    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-    const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
-    return Object.keys(manifest.dependencies || {}).every(name => {
-      const actual = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'), 'utf8'));
-      return actual.version === lock.packages?.[`node_modules/${name}`]?.version;
-    });
-  };
+  const dependenciesExist = () => installedProductionDependenciesMatch(root);
   try {
     if (JSON.parse(fs.readFileSync(marker, 'utf8')).fingerprint === fingerprint && dependenciesExist()) {
       console.log('EdgeView dependencies are up to date.');

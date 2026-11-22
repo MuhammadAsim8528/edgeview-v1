@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readBuildIdentity, sourceDigest, artifactDigest } from '../shared/build_identity.mjs';
 import { resolveRuntimeDataRoot } from '../shared/runtime_paths.mjs';
+import { nodeVersionSupported, NODE_RANGE, installedProductionDependenciesMatch, productionLockIntegrityGaps } from './ensure-dependencies.mjs';
 
 const installation = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export async function runDoctor({ root = installation, full = false, request = fetch, execute, environment = process.env } = {}) {
@@ -18,17 +19,18 @@ export async function runDoctor({ root = installation, full = false, request = f
     add('installation', 'FAIL', 'Expected EdgeView installation manifest is missing or invalid.');
     return { format: 1, checks, exitCode: 1 };
   }
-  add('runtime', Number(process.versions.node.split('.')[0]) >= 22 ? 'PASS' : 'FAIL', `Node ${process.versions.node}`);
+  add('runtime', nodeVersionSupported() ? 'PASS' : 'FAIL', nodeVersionSupported() ? `Node ${process.versions.node}` : `Node ${process.versions.node} is unsupported; ${NODE_RANGE} is required.`);
   try {
     const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
     const canonical = value => JSON.stringify(Object.entries(value || {}).sort(([a], [b]) => a.localeCompare(b)));
     if (lock.name !== manifest.name || lock.version !== manifest.version || ['dependencies', 'devDependencies'].some(key => canonical(lock.packages?.['']?.[key]) !== canonical(manifest[key]))) throw new Error();
     add('dependency_lock', 'PASS', 'npm lock matches the application manifest.');
-    const installed = Object.keys(manifest.dependencies || {}).every(name => {
-      try { return JSON.parse(fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'), 'utf8')).version === lock.packages?.[`node_modules/${name}`]?.version; }
-      catch { return false; }
-    });
-    add('dependencies', installed ? 'PASS' : 'FAIL', installed ? 'Locked production dependencies are installed.' : 'Production dependencies are missing or differ from the lock; run the launcher repair.');
+    const installed = installedProductionDependenciesMatch(root);
+    add('dependencies', installed ? 'PASS' : 'FAIL', installed ? 'The locked production dependency closure is installed.' : 'Production dependencies are incomplete or differ from the lock; run the launcher repair.');
+    const integrityGaps = productionLockIntegrityGaps(lock);
+    add('dependency_integrity', integrityGaps.length ? 'FAIL' : 'PASS', integrityGaps.length
+      ? `The production lock is missing resolved/integrity metadata for ${integrityGaps.length} package entries; regenerate it at unchanged reviewed versions before release.`
+      : 'Every production lock entry has resolved and integrity metadata.');
   } catch { add('dependency_lock', 'FAIL', 'Missing, invalid or inconsistent npm lock.'); }
   const built = ['dist/server.cjs', 'dist/index.html'].every(file => fs.existsSync(path.join(root, file)));
   add('build_presence', built ? 'PASS' : 'FAIL', built ? 'Frontend and backend artifacts exist; freshness is not inferred.' : 'Production build artifacts are missing.');

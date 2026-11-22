@@ -4,7 +4,7 @@ export const observedBatchUsage = projectV1ProviderUsage;
 
 export interface CompanyResearchState {
   id: string; name: string; status: 'pending' | 'processing' | 'completed' | 'failed'; stage: string;
-  error?: string; durationMs?: number; resourceUsage: BatchUsage;
+  error?: string; durationMs?: number; completedAt?: string; updatedAt?: string; resourceUsage: BatchUsage;
   reuse_only?: boolean; force_live?: boolean; reuse_policy_version?: 1;
   metrics?: { emailsFound: number; phonesFound: number; socialsFound: number; leadershipFound: boolean; websiteFound: boolean };
 }

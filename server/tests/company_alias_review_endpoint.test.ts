@@ -104,7 +104,7 @@ try {
   const seeded = spawnSync(process.execPath, ['--require', path.resolve('scripts/test-no-egress.cjs'), '--import', 'tsx', '--input-type=module', '--eval', `
     import {getV1Run} from './server/v1_engine.ts';
     import {prepareCompanyAliasAdmission,persistCompanyAliasAdmission} from './server/company_alias_registry.ts';
-    const plan=prepareCompanyAliasAdmission(${JSON.stringify(alias)},${JSON.stringify(canonical)},getV1Run('run-alias-review'),'raw-alias-review');
+    const plan=prepareCompanyAliasAdmission(${JSON.stringify(alias)},${JSON.stringify(canonical)},await getV1Run('run-alias-review'),'raw-alias-review');
     await persistCompanyAliasAdmission(plan,plan.confirmation_sha256);
   `], { cwd: process.cwd(), env, encoding: 'utf8', timeout: 30000, windowsHide: true });
   assert.equal(seeded.status, 0, 'fixture seed must pass the actual durable registry boundary');

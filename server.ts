@@ -4,6 +4,7 @@ import express from 'express';
 import { buildCountryOverview } from './shared/country_overview';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 import { processBirthIdentity, recordedOwnerWasReused } from './server/process_identity';
 import { acquireRuntimeMaintenance } from './shared/runtime_maintenance.mjs';
 import multer from 'multer';
@@ -59,7 +60,7 @@ import { hasRecentProviderObservation, isRecentProviderOperation, projectV1Provi
 import { createResourceSampler } from './server/resource_snapshot';
 import { readBuildIdentity } from './shared/build_identity.mjs';
 import { createShutdownController } from './server/shutdown';
-import { flushInitializedDatabase, getOperationalDatabaseStatus } from './server/sqlite';
+import { flushInitializedDatabase, getDb, getOperationalDatabaseStatus } from './server/sqlite';
 import { requiresOperationalDatabase } from './server/storage_mutation_guard';
 import { contactResearchCategory } from './shared/contact_research_scope';
 import { initMonitoring, getMonitoringStatus, captureMonitoringEvent, shutdownMonitoring, classifyMonitoringError, applyMonitoringPreferences } from './server/monitoring';
@@ -118,6 +119,50 @@ function boundedText(value: unknown, field: string, maxLength: number, required 
   return clean;
 }
 
+function validateApiKeyFormat(provider: string, key: string): { valid: boolean; error?: string } {
+  const trimmed = key.trim();
+  switch (provider) {
+    case 'serper':
+      if (!/^[a-f0-9]{40}$/i.test(trimmed)) {
+        return { valid: false, error: 'Serper API key must be a 40-character hexadecimal string' };
+      }
+      break;
+    case 'hunter':
+      if (!/^[a-f0-9]{32,40}$/i.test(trimmed)) {
+        return { valid: false, error: 'Hunter API key must be a 32-40 character hexadecimal string' };
+      }
+      break;
+    case 'nvidia':
+      if (!/^nvapi-[a-zA-Z0-9_-]{60,}$/.test(trimmed)) {
+        return { valid: false, error: 'NVIDIA API key must start with "nvapi-" followed by at least 60 characters' };
+      }
+      break;
+    case 'groq':
+      if (!/^gsk_[a-zA-Z0-9]{52}$/.test(trimmed)) {
+        return { valid: false, error: 'Groq API key must start with "gsk_" followed by 52 alphanumeric characters' };
+      }
+      break;
+  }
+  return { valid: true };
+}
+
+function asyncRoute(handler: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<unknown>): express.RequestHandler {
+  return (req, res, next) => { handler(req, res, next).catch(next); };
+}
+
+interface StructuredError {
+  success: false;
+  code: string;
+  message: string;
+  recoverable?: boolean;
+  remediation?: string;
+  [key: string]: unknown;
+}
+
+function structuredError(code: string, message: string, options: { recoverable?: boolean; remediation?: string; [key: string]: unknown } = {}): StructuredError {
+  return { success: false, code, message, ...options };
+}
+
 function publicV1Settings(settings: ReturnType<typeof getAppSettings>) {
   return {
     serper_api_key: '',
@@ -160,6 +205,18 @@ app.use((req, res, next) => {
   const hostCount = req.rawHeaders.filter((_value, index) => index % 2 === 0 && req.rawHeaders[index].toLowerCase() === 'host').length;
   if (hostCount !== 1 || !allowedHosts.has(host)) return res.status(403).json({ error: 'Local EdgeView host required.' });
   if (origin && !allowedOrigins.has(origin)) return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    if (origin && !allowedOrigins.has(origin)) return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
+    if (!origin) {
+      const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+      if (fetchSite && fetchSite !== 'same-origin') return res.status(403).json({ success: false, code: 'LOCAL_ORIGIN_REQUIRED', error: 'A same-origin EdgeView request is required.' });
+      const contentType = String(req.headers['content-type'] || '').toLowerCase();
+      const isJson = /^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|\s*$)/i.test(contentType);
+      const isUpload = /^multipart\/form-data(?:\s*;|\s*$)/i.test(contentType);
+      const isEmpty = !contentType && Number(req.headers['content-length'] || 0) === 0 && !req.headers['transfer-encoding'];
+      if (!isJson && !isUpload && !isEmpty) return res.status(403).json({ success: false, code: 'LOCAL_ORIGIN_REQUIRED', error: 'JSON or same-origin upload content is required for local changes.' });
+    }
+  }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -174,14 +231,26 @@ app.use((req, res, next) => {
 // Match with Express itself, including case/trailing-slash aliases and HEAD.
 // All formats and importer-stat downloads share one fixed process-wide budget.
 let exportWindow = { startedAt: 0, count: 0 };
-const limitExports: express.RequestHandler = (_req, res, next) => {
+const limitExports: express.RequestHandler = async (_req, res, next) => {
   const now = Date.now();
-  if (now - exportWindow.startedAt >= 60_000) exportWindow = { startedAt: now, count: 0 };
+  const key = 'export-window';
+  
+  // Check persistent store
+  const persistent = await getRateLimitWindow(key);
+  if (!exportWindow.startedAt || now - exportWindow.startedAt >= 60_000) {
+    if (persistent && now - persistent.windowStart < 60_000) {
+      exportWindow = { startedAt: persistent.windowStart, count: persistent.count };
+    } else {
+      exportWindow = { startedAt: now, count: 0 };
+    }
+  }
+  
   if (exportWindow.count >= 24) {
     res.setHeader('Retry-After', String(Math.max(1, Math.ceil((60_000 - (now - exportWindow.startedAt)) / 1000))));
     return res.status(429).json({ success: false, code: 'LOCAL_RATE_LIMITED', message: 'Too many exports. Try again in a moment.', recoverable: true });
   }
   exportWindow.count += 1;
+  await setRateLimitWindow(key, exportWindow.startedAt, exportWindow.count);
   next();
 };
 app.use('/api/export', limitExports);
@@ -191,8 +260,47 @@ const statsExportAdmission = express.Router();
 statsExportAdmission.use('/importers/:importer/export', limitExports);
 app.use('/api/stats', statsExportAdmission);
 
+// Rate limit persistence helpers
+async function getRateLimitWindow(bucketKey: string): Promise<{ windowStart: number; count: number } | null> {
+  try {
+    const db = await getDb();
+    const row = await db.get('SELECT window_start, count FROM rate_limit_windows WHERE bucket_key = ?', [bucketKey]);
+    return row ? { windowStart: row.window_start, count: row.count } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setRateLimitWindow(bucketKey: string, windowStart: number, count: number): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.run(
+      `INSERT INTO rate_limit_windows (bucket_key, window_start, count, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(bucket_key) DO UPDATE SET window_start = excluded.window_start, count = excluded.count, updated_at = excluded.updated_at`,
+      [bucketKey, windowStart, count, Date.now()]
+    );
+  } catch {
+    // Non-fatal; rate limiting still works in-memory as fallback
+  }
+}
+
+async function cleanupOldRateLimitWindows(): Promise<void> {
+  try {
+    const db = await getDb();
+    const cutoff = Date.now() - 2 * 60_000;
+    await db.run('DELETE FROM rate_limit_windows WHERE updated_at < ?', [cutoff]);
+  } catch {
+    // Non-fatal
+  }
+}
+
+// Run cleanup on startup and periodically
+cleanupOldRateLimitWindows();
+setInterval(cleanupOldRateLimitWindows, 5 * 60 * 1000);
+
 const mutationWindows = new Map<string, { startedAt: number; count: number }>();
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   const modelDiscovery = req.path === '/api/ai/models';
   if (!modelDiscovery && !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
   // Fixed bucket names avoid unbounded map growth from attacker-chosen paths.
@@ -200,12 +308,28 @@ app.use((req, res, next) => {
   const key = modelDiscovery ? 'model-discovery' : 'local-mutations';
   const limit = modelDiscovery ? 12 : 120;
   const now = Date.now();
-  const entry = mutationWindows.get(key);
+
+  // Check persistent store first
+  const persistent = await getRateLimitWindow(key);
+  let entry = mutationWindows.get(key);
+  
+  // Initialize in-memory cache from persistent store if needed
+  if (!entry && persistent) {
+    const windowStart = persistent.windowStart;
+    if (now - windowStart < 60_000) {
+      entry = { startedAt: windowStart, count: persistent.count };
+      mutationWindows.set(key, entry);
+    }
+  }
+
   if (!entry || now - entry.startedAt >= 60_000) {
-    mutationWindows.set(key, { startedAt: now, count: 1 });
+    entry = { startedAt: now, count: 1 };
+    mutationWindows.set(key, entry);
+    await setRateLimitWindow(key, now, 1);
     return next();
   }
   entry.count += 1;
+  await setRateLimitWindow(key, entry.startedAt, entry.count);
   if (entry.count > limit) {
     res.setHeader('Retry-After', String(Math.max(1, Math.ceil((60_000 - (now - entry.startedAt)) / 1000))));
     return res.status(429).json({ success: false, code: 'LOCAL_RATE_LIMITED', message: 'Too many local requests. Try again in a moment.', recoverable: true });
@@ -271,13 +395,13 @@ app.use(['/api', '/upload', '/files'], (req, res, next) => {
 // secret material and WITHOUT network calls, so it stays healthy (HTTP 200)
 // even when every provider is down or a provider circuit has tripped.
 app.get('/api/health', (req, res) => {
-  const database: any = { status: 'ok', files: 0, persistence: false };
+  const database: { status: 'ok' | 'degraded'; files: number; persistence: boolean; message?: string; operational?: ReturnType<typeof getOperationalDatabaseStatus> } = { status: 'ok', files: 0, persistence: false };
   try {
     database.files = db.files.size;
     database.persistence = persistenceDatabaseExists();
-  } catch (err: any) {
+  } catch (err: unknown) {
     database.status = 'degraded';
-    database.message = err?.message || 'Database status check failed';
+    database.message = err instanceof Error ? err.message : 'Database status check failed';
   }
   database.operational = getOperationalDatabaseStatus();
   if (database.operational.status !== 'ok') database.status = 'degraded';
@@ -285,7 +409,7 @@ app.get('/api/health', (req, res) => {
   let settings: ReturnType<typeof getAppSettings>;
   try {
     settings = getAppSettings();
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to read app settings for /api/health:', err);
     settings = { nvidia_api_key: '', groq_api_key: '', serper_api_key: '', firecrawl_api_key: '', hunter_api_key: '', tavily_api_key: '', exa_api_key: '', linkup_api_key: '', apify_api_key: '' } as ReturnType<typeof getAppSettings>;
   }
@@ -410,9 +534,9 @@ app.get('/api/files', (req, res) => {
       summary: f.summary || {},
     }));
     res.json(fileList);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in /api/files route:', err);
-    res.status(500).json({ error: err?.message || 'Failed to load files', success: false });
+    res.status(500).json(structuredError('FILES_LOAD_FAILED', err instanceof Error ? err.message : 'Failed to load files', { recoverable: true }));
   }
 });
 
@@ -451,14 +575,14 @@ app.post(['/api/files/:id/save-to-history', '/api/stats/save-to-history'], ident
   try {
     const fileId = req.params.id || req.body?.file_id;
     if (!fileId) {
-      return res.status(400).json({ success: false, error: 'File ID is required' });
+      return res.status(400).json(structuredError('FILE_ID_REQUIRED', 'File ID is required'));
     }
     const file = db.getFileById(fileId);
     if (!file) {
-      return res.status(404).json({ success: false, error: 'File not found in active session' });
+      return res.status(404).json(structuredError('FILE_NOT_FOUND', 'File not found in active session'));
     }
 
-    if (!hasTradeParties(file.columns ?? [])) return res.status(422).json({ success: false, error: 'Trade history requires an importer or exporter field.' });
+    if (!hasTradeParties(file.columns ?? [])) return res.status(422).json(structuredError('TRADE_FIELDS_REQUIRED', 'Trade history requires an importer or exporter field.'));
     const fileHash = computeFileHash(Buffer.from(JSON.stringify(file.rows || [])));
     const saved = await saveFileToDb(file, fileHash, 'real');
 
@@ -468,7 +592,7 @@ app.post(['/api/files/:id/save-to-history', '/api/stats/save-to-history'], ident
       data: saved,
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err?.message || 'Failed to save file to history' });
+    return res.status(500).json(structuredError('SAVE_HISTORY_FAILED', err?.message || 'Failed to save file to history', { recoverable: true }));
   }
 }));
 
@@ -477,13 +601,13 @@ app.get('/api/files/:id/data', (req, res) => {
   try {
     const file = db.getFileById(req.params.id);
     if (!file) {
-      return res.status(404).json({ error: 'File not found' });
+      return res.status(404).json(structuredError('FILE_NOT_FOUND', 'File not found'));
     }
 
     const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
     const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
     if ((req.query.limit !== undefined && (typeof req.query.limit !== 'string' || !/^\d+$/.test(req.query.limit))) || !Number.isInteger(limit) || limit < 1 || limit > 1000
-      || (req.query.offset !== undefined && (typeof req.query.offset !== 'string' || !/^\d+$/.test(req.query.offset))) || !Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ error: 'Pagination requires limit 1–1000 and a non-negative integer offset.' });
+      || (req.query.offset !== undefined && (typeof req.query.offset !== 'string' || !/^\d+$/.test(req.query.offset))) || !Number.isSafeInteger(offset) || offset < 0) return res.status(400).json(structuredError('INVALID_PAGINATION', 'Pagination requires limit 1–1000 and a non-negative integer offset.', { recoverable: true }));
     const positions = new WeakMap<Record<string, unknown>, number>();
     const rows = selectFileViewRows(file.rows || [], req.query, true, false, positions);
 
@@ -507,9 +631,9 @@ app.get('/api/files/:id/data', (req, res) => {
         importers: file.summary?.importers_list || [],
       },
     });
-  } catch (err: any) {
-    if (err instanceof FileViewValidationError) return res.status(400).json({ code: 'INVALID_FILE_VIEW', error: err.message });
-    res.status(500).json({ error: err?.message || 'Failed to fetch file data' });
+  } catch (err: unknown) {
+    if (err instanceof FileViewValidationError) return res.status(400).json(structuredError('INVALID_FILE_VIEW', err.message));
+    res.status(500).json(structuredError('FILE_DATA_FETCH_FAILED', err instanceof Error ? err.message : 'Failed to fetch file data', { recoverable: true }));
   }
 });
 
@@ -533,46 +657,62 @@ app.delete('/api/files/:id', identityWorkHandler(async (req, res) => {
     }
     if (await hasUnattributedHistory(file.name)) return res.status(409).json(HISTORY_RECONCILIATION_REQUIRED);
 
-    // 1. Persist the primary file deletion first so it cannot reappear after
-    // restart. JSON persistence throws on an undurable write.
-    const diskDeleted = await deleteFileFromHistory(id);
-
-    // 2. Purge the derived shipment index and cross an explicit durability
-    // barrier before claiming all associated history was removed.
-    let historyCleanupError: string | null = null;
+    // Purge derived history before removing the primary record. A failed SQL
+    // cleanup leaves the file available for an ordinary retry of this route.
     try {
       const { getDb } = await import('./server/sqlite');
       const sqliteDb = await getDb();
       await sqliteDb.run('DELETE FROM history_data WHERE file_id = ?', [id]);
       await sqliteDb.flush();
-    } catch (sqlErr: any) {
-      historyCleanupError = String(sqlErr?.message || sqlErr);
+    } catch (sqlErr) {
       console.warn('Delete history_data durability warning:', sqlErr);
+      return res.status(503).json({
+        success: false,
+        code: 'HISTORY_CLEANUP_FAILED',
+        message: 'The file was not deleted because associated history cleanup failed. Retry deletion.',
+        recoverable: true,
+        retryable: true,
+        deleted: false,
+      });
     }
 
-    // 3. Memory follows the durable primary store even if derived-index cleanup
-    // needs repair, preventing runtime state from disagreeing with restart state.
+    // JSON persistence throws on an undurable write, so memory follows only a
+    // successful primary-store deletion.
+    let diskDeleted: boolean;
+    try {
+      diskDeleted = await deleteFileFromHistory(id);
+    } catch (primaryErr) {
+      console.error('Failed to delete primary file after derived cleanup:', primaryErr);
+      return res.status(500).json({
+        success: false,
+        partial: true,
+        code: 'PRIMARY_FILE_DELETE_FAILED',
+        message: 'Associated history was removed, but the primary file could not be deleted. Retry deletion.',
+        recoverable: true,
+        retryable: true,
+        deleted: false,
+      });
+    }
     db.files.delete(id);
 
-    // 4. Re-sync company contacts and prune contacts that no longer have a
-    //    source file so stale companies do not persist until restart.
     try {
       db.syncCompaniesFromFiles();
       db.pruneOrphanedContacts();
     } catch (syncErr) {
       console.warn('Sync companies warning during delete:', syncErr);
-    }
-
-    if (historyCleanupError) {
       return res.status(207).json({
         success: true,
         partial: true,
-        message: 'File deletion was durably saved, but derived history cleanup needs retry.',
+        code: 'FILE_DELETED_PROJECTION_REFRESH_FAILED',
+        message: 'The file was permanently deleted, but the current company projection needs to be reloaded.',
+        recoverable: true,
+        retryable: false,
+        remediation: 'Reload the file and company views. The deleted file does not need to be deleted again.',
         deleted_id: id,
         persisted: diskDeleted,
-        warning: historyCleanupError,
       });
     }
+
     return res.json({
       success: true,
       message: 'File and associated history records deleted durably',
@@ -581,13 +721,13 @@ app.delete('/api/files/:id', identityWorkHandler(async (req, res) => {
     });
   } catch (err: any) {
     console.error('File delete route error:', err);
-    return res.status(500).json({ error: err?.message || 'Failed to delete file' });
+    return res.status(500).json(structuredError('FILE_DELETE_FAILED', err?.message || 'Failed to delete file', { recoverable: true }));
   }
 }));
 
 // Reset / Re-seed sample data
 app.post('/api/sample-data/seed', identityWorkHandler((req, res) => {
-  if (process.env.EDGEVIEW_ENABLE_SAMPLE_DATA !== '1') return res.status(404).json({ error: 'Sample data is disabled.' });
+  if (process.env.EDGEVIEW_ENABLE_SAMPLE_DATA !== '1') return res.status(404).json(structuredError('SAMPLE_DATA_DISABLED', 'Sample data is disabled.'));
   db.seedInitialData();
   res.json({ success: true, message: 'Sample files reseeded successfully' });
 }));
@@ -600,38 +740,41 @@ async function hydrateContactsFromCache(): Promise<void> {
 
 app.use('/api/companies', companyAliasReviewRouter);
 
-app.get('/api/companies', async (req, res) => {
+app.get('/api/companies', asyncRoute(async (req, res) => {
   await hydrateContactsFromCache();
 
-  const contactsList = Array.from(db.contacts.values());
+  const contactsList = db.contactsForFile(req.query.file_id);
   const reusable = reusableEvidenceContacts(contactsList);
   res.json(contactsList.map(contact => ({ ...contact, can_revalidate_evidence: reusable.has(contact) })));
-});
+}));
 
 // Canonical International Importer Directory (concise projection, excl. Pakistan, A→Z)
-app.get('/api/international-importer-directory', async (req, res) => {
+app.get('/api/international-importer-directory', asyncRoute(async (req, res) => {
   await hydrateContactsFromCache();
   const { getInternationalImporterDirectory } = await import('./server/international_importer_directory');
-  const contactsList = Array.from(db.contacts.values());
-  const directory = await getInternationalImporterDirectory(contactsList as any);
+  const fileId = req.query.file_id;
+  const contactsList = db.contactsForFile(fileId);
+  const { TradeRelationshipResolver } = await import('./server/trade_relationship_resolver');
+  const index = await TradeRelationshipResolver.buildTradeIndex(typeof fileId === 'string' ? fileId : undefined);
+  const directory = await getInternationalImporterDirectory(contactsList as any, index);
   res.json(directory);
-});
+}));
 
-app.get('/api/companies/:id', async (req, res) => {
+app.get('/api/companies/:id', asyncRoute(async (req, res) => {
   await hydrateContactsFromCache();
   const contact = Array.from(db.contacts.values()).find((c) => c.id === req.params.id);
   if (!contact) {
-    return res.status(404).json({ error: 'Company contact not found' });
+    return res.status(404).json(structuredError('CONTACT_NOT_FOUND', 'Company contact not found'));
   }
   res.json({ ...contact, can_revalidate_evidence: reusableEvidenceSelection([contact]) });
-});
+}));
 
 // Read-only, canonical trusted-intelligence projection. Opening this endpoint
 // never starts research and never creates a second company-data store.
-app.get('/api/companies/:id/intelligence', async (req, res) => {
+app.get('/api/companies/:id/intelligence', asyncRoute(async (req, res) => {
   await hydrateContactsFromCache();
   const contact = Array.from(db.contacts.values()).find((c) => c.id === req.params.id);
-  if (!contact) return res.status(404).json({ error: 'Company contact not found' });
+  if (!contact) return res.status(404).json(structuredError('CONTACT_NOT_FOUND', 'Company contact not found'));
   return res.json({
     entity_key: (contact as any).entity_key,
     company_name: contact.company_name,
@@ -643,7 +786,7 @@ app.get('/api/companies/:id/intelligence', async (req, res) => {
     evidence: (contact as any).evidence || [],
     sources: (contact as any).sources || [],
   });
-});
+}));
 
 // Retired pre-V1 enrichment endpoint. Keep an explicit tombstone so stale
 // clients cannot accidentally discover or revive the old mutation path.
@@ -662,7 +805,7 @@ app.get('/api/settings', (req, res) => {
   try {
     res.json(publicV1Settings(getAppSettings()));
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to retrieve settings' });
+    res.status(500).json(structuredError('SETTINGS_RETRIEVE_FAILED', err?.message || 'Failed to retrieve settings', { recoverable: true }));
   }
 });
 
@@ -671,7 +814,7 @@ app.get('/api/ai/models', async (req, res) => {
   try {
     const { fetchProviderModels } = await import('./server/ai_providers');
     const provider = String(req.query.provider || 'nvidia').toLowerCase();
-    if (!['nvidia', 'groq'].includes(provider)) return res.status(400).json({ success: false, error: 'Only NVIDIA and Groq models are supported by EdgeView V1.' });
+    if (!['nvidia', 'groq'].includes(provider)) return res.status(400).json(structuredError('UNSUPPORTED_PROVIDER', 'Only NVIDIA and Groq models are supported by EdgeView V1.'));
     const key = req.query.key ? String(req.query.key) : undefined;
     const baseUrl = req.query.baseUrl ? String(req.query.baseUrl) : undefined;
     const refresh = req.query.refresh === 'true';
@@ -685,11 +828,8 @@ app.get('/api/ai/models', async (req, res) => {
       cached: result.cached,
       last_updated: result.lastUpdated,
     });
-  } catch (err: any) {
-    res.status(400).json({
-      success: false,
-      error: err?.message || 'Failed to retrieve AI models',
-    });
+} catch (err: unknown) {
+    return res.status(500).json(structuredError('SAVE_HISTORY_FAILED', err instanceof Error ? err.message : 'Failed to save file to history', { recoverable: true }));
   }
 });
 
@@ -771,7 +911,14 @@ app.post('/api/settings', (req, res) => {
     }
     const sanitized: Record<string, unknown> = {};
     for (const key of ['serper_api_key', 'hunter_api_key', 'nvidia_api_key', 'groq_api_key']) {
-      if (Object.prototype.hasOwnProperty.call(input, key)) sanitized[key] = boundedText(input[key], key, 512) ?? '';
+      if (Object.prototype.hasOwnProperty.call(input, key)) {
+        const provider = key.replace('_api_key', '');
+        const validation = validateApiKeyFormat(provider, String(input[key]));
+        if (!validation.valid) {
+          return res.status(400).json(structuredError('INVALID_API_KEY_FORMAT', validation.error || `Invalid ${provider} API key format`));
+        }
+        sanitized[key] = boundedText(input[key], key, 512) ?? '';
+      }
     }
     for (const key of ['serper_enabled', 'hunter_enabled', 'nvidia_enabled', 'groq_enabled']) {
       if (Object.prototype.hasOwnProperty.call(input, key)) {
@@ -839,6 +986,12 @@ app.post('/api/settings/test', async (req, res) => {
     } catch { return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'Invalid provider test input.' }); }
     if (typeof service !== 'string' || !V1_PROVIDER_IDS.has(service)) {
       return res.status(400).json({ success: false, message: 'Only EdgeView V1 providers can be tested.' });
+    }
+    if (key) {
+      const validation = validateApiKeyFormat(service, key);
+      if (!validation.valid) {
+        return res.status(400).json(structuredError('INVALID_API_KEY_FORMAT', validation.error || `Invalid ${service} API key format`));
+      }
     }
     const settings = getAppSettings();
     
@@ -912,7 +1065,7 @@ app.post('/api/enrich/company', identityWorkHandler(async (req, res) => {
     }
     if (!resolvedCountry && ctxContact) resolvedCountry = String(ctxContact.country || ctxContact.normalized_country || '').trim();
     if (!resolvedCountry) return res.status(400).json({ success: false, error: 'Country is required for identity-anchored V1 enrichment.' });
-    const cachedRun = forceFetch ? null : reusableContactRun(ctxContact);
+    const cachedRun = forceFetch ? null : await reusableContactRun(ctxContact);
     if (reuseOnly && !cachedRun) return res.status(409).json({ success: false, code: 'RETAINED_EVIDENCE_UNAVAILABLE', error: 'No reusable evidence exists for this company and country.' });
     const capability = buildV1Capabilities().company_enrichment;
     if (!forceFetch && !reuseOnly && capability.available && ctxContact?.edgeview_v1_run_id
@@ -932,7 +1085,7 @@ app.post('/api/enrich/company', identityWorkHandler(async (req, res) => {
     }
     if (ctxContact) {
       await withContactPublication(ctxContact.id, async () => {
-        const projected = projectHistoricalContactFields(run);
+        const projected = await projectHistoricalContactFields(run);
         // The directory must not expose a projection while its durable save is
         // pending or after that save fails. Immutable evidence already survives.
         await persistV1ContactOverlay(ctxContact.id, run.id, projected, true);
@@ -987,11 +1140,11 @@ app.get('/api/v1/runs', (_req, res) => {
   }
 });
 
-app.get('/api/v1/runs/:id', (req, res) => {
-  const run = getV1Run(req.params.id);
+app.get('/api/v1/runs/:id', asyncRoute(async (req, res) => {
+  const run = await getV1Run(req.params.id);
   if (!run) return res.status(404).json({ success: false, error: 'V1 run not found' });
   res.json({ success: true, run });
-});
+}));
 
 app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
   const monitoringStartedAt = Date.now();
@@ -1013,8 +1166,13 @@ app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    let clientConnected = true;
+    req.on('close', () => { clientConnected = false; });
+
     const sendEvent = (type: string, data: any) => {
-      res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (clientConnected) {
+        res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
     };
 
     let processedCount = 0;
@@ -1030,7 +1188,7 @@ app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
     const executeWithLimit = async (limit: number, items: string[]) => {
       let index = 0;
       const executeNext = async (): Promise<void> => {
-        if (index >= items.length) return;
+        if (!clientConnected || index >= items.length) return;
         const currentId = items[index++];
         const contact = db.getContactById(currentId);
 
@@ -1061,11 +1219,11 @@ app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
         try {
           const country = String(contact.country || '').trim();
           if (!country) throw new Error('Exact country is required for V1 enrichment');
-          const cachedRun = forceFetch ? null : reusableContactRun(contact);
+          const cachedRun = forceFetch ? null : await reusableContactRun(contact);
           if (reuseOnly && !cachedRun) throw new Error('RETAINED_EVIDENCE_UNAVAILABLE');
           const run = cachedRun || await runV1Enrichment(String(contact.company_name || '').trim(), country);
           const projected = await withContactPublication(contact.id, async () => {
-            const current = projectHistoricalContactFields(run);
+            const current = await projectHistoricalContactFields(run);
             await persistV1ContactOverlay(contact.id, run.id, current, true);
             Object.assign(contact, current, { edgeview_v1_run_id: run.id, research_validation_status: 'current', last_updated: new Date().toISOString() });
             db.rebuildIndexes();
@@ -1118,7 +1276,7 @@ app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 300));
-        return executeNext();
+        if (clientConnected) return executeNext();
       };
 
       const workers = Array.from({ length: Math.min(limit, items.length) }, () => executeNext());
@@ -1126,9 +1284,11 @@ app.post('/api/enrich/batch', identityWorkHandler(async (req, res) => {
     };
 
     await executeWithLimit(3, company_ids);
-    void captureMonitoringEvent('research_completed', { stage: 'run', outcome: 'success', duration_ms: Date.now() - monitoringStartedAt });
-    sendEvent('done', { message: 'Batch enrichment complete', summary: summaryStats });
-    res.end();
+    if (clientConnected) {
+      void captureMonitoringEvent('research_completed', { stage: 'run', outcome: 'success', duration_ms: Date.now() - monitoringStartedAt });
+      sendEvent('done', { message: 'Batch enrichment complete', summary: summaryStats });
+      res.end();
+    }
   } catch (err: any) {
     console.error('Error in /api/enrich/batch:', err);
     const duration_ms = Date.now() - monitoringStartedAt;
@@ -1185,9 +1345,20 @@ app.post('/api/enrich/jobs', identityWorkHandler(async (req, res) => {
       });
     }
     
-    const { createJob } = await import('./server/job_manager');
+    const { createJob, runJobLoop, isJobDraining, discardJob } = await import('./server/job_manager');
     const jobId = await createJob(company_ids, mode || 'importer', Boolean(reuseOnly || !capability.available), Boolean(forceFetch));
-    res.json({ success: true, jobId });
+    let started = false;
+    try {
+      started = await runJobLoop(jobId, Boolean(forceFetch), !capability.available);
+    } catch (error) {
+      await discardJob(jobId);
+      throw error;
+    }
+    if (!started) {
+      await discardJob(jobId);
+      return res.status(409).json({ success: false, code: isJobDraining(jobId) ? 'JOB_DRAINING' : 'JOB_ALREADY_RUNNING', error: 'The job could not be started.' });
+    }
+    res.json({ success: true, jobId, started: true });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1293,17 +1464,23 @@ app.get('/api/enrich/job/:id/progress', async (req, res) => {
     const processing = Object.values(companyStates).filter(s => s.status === 'processing');
     const pending = Object.values(companyStates).filter(s => s.status === 'pending');
     
-    // Recent results summary (last 5 completed/failed)
+    // Recency is the latest terminal update, not duration. cached evidence
+    // rechecks retain completedAt but advance updatedAt; legacy states retain
+    // deterministic original queue order when neither timestamp is available.
     const recent = Object.values(companyStates)
-      .filter(s => s.status === 'completed' || s.status === 'failed')
-      .sort((a, b) => (b.durationMs || 0) - (a.durationMs || 0))
+      .map(state => ({ state, recencyAt: Date.parse(state.updatedAt || state.completedAt || '') }))
+      .filter(({ state }) => state.status === 'completed' || state.status === 'failed')
+      .sort((a, b) => (Number.isFinite(b.recencyAt) ? b.recencyAt : 0) - (Number.isFinite(a.recencyAt) ? a.recencyAt : 0))
       .slice(0, 5)
-      .map(s => ({
+      .map(({ state: s }) => ({
+        id: s.id,
         name: s.name,
         status: s.status,
         stage: s.stage,
         outcome: s.outcome,
         durationMs: s.durationMs,
+        completedAt: s.completedAt,
+        updatedAt: s.updatedAt,
         error: s.error,
         metrics: s.metrics || {},
         resourceUsage: projectV1ProviderUsage(s.resourceUsage),
@@ -1481,7 +1658,7 @@ function savedEvidenceNeedsChoice(contacts: Array<{ company_name?: string; count
 function validResearchSelection(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value.length <= 5000
     && value.every(id => typeof id === 'string' && id.length > 0 && id.length <= 200 && id.trim() === id && !/[\u0000-\u001f]/.test(id))
-    && new Set(value).size === value.length;
+    && new Set(value.map(id => id.toLowerCase())).size === value.length;
 }
 type V1Capability = {
   id: string;
@@ -1696,8 +1873,23 @@ app.get('/api/runtime/state', async (req, res) => {
       cacheMisses: null,
     };
 
-    // 2. Jobs
-    const jobCounts = await getJobsCountByStatus();
+    // 2. Jobs. Count/latest readers throw on database failure; never convert
+    // that failure into zero jobs or a reassuring but false IDLE state.
+    let jobCounts: { active: number; completed: number; failed: number; partial: number };
+    let activeJob: import('./server/job_manager').ResearchJob | null;
+    try {
+      jobCounts = await getJobsCountByStatus();
+      activeJob = await getLatestActiveJob();
+    } catch (jobStateError) {
+      console.error('Failed to read job runtime state:', jobStateError);
+      return res.status(503).json({
+        success: false,
+        code: 'JOB_STATE_UNAVAILABLE',
+        message: 'Job runtime state is unavailable; current research activity is unknown.',
+        recoverable: true,
+        remediation: 'Retry after operational storage recovers. No idle or completed state is being assumed.',
+      });
+    }
     const jobs = {
       active: jobCounts.active,
       completed: jobCounts.completed,
@@ -1710,8 +1902,6 @@ app.get('/api/runtime/state', async (req, res) => {
     let status = 'IDLE';
     let completedCompanies = 0;
     let totalCompanies = 0;
-
-    const activeJob = await getLatestActiveJob();
     if (activeJob) {
       currentCompany = activeJob.current_company || null;
       status = activeJob.status;
@@ -1808,13 +1998,13 @@ app.post('/api/logs/sync/clear', async (req, res) => {
 });
 
 // 2. Summary Endpoint
-app.get('/api/summary', async (req, res) => {
+app.get('/api/summary', asyncRoute(async (req, res) => {
   // Hydrate from the persisted contact_cache first so summary counts match the
   // Contacts tab (which hydrates the same way). Without this, /api/summary
   // under-reported persisted enrichment and disagreed with the Contacts UI.
   await hydrateContactsFromCache();
 
-  const contacts = Array.from(db.contacts.values());
+  const contacts = db.contactsForFile(req.query.file_id);
   const total = contacts.length;
   let contactsFound = 0;
   let researchedCompanies = 0;
@@ -1834,7 +2024,7 @@ app.get('/api/summary', async (req, res) => {
     }
   }
 
-  const sourceRecords = Array.from(db.files.values()).reduce((sum, file) => sum + (file.rows?.length || 0), 0);
+  const sourceRecords = Array.from(db.files.values()).filter(file => req.query.file_id === undefined || file.id === req.query.file_id).reduce((sum, file) => sum + (file.rows?.length || 0), 0);
   const researchScope = total - excludedExporters;
 
   res.json({
@@ -1847,7 +2037,7 @@ app.get('/api/summary', async (req, res) => {
     research_scope: researchScope,
     source_records: sourceRecords,
   });
-});
+}));
 
 // 3. Reports Endpoints
 app.get('/api/reports', (req, res) => {
@@ -1859,7 +2049,7 @@ app.post('/api/reports/upload', (req, res) => {
   const { title, created_by, report_type, content_text, columns, rows, source_file } = req.body;
 
   const newReport = {
-    id: `rep-${Date.now()}`,
+    id: `rep-${Date.now()}-${randomUUID()}`,
     title: title || 'EdgeView Report',
     created_by: created_by || 'EdgeView',
     created_at: new Date().toISOString(),
@@ -1929,7 +2119,7 @@ app.post('/api/export', async (req, res) => {
     if (req.body?.dataset === 'outreach') return res.status(410).json({ success: false, code: 'RETIRED_EXPORT_DATASET', error: 'Outreach exports are not supported by EdgeView V1.' });
     if (req.body?.dataset === 'files') return res.status(400).json({ success: false, code: 'STORED_FILE_REQUIRED', error: 'File exports require a stored file reference.' });
     const payload = req.body?.dataset === 'contacts'
-      ? resolveStoredContactExport(req.body, Array.from(db.contacts.values()))
+      ? resolveStoredContactExport(req.body, db.contactsForFile(req.body.contact_file_id))
       : ['summary','country','stats'].includes(req.body?.dataset)
       ? resolveStoredDerivedExport(req.body, db.files, archivedFileRows)
       : req.body?.dataset === 'reports'
@@ -2058,7 +2248,8 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
       }
     }
 
-    let contactsToExport = Array.from(db.contacts.values());
+    const fileId = req.body?.contact_file_id ?? req.query.contact_file_id;
+    let contactsToExport = db.contactsForFile(fileId);
     if (companyIds.length > 0) {
       const idSet = new Set(companyIds);
       contactsToExport = contactsToExport.filter((c) => idSet.has(c.id));
@@ -2103,7 +2294,7 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
 
     // Build the trade index ONCE (single pass over the dataset) so that every
     // importer/exporter below resolves its history in O(1).
-    const tradeIndex = await TradeRelationshipResolver.buildTradeIndex();
+    const tradeIndex = await TradeRelationshipResolver.buildTradeIndex(typeof fileId === 'string' ? fileId : undefined);
 
     const cleanMarkdown = (text: string | null | undefined): string => {
       if (!text) return '';
@@ -2128,7 +2319,7 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
       return getInternationalImporterDirectory(enrichedContacts as any, tradeIndex);
     };
 
-    const generateCSVBuffer = async () => {
+    const generateCSVBuffer = async (requestedType?: 'importer' | 'exporter') => {
       if (report_type === 'international_importer') {
         const columns = INTERNATIONAL_IMPORTER_COLUMNS;
         const rows = flattenInternationalImporterRows(await getInternationalDirectory(), columns as any);
@@ -2138,7 +2329,7 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
         );
         return '\uFEFF' + [headers, ...rowLines].join('\r\n');
       }
-      const rt: 'importer' | 'exporter' = report_type === 'exporter' ? 'exporter' : 'importer';
+      const rt: 'importer' | 'exporter' = requestedType ?? (report_type === 'exporter' ? 'exporter' : 'importer');
       const columns = contactReportColumns(rt);
       const rows = flattenContactReportRows(await getReport(rt), columns);
       const headers = columns.map((col) => sanitizeCSVCell(col.header)).join(',');
@@ -2148,19 +2339,26 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
       return '\uFEFF' + [headers, ...rowLines].join('\r\n');
     };
 
-    const generateXLSXBuffer = async () => {
+    const generateXLSXBuffer = async (requestedType?: 'importer' | 'exporter') => {
       if (report_type === 'international_importer') {
         const columns = INTERNATIONAL_IMPORTER_COLUMNS;
         const rows = flattenInternationalImporterRows(await getInternationalDirectory(), columns as any);
         return generateXlsxWorkbook('International Importers', columns as any, rows);
       }
-      const rt: 'importer' | 'exporter' = report_type === 'exporter' ? 'exporter' : 'importer';
+      const rt: 'importer' | 'exporter' = requestedType ?? (report_type === 'exporter' ? 'exporter' : 'importer');
       const columns = contactReportColumns(rt);
       const rows = flattenContactReportRows(await getReport(rt), columns);
       return generateXlsxWorkbook('Contact Directory', columns, rows);
     };
 
     if (format === 'csv') {
+      if (report_type === 'both') {
+        zip.file('EdgeView_Importer_Report.csv', await generateCSVBuffer('importer'));
+        zip.file('EdgeView_Exporter_Report.csv', await generateCSVBuffer('exporter'));
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', getSafeContentDisposition('EdgeView_Contact_Reports_CSV.zip'));
+        return res.send(await zip.generateAsync({ type: 'nodebuffer' }));
+      }
       const csvContent = await generateCSVBuffer();
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader(
@@ -2173,6 +2371,13 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
     }
 
     if (format === 'xlsx') {
+      if (report_type === 'both') {
+        zip.file('EdgeView_Importer_Report.xlsx', await generateXLSXBuffer('importer'));
+        zip.file('EdgeView_Exporter_Report.xlsx', await generateXLSXBuffer('exporter'));
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', getSafeContentDisposition('EdgeView_Contact_Reports_XLSX.zip'));
+        return res.send(await zip.generateAsync({ type: 'nodebuffer' }));
+      }
       const xlsxBuf = await generateXLSXBuffer();
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader(
@@ -2233,12 +2438,18 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
     }
 
     if (format === 'all') {
-      // Create ZIP of all requested assets
-      const csvStr = await generateCSVBuffer();
-      const xlsxBuf = await generateXLSXBuffer();
+      // Create ZIP of all requested assets, including both tabular directories.
       const intlNaming = report_type === 'international_importer';
-      zip.file(intlNaming ? 'EdgeView_International_Importer_Directory.csv' : 'EdgeView_Contact_Directory.csv', csvStr);
-      zip.file(intlNaming ? 'EdgeView_International_Importer_Directory.xlsx' : 'EdgeView_Contact_Directory.xlsx', xlsxBuf);
+      if (report_type === 'both') {
+        for (const rt of ['importer', 'exporter'] as const) {
+          const label = rt === 'importer' ? 'Importer' : 'Exporter';
+          zip.file(`EdgeView_${label}_Report.csv`, await generateCSVBuffer(rt));
+          zip.file(`EdgeView_${label}_Report.xlsx`, await generateXLSXBuffer(rt));
+        }
+      } else {
+        zip.file(intlNaming ? 'EdgeView_International_Importer_Directory.csv' : 'EdgeView_Contact_Directory.csv', await generateCSVBuffer());
+        zip.file(intlNaming ? 'EdgeView_International_Importer_Directory.xlsx' : 'EdgeView_Contact_Directory.xlsx', await generateXLSXBuffer());
+      }
 
       if (report_type === 'importer' || report_type === 'both') {
         const impPdf = await generatePdfReport(enrichedContacts, 'importer', tradeIndex);
@@ -2268,9 +2479,9 @@ app.all(['/api/export/report', '/api/export/docx', '/api/export/pdf'], async (re
     }
 
     throw new Error(`Unsupported export format: ${format}`);
-  } catch (err: any) {
-    console.error('Failed to generate report:', err);
-    res.status(500).json({ error: err?.message || 'Failed to generate report' });
+} catch (err: unknown) {
+    console.error('File delete route error:', err);
+    return res.status(500).json(structuredError('FILE_DELETE_FAILED', err instanceof Error ? err.message : 'Failed to delete file', { recoverable: true }));
   }
 });
 
@@ -2389,34 +2600,7 @@ function getAllDatasetRows(fileId?: string): Array<{
     }
   }
 
-  return rawRows.map((row) => {
-    const country = row.Country || row.COUNTRY || row.DESTINATION_COUNTRY || row.cntry || row.ORIGIN || 'Unknown';
-    const importer = row.Importer || row.IMPORTER || row.BUYER || row.BUYER_NAME || row.Consignee || 'Unknown Importer';
-    const exporter = row.Exporter || row.EXPORTER || row.SELLER || row.SUPPLIER || row.SUPPLIER_NAME || 'Unknown Exporter';
-    const product = row.Item || row.ITEM || row.PRODUCT || row.product_name || row.DESCRIPTION || 'Unknown Product';
-    
-    const fcVal = row['Total Value (USD)'] || row['Total FC (USD)'] || row.TOT_FC || row.VAL_USD || row.total_cost_usd || row.AMOUNT || 0;
-    const total_value = typeof fcVal === 'number' ? fcVal : (parseFloat(String(fcVal)) || 0);
-
-    const qtyVal = row.QTY || row.qty || row.Qty || row.QUANTITY || row.GROSS || row.NET || 0;
-    const quantity = typeof qtyVal === 'number' ? qtyVal : (parseFloat(String(qtyVal)) || 0);
-
-    const unit = row.UNT || row.unit || row.UNIT || row.UOM || row.qty_unit || 'KG';
-
-    let cleanCountry = String(country).trim();
-    if (!cleanCountry || cleanCountry.toLowerCase() === 'nan' || cleanCountry === '3004') cleanCountry = 'Unknown';
-    else cleanCountry = cleanCountry.charAt(0).toUpperCase() + cleanCountry.slice(1).toLowerCase();
-
-    return {
-      country: cleanCountry,
-      importer: String(importer).trim() || 'Unknown Importer',
-      exporter: String(exporter).trim() || 'Unknown Exporter',
-      product: String(product).trim() || 'Unknown Product',
-      total_value,
-      quantity,
-      unit: String(unit).trim().toUpperCase() || 'KG',
-    };
-  });
+  return rawRows.map(extractRowData);
 }
 
 app.get('/api/countries', (req, res) => {

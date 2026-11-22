@@ -51,7 +51,7 @@ try {
     assert.notEqual(first.id, second.id, 'a new explicit execution must create a new immutable operation');
     assert.deepEqual(first.research_context, context);
     assert.equal(first.status, 'FAILED', 'disabled providers cannot fabricate successful research');
-    assert.deepEqual(engine.getV1Run(first.id)!.research_context, context);
+    assert.deepEqual((await engine.getV1Run(first.id))!.research_context, context);
     fs.writeFileSync(path.join(root, 'expected.json'), JSON.stringify({ id: first.id, context }));
     const result = spawnSync(process.execPath, ['--import', 'tsx', path.resolve('server/tests/research_context.test.ts'), '--reopen'], {
       env: { ...process.env, EDGEVIEW_V1_DATA_DIR: root }, encoding: 'utf8', timeout: 30000, windowsHide: true,
@@ -59,7 +59,7 @@ try {
     assert.equal(result.status, 0, result.stdout + result.stderr);
   } else {
     const expected = JSON.parse(fs.readFileSync(path.join(root, 'expected.json'), 'utf8'));
-    assert.deepEqual(engine.getV1Run(expected.id)!.research_context, expected.context);
+    assert.deepEqual((await engine.getV1Run(expected.id))!.research_context, expected.context);
     assert.deepEqual(engine.listV1RunIdentityHeaders().find(run => run.id === expected.id)!.research_context, expected.context, 'restart derived index must retain context without hydrating raw blobs');
   }
   console.log('PASS actual immutable operation context: profile/schema/pipeline/provider compatibility, key exclusion, disabled-provider failure, new IDs and fresh-process restart');

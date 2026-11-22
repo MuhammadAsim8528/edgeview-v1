@@ -18,6 +18,7 @@ const port = Number(process.env.EDGEVIEW_RELEASE_TEST_PORT || await unusedTestPo
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid isolated test port.');
 const base = `http://127.0.0.1:${port}`;
 const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'edgeview-release-smoke-'));
+const outboundAudit = path.join(testRoot, 'outbound-attempts.txt');
 const isolatedEnv = {
   ...process.env,
   PORT: String(port),
@@ -28,6 +29,11 @@ const isolatedEnv = {
   EDGEVIEW_SQLITE_DB: path.join(testRoot, 'operational.db'),
   EDGEVIEW_V1_DATA_DIR: path.join(testRoot, 'runs'),
   EDGEVIEW_CONFIG: path.join(testRoot, 'config.json'),
+  EDGEVIEW_MONITORING_ENABLED: '0',
+  EDGEVIEW_SENTRY_DSN: '',
+  EDGEVIEW_POSTHOG_KEY: '',
+  EDGEVIEW_POSTHOG_HOST: '',
+  EDGEVIEW_E2E_EGRESS_AUDIT: outboundAudit,
   SERPER_API_KEY: '',
   HUNTER_API_KEY: '',
   NVIDIA_API_KEY: '',
@@ -39,7 +45,7 @@ const isolatedEnv = {
   APIFY_API_KEY: '',
   GEMINI_API_KEY: '',
 };
-const child = spawn(process.execPath, ['dist/server.cjs'], {
+const child = spawn(process.execPath, ['--require', path.resolve('scripts/test-no-egress.cjs'), 'dist/server.cjs'], {
   cwd: process.cwd(),
   env: isolatedEnv,
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -434,7 +440,8 @@ try {
   }
   assert.equal(uploadThrottled, true, 'non-API upload alias must share the mutation request budget');
   assert.equal((await fetch(`${base}/files/upload`, { method: 'POST' })).status, 429, 'another upload alias cannot bypass the budget');
-  console.log('PASS EdgeView production release smoke');
+  assert.equal(fs.existsSync(outboundAudit), false, 'release runtime attempted provider, monitoring or other outbound transport');
+  console.log('PASS EdgeView production release smoke (outbound transport denied and unused)');
 } finally {
   if (child.exitCode === null && child.signalCode === null) {
     const stopped = new Promise(resolve => child.once('exit', resolve));

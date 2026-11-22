@@ -38,6 +38,14 @@ interface FileViewerProps {
   onOpenExport: (payload: GlobalExportPayload) => void;
 }
 
+export const FILE_PAGE_SIZE_OPTIONS = [15, 25, 50, 100, 200, 250, 500] as const;
+
+const FILE_VIEW_SORT_KEYS: Record<string, string> = {
+  date: 'Date', importer: 'Importer', country: 'Country', exporter: 'Exporter',
+  item: 'Item', total_fc_usd: 'Total Value (USD)',
+};
+const serverSortKey = (key: string) => FILE_VIEW_SORT_KEYS[key] || key;
+
 // Helper to extract cell value across actualCol, label, key, or raw aliases
 const getCellValue = (row: Record<string, any> | any[], col: DisplayColumn, fileCols: string[] = []): any => {
   if (row === undefined || row === null) return '';
@@ -146,6 +154,72 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+function tradeDayKey(year: number, month: number, day: number): number | null {
+  if (![year, month, day].every(Number.isInteger) || year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCFullYear(year);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return year * 10000 + month * 100 + day;
+}
+
+/** Canonical day semantics for small local pages; mirrors server/file_view.ts. */
+export function parseTradeDateKey(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : tradeDayKey(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
+  const text = String(value).trim();
+  if (!text || text === 'N/A' || text.startsWith('####')) return null;
+
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/);
+  if (iso) return tradeDayKey(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  if (/^\d{8}$/.test(text) && /^(19|20)/.test(text)) {
+    return tradeDayKey(Number(text.slice(0, 4)), Number(text.slice(4, 6)), Number(text.slice(6, 8)));
+  }
+  if (/^\d+(?:\.\d+)?$/.test(text)) {
+    const serial = Number(text);
+    if (serial >= 1000 && serial <= 90000) {
+      const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000);
+      return tradeDayKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+    }
+  }
+
+  const parts = text.split(/[\/\-\.\s]+/);
+  if (parts.length >= 3) {
+    const month = MONTH_NAMES.findIndex(name => name.toLowerCase().startsWith(parts[1].toLowerCase() || 'xyz'));
+    if (month !== -1 && /^\d{1,2}$/.test(parts[0]) && /^\d{4}$/.test(parts[2])) {
+      return tradeDayKey(Number(parts[2]), month + 1, Number(parts[0]));
+    }
+    if (parts.slice(0, 3).every(part => /^\d+$/.test(part))) {
+      const first = Number(parts[0]);
+      const second = Number(parts[1]);
+      const third = Number(parts[2]);
+      if (parts[0].length === 4) return tradeDayKey(first, second, third);
+      if (parts[2].length === 4) {
+        return second > 12 && first <= 12 ? tradeDayKey(third, first, second) : tradeDayKey(third, second, first);
+      }
+    }
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : tradeDayKey(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+}
+
+export function compareTradeDates(a: unknown, b: unknown): number {
+  const keyA = parseTradeDateKey(a);
+  const keyB = parseTradeDateKey(b);
+  if (keyA !== null && keyB !== null) return keyA - keyB;
+  if (keyA !== null) return -1;
+  if (keyB !== null) return 1;
+  return String(a ?? '').toLowerCase().localeCompare(String(b ?? '').toLowerCase());
+}
+
+export function isTradeDateInRange(value: unknown, startDate: string, endDate: string): boolean {
+  const valueKey = parseTradeDateKey(value);
+  if (valueKey === null) return true;
+  const startKey = parseTradeDateKey(startDate);
+  const endKey = parseTradeDateKey(endDate);
+  return (startKey === null || valueKey >= startKey) && (endKey === null || valueKey <= endKey);
+}
 
 // Helper to convert dates to DD-Month-YYYY
 const formatExcelDate = (val: any): string => {
@@ -381,7 +455,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onEx
     group_shipments: String(isGrouped), search: debouncedSearch, product: productFilter, country: countryFilter,
     importer: importerFilter, start_date: startDate, end_date: endDate });
   if (sourceMode) pageParams.set('source_values', 'true');
-  if (sortColumn) { pageParams.set('sort_by', sortColumn); pageParams.set('sort_dir', sortDirection); }
+  if (sortColumn) { pageParams.set('sort_by', serverSortKey(sortColumn)); pageParams.set('sort_dir', sortDirection); }
   const pageUrl = file?.id && isServerSide ? `/api/files/${encodeURIComponent(file.id)}/data?${pageParams}` : '';
   const pageKey = `${pageUrl}#${pageRetry}`;
   const activePage = pageResult?.key === pageKey ? pageResult.result : null;
@@ -615,13 +689,10 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onEx
         }
       }
 
-      // Date Range Filter
+      // Compare canonical calendar days, never formatted display strings.
       if (startDate || endDate) {
-        const rowDate = formatExcelDate(getCellValue(row, { key: 'date', label: 'Date', actualCol: null }, fileColumns) || row['Date'] || '');
-        if (rowDate) {
-          if (startDate && rowDate < startDate) return false;
-          if (endDate && rowDate > endDate) return false;
-        }
+        const rawDate = getCellValue(row, { key: 'date', label: 'Date', actualCol: null }, fileColumns) || row['Date'] || '';
+        if (!isTradeDateInRange(rawDate, startDate, endDate)) return false;
       }
 
       // Global Search
@@ -647,6 +718,11 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onEx
     return [...filteredRows].sort((a, b) => {
       const valA = getCellValue(a, targetCol, fileColumns);
       const valB = getCellValue(b, targetCol, fileColumns);
+
+      if (targetCol.key === 'date') {
+        const comparison = compareTradeDates(valA, valB);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      }
 
       if (typeof valA === 'number' && typeof valB === 'number') {
         return sortDirection === 'asc' ? valA - valB : valB - valA;
@@ -738,7 +814,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onEx
       sourceView: { group_shipments: String(isGrouped), search: debouncedSearch,
         product: productFilter, country: countryFilter, importer: importerFilter,
         start_date: startDate, end_date: endDate,
-        ...(sortColumn ? { sort_by: sortColumn, sort_dir: sortDirection } : {}) },
+        ...(sortColumn ? { sort_by: serverSortKey(sortColumn), sort_dir: sortDirection } : {}) },
       filenamePrefix: `EdgeView_${baseName}_Filtered`,
     });
   };
@@ -1214,11 +1290,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onEx
                     }}
                     className="border border-[#333333] rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#10b981] bg-[#1a1a1a] text-white"
                   >
-                    <option value={15}>15</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={200}>200</option>
+                    {FILE_PAGE_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}
                   </select>
                 </div>
 
@@ -1338,11 +1410,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onEx
                   }}
                   className="bg-[#1a1a1a] border border-[#333333] text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-[#10b981]"
                 >
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={250}>250</option>
-                  <option value={500}>500</option>
+                  {FILE_PAGE_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}
                 </select>
               </div>
 

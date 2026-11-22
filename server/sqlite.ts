@@ -22,6 +22,7 @@ export interface DatabaseWrapper {
   flush(): Promise<void>;
   saveContactOverlayDurably(companyId: string, runId: string, overlayJson: string, updatedAt: string): Promise<void>;
   insertCompanyAliasDurably(row: CompanyAliasRow): Promise<CompanyAliasRow>;
+  replaceFileHistoryDurably(fileId: string, rows: Array<readonly unknown[]>): Promise<{ rollback: () => Promise<void> }>;
   prepare(sql: string): Promise<{
     run: (...params: any[]) => Promise<void>;
     finalize: () => Promise<void>;
@@ -203,6 +204,81 @@ export async function getDb(): Promise<DatabaseWrapper> {
           throw rollbackFailure || failure;
         }
       },
+      // Upload history is admitted as one synchronous sql.js batch. The durable
+      // replacement includes an exact inverse so a failed finalize/JSON write
+      // cannot leave rejected rows in memory for a later unrelated flush.
+      async replaceFileHistoryDurably(fileId, rows) {
+        if (rollbackFailure) throw rollbackFailure;
+        if (pendingPersistenceError) flushPendingSave();
+        const select = db.prepare('SELECT * FROM history_data WHERE file_id = ? ORDER BY id');
+        const previous: any[] = [];
+        try {
+          select.bind([fileId]);
+          while (select.step()) previous.push(select.getAsObject());
+        } finally { select.free(); }
+        const sequenceStatement = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'history_data'");
+        let previousSequence: unknown;
+        try { if (sequenceStatement.step()) previousSequence = sequenceStatement.getAsObject().seq; }
+        finally { sequenceStatement.free(); }
+
+        const inTransaction = (mutation: () => void) => {
+          db.run('BEGIN IMMEDIATE');
+          let committed = false;
+          try { mutation(); db.run('COMMIT'); committed = true; }
+          finally { if (!committed) db.run('ROLLBACK'); }
+        };
+        const insertColumns = 'be_link, be_date, hs_code, item, importer, exporter, country, tot_fc, qty, unit, agent_name, file_name, file_id';
+        const placeholders = Array(13).fill('?').join(', ');
+        const restore = () => {
+          if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+          inTransaction(() => {
+            db.run('DELETE FROM history_data WHERE file_id = ?', [fileId]);
+            const statement = db.prepare(`INSERT INTO history_data (id, ${insertColumns}, source, uploaded_at)
+              VALUES (?, ${placeholders}, ?, ?)`);
+            try {
+              for (const row of previous) {
+                statement.run([row.id, row.be_link, row.be_date, row.hs_code, row.item, row.importer, row.exporter,
+                  row.country, row.tot_fc, row.qty, row.unit, row.agent_name, row.file_name, row.file_id, row.source, row.uploaded_at]);
+              }
+            } finally { statement.free(); }
+            if (previousSequence === undefined) db.run("DELETE FROM sqlite_sequence WHERE name = 'history_data'");
+            else db.run("UPDATE sqlite_sequence SET seq = ? WHERE name = 'history_data'", [previousSequence as any]);
+          });
+          saveToDisk();
+        };
+        const rollbackError = (cause: unknown) => Object.assign(
+          new Error('PERSISTENCE_ROLLBACK_FAILED: Restart required; operational writes are disabled.', { cause }),
+          { code: 'PERSISTENCE_ROLLBACK_FAILED' });
+        const failRollback = (cause: unknown) => {
+          rollbackFailure = rollbackError(cause);
+          operationalStatus = 'degraded';
+          return rollbackFailure;
+        };
+
+        try {
+          inTransaction(() => {
+            db.run('DELETE FROM history_data WHERE file_id = ?', [fileId]);
+            const statement = db.prepare(`INSERT INTO history_data (${insertColumns}) VALUES (${placeholders})`);
+            try { for (const row of rows) statement.run(row as any); }
+            finally { statement.free(); }
+          });
+          flushPendingSave();
+        } catch (failure) {
+          try { restore(); }
+          catch (undoError) { throw failRollback(undoError); }
+          throw failure;
+        }
+
+        let rolledBack = false;
+        return {
+          async rollback() {
+            if (rolledBack) return;
+            if (rollbackFailure) throw rollbackFailure;
+            try { restore(); rolledBack = true; }
+            catch (undoError) { throw failRollback(undoError); }
+          },
+        };
+      },
       async exec(sql: string) {
         if (rollbackFailure) throw rollbackFailure;
         try {
@@ -383,7 +459,15 @@ export async function getDb(): Promise<DatabaseWrapper> {
       );
       CREATE INDEX IF NOT EXISTS company_aliases_canonical ON company_aliases(canonical_id);
 
-      CREATE TABLE IF NOT EXISTS research_campaigns (
+      CREATE TABLE IF NOT EXISTS rate_limit_windows (
+          bucket_key TEXT PRIMARY KEY,
+          window_start INTEGER NOT NULL,
+          count INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_limit_windows_window ON rate_limit_windows(window_start);
+
+        CREATE TABLE IF NOT EXISTS research_campaigns (
           id TEXT PRIMARY KEY,
           request_key TEXT NOT NULL,
           entity_key TEXT NOT NULL,

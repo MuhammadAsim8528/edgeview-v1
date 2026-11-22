@@ -86,7 +86,7 @@ try {
   fs.writeFileSync(path.join(root, 'run.json'), stored);
   const reloaded = JSON.parse(fs.readFileSync(path.join(root, 'run.json'), 'utf8'));
   assert.ok(reloaded.raw_records[0].response.__edgeview_blob_ref__, 'proof uses the existing content-addressed blob store');
-  const hydrated = hydrateV1RunFromStorage(reloaded, root) as V1Run;
+  const hydrated = await hydrateV1RunFromStorage(reloaded, root) as V1Run;
   assert.equal(verifyCompanyAliasEvidence(left, right, hydrated, 'raw-alias').verified, true);
   const tampered = structuredClone(hydrated);
   (tampered.raw_records[0].response as any).provenance.finalUrl = 'https://foreign.example.test/legal';

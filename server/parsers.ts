@@ -1,5 +1,109 @@
 import mammoth from 'mammoth';
+import { inflateRawSync } from 'node:zlib';
 import { checkTextColumnCount, TextParseBudget, TextParseLimitError, TEXT_PARSE_LIMITS } from './text_parse_budget';
+import { parseTradeNumeric } from './value_normalization';
+
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES = 2048;
+const MAX_ARCHIVE_ENTRY_BYTES = 64 * 1024 * 1024;
+const MAX_ARCHIVE_TOTAL_BYTES = 128 * 1024 * 1024;
+
+function addWorksheetXmlBounds(xml: string, totals: { rows: number; cells: number }): void {
+  let cursor = 0;
+  while (cursor < xml.length) {
+    const start = xml.indexOf('<', cursor);
+    if (start < 0) break;
+    if (xml.startsWith('<!--', start)) { cursor = xml.indexOf('-->', start + 4); if (cursor < 0) return; cursor += 3; continue; }
+    if (xml.startsWith('<![CDATA[', start)) { cursor = xml.indexOf(']]>', start + 9); if (cursor < 0) return; cursor += 3; continue; }
+    if (xml.startsWith('<?', start)) { cursor = xml.indexOf('?>', start + 2); if (cursor < 0) return; cursor += 2; continue; }
+    if (xml.startsWith('</', start) || xml.startsWith('<!', start)) { cursor = xml.indexOf('>', start + 2); if (cursor < 0) return; cursor += 1; continue; }
+    let end = start + 1;
+    while (end < xml.length && !/[\s/>]/.test(xml[end])) end += 1;
+    const tag = xml.slice(start + 1, end);
+    if (tag === 'row' || tag.endsWith(':row')) totals.rows += 1;
+    if (tag === 'c' || tag.endsWith(':c')) totals.cells += 1;
+    if (totals.rows > TEXT_PARSE_LIMITS.rows + 1 || totals.cells > TEXT_PARSE_LIMITS.cells) throw new TextParseLimitError();
+    cursor = end + 1;
+  }
+}
+
+/** Verify actual expansion before ExcelJS/Mammoth inflates archive entries. */
+function checkOfficeArchiveBounds(buffer: Buffer): void {
+  const minimumOffset = Math.max(0, buffer.length - 22 - 65535);
+  let eocd = -1;
+  for (let offset = buffer.length - 22; offset >= minimumOffset; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === 0x06054b50) { eocd = offset; break; }
+  }
+  const invalid = () => new Error('Office archive exceeds safe expanded-size limits or has an invalid directory.');
+  if (eocd < 0 || eocd + 22 + buffer.readUInt16LE(eocd + 20) !== buffer.length) throw invalid();
+  if (buffer.readUInt16LE(eocd + 4) !== 0 || buffer.readUInt16LE(eocd + 6) !== 0) throw invalid();
+  const entries = buffer.readUInt16LE(eocd + 10);
+  const centralBytes = buffer.readUInt32LE(eocd + 12);
+  const centralOffset = buffer.readUInt32LE(eocd + 16);
+  if (entries === 0xffff || centralBytes === 0xffffffff || centralOffset === 0xffffffff
+    || entries > MAX_ARCHIVE_ENTRIES || centralOffset + centralBytes > eocd) throw invalid();
+
+  let cursor = centralOffset;
+  let totalBytes = 0;
+  const worksheetTotals = { rows: 0, cells: 0 };
+  for (let index = 0; index < entries; index += 1) {
+    if (cursor + 46 > buffer.length || buffer.readUInt32LE(cursor) !== 0x02014b50) throw invalid();
+    const flags = buffer.readUInt16LE(cursor + 8);
+    const method = buffer.readUInt16LE(cursor + 10);
+    const compressedBytes = buffer.readUInt32LE(cursor + 20);
+    const expandedBytes = buffer.readUInt32LE(cursor + 24);
+    const nameBytes = buffer.readUInt16LE(cursor + 28);
+    const extraBytes = buffer.readUInt16LE(cursor + 30);
+    const commentBytes = buffer.readUInt16LE(cursor + 32);
+    if ((flags & 1) !== 0 || (method !== 0 && method !== 8)
+      || compressedBytes === 0xffffffff || expandedBytes === 0xffffffff
+      || compressedBytes > buffer.length || expandedBytes > MAX_ARCHIVE_ENTRY_BYTES) throw invalid();
+    totalBytes += expandedBytes;
+    if (totalBytes > MAX_ARCHIVE_TOTAL_BYTES) throw invalid();
+
+    const localOffset = buffer.readUInt32LE(cursor + 42);
+    if (localOffset === 0xffffffff || localOffset + 30 > centralOffset
+      || buffer.readUInt32LE(localOffset) !== 0x04034b50 || buffer.readUInt16LE(localOffset + 8) !== method) throw invalid();
+    const dataStart = localOffset + 30 + buffer.readUInt16LE(localOffset + 26) + buffer.readUInt16LE(localOffset + 28);
+    const dataEnd = dataStart + compressedBytes;
+    if (dataStart < localOffset || dataEnd < dataStart || dataEnd > centralOffset) throw invalid();
+    const expanded = method === 0
+      ? buffer.subarray(dataStart, dataEnd)
+      : inflateRawSync(buffer.subarray(dataStart, dataEnd), { maxOutputLength: expandedBytes + 1 });
+    if (expanded.length !== expandedBytes || (method === 0 && compressedBytes !== expandedBytes)) throw invalid();
+    const entryName = buffer.toString('utf8', cursor + 46, cursor + 46 + nameBytes);
+    if (/^xl\/worksheets\/[^/]+\.xml$/i.test(entryName)) addWorksheetXmlBounds(expanded.toString('utf8'), worksheetTotals);
+
+    cursor += 46 + nameBytes + extraBytes + commentBytes;
+    if (cursor > centralOffset + centralBytes) throw invalid();
+  }
+}
+
+function detectTextDelimiter(text: string, extension: string): string {
+  if (extension === 'tsv') return '\t';
+  const candidates = ['\t', ';', ','];
+  const counts = [0, 0, 0];
+  let quoted = false;
+  let fieldStart = true;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      if (quoted && text[index + 1] === '"') { index += 1; continue; }
+      if (quoted) quoted = false;
+      else if (fieldStart) quoted = true;
+      fieldStart = false;
+      continue;
+    }
+    if (!quoted) {
+      const delimiter = candidates.indexOf(char);
+      if (delimiter >= 0) { counts[delimiter] += 1; fieldStart = true; continue; }
+      if (char === '\r' || char === '\n') break;
+      if (!/\s/.test(char)) fieldStart = false;
+    }
+  }
+  const highest = Math.max(...counts);
+  return highest > 0 ? candidates[counts.indexOf(highest)] : ',';
+}
 
 export interface ParsedResult {
   file_type: 'NVL' | 'DBF' | 'CSV' | 'Excel' | 'DOCX' | 'Unknown';
@@ -19,10 +123,65 @@ export interface ParsedResult {
  */
 export function parseNVL(content: string): { columns: string[]; rows: Record<string, any>[] } {
   try {
+    const requiredCols = ['Date', 'Item', 'Importer', 'Exporter', 'Total Value (USD)', 'Agent'];
+    const columnMapping: Record<string, string> = {
+      BE_DATE: 'Date', ITEM: 'Item', IMPORTER: 'Importer', EXPORTER: 'Exporter',
+      TOT_FC: 'Total Value (USD)', AGENT_NAME: 'Agent',
+      be_date: 'Date', item: 'Item', importer: 'Importer', exporter: 'Exporter',
+      tot_fc: 'Total Value (USD)', agent_name: 'Agent',
+    };
+    const reverseMapping: Record<string, string> = {
+      Date: 'BE_DATE', Item: 'ITEM', Importer: 'IMPORTER', Exporter: 'EXPORTER',
+      'Total Value (USD)': 'TOT_FC', 'Total FC (USD)': 'TOT_FC', Agent: 'AGENT_NAME',
+    };
     if (!content || typeof content !== 'string' || !content.trim()) {
-      return { columns: ['Date', 'Item', 'Importer', 'Exporter', 'Total Value (USD)', 'Agent'], rows: [] };
+      return { columns: requiredCols, rows: [] };
     }
 
+    // A raw key may contain underscores/dots but no whitespace. Requiring this
+    // shape avoids treating arbitrary prose or a delimited table as key-value NVL.
+    const keyValuePattern = /^[A-Za-z_][A-Za-z0-9_.]*\s*=\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\r\n]*)$/;
+    const isKeyValueRecord = (line: string) => {
+      const trimmed = line.trim();
+      return trimmed === '---' || trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('//')
+        || keyValuePattern.test(trimmed);
+    };
+    const firstContentLine = content.split(/\r?\n/).find(line => line.trim() && !line.trim().startsWith('#') && !line.trim().startsWith('//'))?.trim() ?? '';
+    if (keyValuePattern.test(firstContentLine) && content.split(/\r?\n/).every(isKeyValueRecord)) {
+      const budget = new TextParseBudget();
+      const allColsSet = new Set<string>(requiredCols);
+      const rows: Record<string, any>[] = [];
+      let currentRecord: Record<string, any> = {};
+      const flush = () => {
+        if (!Object.keys(currentRecord).length) return;
+        budget.addRow(Object.keys(currentRecord).length);
+        for (const [newKey, oldKey] of Object.entries(reverseMapping)) {
+          if (currentRecord[newKey] && !currentRecord[oldKey]) currentRecord[oldKey] = currentRecord[newKey];
+        }
+        for (const [oldKey, newKey] of Object.entries(columnMapping)) {
+          if (currentRecord[oldKey] !== undefined && !currentRecord[newKey]) currentRecord[newKey] = currentRecord[oldKey];
+        }
+        rows.push(currentRecord);
+        currentRecord = {};
+      };
+      for (const rawLine of content.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line === '---') { flush(); continue; }
+        if (line.startsWith('#') || line.startsWith('//')) continue;
+        const match = line.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*([\s\S]*)$/);
+        if (!match) continue;
+        const key = match[1];
+        let value = match[2].trim();
+        if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) value = value.slice(1, -1);
+        // Preserve the legacy repeated-key record boundary too.
+        if (Object.hasOwn(currentRecord, key)) flush();
+        currentRecord[key] = value;
+        allColsSet.add(key);
+        if (columnMapping[key]) allColsSet.add(columnMapping[key]);
+      }
+      flush();
+      return { columns: Array.from(allColsSet), rows };
+    }
     const lines = content.split(/\r?\n/).map((l) => (l || '').trim()).filter((l) => l.length > 0);
     if (lines.length === 0) {
       return { columns: ['Date', 'Item', 'Importer', 'Exporter', 'Total Value (USD)', 'Agent'], rows: [] };
@@ -53,33 +212,6 @@ export function parseNVL(content: string): { columns: string[]; rows: Record<str
         return [line ? String(line) : ''];
       }
     };
-
-    const columnMapping: Record<string, string> = {
-      BE_DATE: 'Date',
-      ITEM: 'Item',
-      IMPORTER: 'Importer',
-      EXPORTER: 'Exporter',
-      TOT_FC: 'Total Value (USD)',
-      AGENT_NAME: 'Agent',
-      be_date: 'Date',
-      item: 'Item',
-      importer: 'Importer',
-      exporter: 'Exporter',
-      tot_fc: 'Total Value (USD)',
-      agent_name: 'Agent',
-    };
-
-    const reverseMapping: Record<string, string> = {
-      Date: 'BE_DATE',
-      Item: 'ITEM',
-      Importer: 'IMPORTER',
-      Exporter: 'EXPORTER',
-      'Total Value (USD)': 'TOT_FC',
-      'Total FC (USD)': 'TOT_FC',
-      Agent: 'AGENT_NAME',
-    };
-
-    const requiredCols = ['Date', 'Item', 'Importer', 'Exporter', 'Total Value (USD)', 'Agent'];
 
     const firstLineCells = splitLineIntoCells(lines[0]);
     const hasHeader = firstLineCells.some((cell) =>
@@ -216,9 +348,7 @@ export function parseDBFBuffer(buffer: Buffer): { columns: string[]; rows: Recor
     const headerLen = buffer.readUInt16LE(8);
     const recordLen = buffer.readUInt16LE(10);
 
-    if (headerLen <= 0 || recordLen <= 0 || headerLen >= buffer.length) {
-      return { columns: [], rows: [] };
-    }
+    if (headerLen < 33 || recordLen < 1 || headerLen > buffer.length) return { columns: [], rows: [] };
 
     const fields: Array<{ name: string; type: string; len: number }> = [];
     let offset = 32;
@@ -234,18 +364,21 @@ export function parseDBFBuffer(buffer: Buffer): { columns: string[]; rows: Recor
       const len = buffer[offset + 16];
       if (name) {
         fields.push({ name, type, len });
+        checkTextColumnCount(fields.length);
       }
       offset += 32;
     }
 
-    if (fields.length === 0) return { columns: [], rows: [] };
+    if (offset !== headerLen - 1 || buffer[offset] !== 0x0d || fields.length === 0 || fields.length > 512) throw new Error('Invalid DBF field descriptors');
 
     const columns = fields.map((f) => f.name);
     const rows: Record<string, any>[] = [];
+    const budget = new TextParseBudget();
     let recOffset = headerLen;
 
     const calculatedMax = Math.floor((buffer.length - headerLen) / recordLen);
-    const numRecords = rawNumRecords > 0 && rawNumRecords < 1000000 ? Math.min(rawNumRecords, calculatedMax) : calculatedMax;
+    if (rawNumRecords > 100000 || calculatedMax > 100000) throw new Error('DBF table exceeds safe record count');
+    const numRecords = Math.min(rawNumRecords, calculatedMax);
 
     for (let i = 0; i < numRecords; i++) {
       if (recOffset + recordLen > buffer.length) break;
@@ -254,6 +387,7 @@ export function parseDBFBuffer(buffer: Buffer): { columns: string[]; rows: Recor
 
       // Check deletion flag (0x2A is '*')
       if (recordBytes[0] === 0x2a) continue;
+      budget.addRow(fields.length);
 
       const row: Record<string, any> = {};
       let colOffset = 1;
@@ -268,8 +402,8 @@ export function parseDBFBuffer(buffer: Buffer): { columns: string[]; rows: Recor
         colOffset += f.len;
 
         if (f.type === 'N') {
-          const num = Number(valStr);
-          row[f.name] = isNaN(num) ? valStr : num;
+          const num = parseTradeNumeric(valStr);
+          row[f.name] = num === null ? valStr : num;
         } else {
           row[f.name] = valStr;
         }
@@ -280,6 +414,7 @@ export function parseDBFBuffer(buffer: Buffer): { columns: string[]; rows: Recor
 
     return { columns, rows };
   } catch (err) {
+    if (err instanceof TextParseLimitError) throw err;
     console.warn('parseDBFBuffer failed gracefully:', err);
     return { columns: [], rows: [] };
   }
@@ -337,6 +472,12 @@ function parseCustomsNVLRawText(text: string): { columns: string[]; rows: Record
 }
 
 export function standardizeDate(input: any): string {
+  const validCalendarDate = (year: number, month: number, day: number): string | null => {
+    if (!Number.isInteger(year) || year < 1000 || year > 9999 || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+    const candidate = new Date(Date.UTC(year, month - 1, day));
+    return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day
+      ? `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
+  };
   try {
     if (input === null || input === undefined) return '';
     const s = String(input).trim();
@@ -344,11 +485,11 @@ export function standardizeDate(input: any): string {
 
     // 1. YYYYMMDD
     if (/^\d{8}$/.test(s) && (s.startsWith('19') || s.startsWith('20'))) {
-      return `${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}`;
+      return validCalendarDate(Number(s.slice(0, 4)), Number(s.slice(4, 6)), Number(s.slice(6, 8))) ?? s;
     }
 
     // 2. Excel serial number
-    if (!isNaN(Number(s))) {
+    if (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) {
       const num = Number(s);
       if (num >= 1000 && num <= 90000) {
         const excelBase = new Date(Date.UTC(1899, 11, 30));
@@ -367,34 +508,26 @@ export function standardizeDate(input: any): string {
       const p3 = parseInt(parts[2], 10);
 
       // YYYY/MM/DD
-      if (parts[0].length === 4 && !isNaN(p1) && !isNaN(p2) && !isNaN(p3)) {
-        const year = p1;
-        const month = String(Math.min(12, Math.max(1, p2))).padStart(2, '0');
-        const day = String(Math.min(31, Math.max(1, p3))).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+      if (parts[0].length === 4 && /^\d+$/.test(parts[0]) && !isNaN(p1) && !isNaN(p2) && !isNaN(p3)) {
+        return validCalendarDate(p1, p2, p3) ?? s;
       }
 
       // DD/MM/YYYY or MM/DD/YYYY
-      if (parts[2].length === 4 && !isNaN(p1) && !isNaN(p2) && !isNaN(p3)) {
-        const year = p3;
-        let day = p1;
-        let month = p2;
-
-        if (p1 > 12) {
-          day = p1;
-          month = p2;
-        } else if (p2 > 12) {
-          day = p2;
-          month = p1;
-        }
-
-        const monthStr = String(Math.min(12, Math.max(1, month))).padStart(2, '0');
-        const dayStr = String(Math.min(31, Math.max(1, day))).padStart(2, '0');
-        return `${year}-${monthStr}-${dayStr}`;
+      if (parts[2].length === 4 && /^\d+$/.test(parts[2]) && !isNaN(p1) && !isNaN(p2) && !isNaN(p3)) {
+        const day = p2 > 12 && p1 <= 12 ? p2 : p1;
+        const month = p2 > 12 && p1 <= 12 ? p1 : p2;
+        return validCalendarDate(p3, month, day) ?? s;
       }
     }
 
     // 4. Native JS Date attempt
+    // Numeric calendar forms above are validated before any host-locale parsing.
+    // Do not let JavaScript roll an impossible date such as Feb 31 into March.
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/);
+    if (iso) {
+      if (!validCalendarDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))) return s;
+      if (iso[4] && (Number(iso[4]) > 23 || Number(iso[5]) > 59 || Number(iso[6] ?? 0) > 59)) return s;
+    }
     const d = new Date(s);
     if (!isNaN(d.getTime())) {
       return d.toISOString().split('T')[0];
@@ -563,6 +696,9 @@ export async function parseFile(
     if (!buffer || buffer.length === 0) {
       return { file_type: 'Unknown', columns: [], rows: [], raw_text: 'Empty file buffer received.', error: 'Empty file buffer received.' };
     }
+    if (buffer.length > MAX_UPLOAD_BYTES) {
+      return { file_type: 'Unknown', columns: [], rows: [], error: 'File exceeds the 50MB parser allocation limit.' };
+    }
 
     const ext = filename.split('.').pop()?.toLowerCase() || '';
 
@@ -616,9 +752,9 @@ export async function parseFile(
         }
         if (totFc !== '') {
           norm['TOT_FC'] = totFc;
-          const num = Number(String(totFc).replace(/[^0-9.-]/g, ''));
-          norm['Total Value (USD)'] = isNaN(num) ? totFc : num;
-          norm['Total FC (USD)'] = isNaN(num) ? totFc : num;
+          const num = parseTradeNumeric(totFc);
+          norm['Total Value (USD)'] = num === null ? totFc : num;
+          norm['Total FC (USD)'] = num === null ? totFc : num;
         }
         if (ntn) {
           norm['NTN'] = ntn;
@@ -724,6 +860,7 @@ export async function parseFile(
       if (ext === 'xls') {
         return { file_type: 'Excel', columns: [], rows: [], error: 'Legacy .xls files are not accepted. Save the workbook as .xlsx and upload it again.' };
       }
+      checkOfficeArchiveBounds(buffer);
       const { default: ExcelJS } = await import('exceljs');
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer as any);
@@ -732,22 +869,37 @@ export async function parseFile(
       const headerRow = sheet.getRow(1);
       const columns: string[] = [];
       const width = Math.max(headerRow.cellCount, sheet.columnCount);
+      checkTextColumnCount(width);
+      if (sheet.rowCount > TEXT_PARSE_LIMITS.rows + 1) throw new TextParseLimitError();
       for (let index = 1; index <= width; index += 1) {
         columns.push(headerRow.getCell(index).text.trim() || `Column_${index}`);
       }
+      const cellValue = (cell: any): any => {
+        const convert = (raw: any): any => {
+          if (raw === null || raw === undefined) return '';
+          if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? '' : raw.toISOString();
+          if (typeof raw !== 'object') return raw;
+          if ('result' in raw) return convert(raw.result);
+          if (Array.isArray(raw.richText)) return raw.richText.map((part: any) => String(part?.text ?? '')).join('');
+          if (typeof raw.text === 'string') return raw.text;
+          if (typeof raw.hyperlink === 'string') return raw.hyperlink;
+          if (typeof raw.error === 'string') return raw.error;
+          return String(cell.text ?? '');
+        };
+        return convert(cell.value);
+      };
       const rows: Record<string, any>[] = [];
+      const budget = new TextParseBudget();
       for (let rowIndex = 2; rowIndex <= sheet.actualRowCount; rowIndex += 1) {
         const source = sheet.getRow(rowIndex);
         const record: Record<string, any> = {};
         let populated = false;
         columns.forEach((column, offset) => {
-          const cell = source.getCell(offset + 1);
-          const raw: any = cell.value;
-          const value = raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw instanceof Date ? raw.toISOString() : raw ?? '';
+          const value = cellValue(source.getCell(offset + 1));
           record[column] = value;
           if (value !== '') populated = true;
         });
-        if (populated) rows.push(record);
+        if (populated) { budget.addRow(columns.length); rows.push(record); }
       }
       return {
         file_type: 'Excel',
@@ -766,36 +918,48 @@ export async function parseFile(
     const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
     if (lines.length === 0) return { file_type: 'CSV', columns: [], rows: [] };
 
-    // Direct fast line parser for high row counts (>100 rows) or fallback
-    const delimiter = text.includes('\t') ? '\t' : text.includes(';') ? ';' : ',';
-    const splitCSVLine = (lineStr: string): string[] => {
-      const result: string[] = [];
-      let cur = '';
-      let inQuotes = false;
-      for (let cIdx = 0; cIdx < lineStr.length; cIdx++) {
-        const char = lineStr[cIdx];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === delimiter && !inQuotes) {
-          result.push(cur.trim().replace(/^"|"$/g, ''));
-          checkTextColumnCount(result.length + 1);
-          cur = '';
-        } else {
-          cur += char;
-        }
-      }
-      result.push(cur.trim().replace(/^"|"$/g, ''));
-      checkTextColumnCount(result.length);
-      return result;
-    };
+    const delimiter = detectTextDelimiter(text, ext);
 
-    const headers = splitCSVLine(lines[0]);
+    // Delimiters and newlines inside quoted fields are data, not record boundaries.
+    const splitDelimitedRecords = (input: string): string[][] => {
+      const records: string[][] = [];
+      let record: string[] = [], value = '', inQuotes = false;
+      const finishValue = () => { record.push(value.trim()); value = ''; };
+      const finishRecord = () => {
+        finishValue();
+        if (record.some(cell => cell !== '')) records.push(record);
+        record = [];
+      };
+      for (let index = 0; index < input.length; index++) {
+        const char = input[index];
+        if (inQuotes) {
+          if (char === '"') {
+            if (input[index + 1] === '"') { value += '"'; index++; }
+            else inQuotes = false;
+          } else value += char;
+        } else if (char === '"' && value.trim() === '') {
+          value = ''; inQuotes = true;
+        } else if (char === delimiter) {
+          finishValue();
+          checkTextColumnCount(record.length + 1);
+        } else if (char === '\r' || char === '\n') {
+          if (char === '\r' && input[index + 1] === '\n') index++;
+          finishRecord();
+        } else value += char;
+      }
+      if (inQuotes) throw new Error('Unterminated quoted field in delimited text.');
+      finishRecord();
+      checkTextColumnCount(records[0]?.length ?? 0);
+      return records;
+    };
+    const [headers, ...records] = splitDelimitedRecords(text);
+    if (!headers) return { file_type: 'CSV', columns: [], rows: [] };
     const rows: Record<string, any>[] = [];
     const budget = new TextParseBudget();
 
-    for (let i = 1; i < lines.length; i++) {
-      const cells = splitCSVLine(lines[i]);
+    for (const cells of records) {
       if (cells.length === 0 || (cells.length === 1 && !cells[0])) continue;
+      if (cells.length > headers.length) throw new Error('Delimited row has more fields than the header; no extra values were discarded.');
       budget.addRow(headers.length);
       const row: Record<string, any> = {};
       headers.forEach((h, colIdx) => {
@@ -815,6 +979,7 @@ export async function parseFile(
   // 5. DOCX Files
   if (ext === 'docx') {
     try {
+      checkOfficeArchiveBounds(buffer);
       const result = await mammoth.extractRawText({ buffer });
       const htmlResult = await mammoth.convertToHtml({ buffer });
 

@@ -36,6 +36,19 @@ const modelCache = new Map<string, CacheEntry>();
 const MAX_MODEL_CACHE_ENTRIES = 32;
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache
 
+/** Provider/upstream diagnostics are untrusted and may repeat the credential. */
+function sanitizeProviderError(error: unknown, apiKey: string, fallback: string): string {
+  const original = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  let message = (original || fallback).slice(0, 64 * 1024);
+  const credential = apiKey.trim();
+  if (credential) {
+    for (const echoed of new Set([credential, encodeURIComponent(credential), encodeURI(credential)])) {
+      if (echoed) message = message.split(echoed).join('[redacted credential]');
+    }
+  }
+  return message.slice(0, 2000);
+}
+
 async function readModelList(response: Response): Promise<any[]> {
   const captured = await readProviderResponse(response, 1024 * 1024, 20_000, true);
   if (captured.failure) throw providerSchemaError(captured.failure.message);
@@ -92,7 +105,7 @@ export const NvidiaProvider: AIProvider = {
       const captured = await readProviderResponse(res, 256 * 1024);
       const errJson = (captured.body && typeof captured.body === 'object' ? captured.body : {}) as any;
       const msg = errJson.message || errJson.error?.message || `NVIDIA API error (Status ${res.status})`;
-      throw new Error(msg);
+      throw new Error(sanitizeProviderError(msg, cleanKey, `NVIDIA API error (Status ${res.status})`));
     }
 
     const rawList = await readModelList(res);
@@ -150,7 +163,7 @@ export const NvidiaProvider: AIProvider = {
     } catch (err: any) {
       return {
         success: false,
-        message: err?.message || 'Failed to connect to NVIDIA NIM endpoint',
+        message: sanitizeProviderError(err, apiKey, 'Failed to connect to NVIDIA NIM endpoint'),
         modelAvailable: false,
         httpStatus,
       };
@@ -190,7 +203,7 @@ export const GroqProvider: AIProvider = {
       const captured = await readProviderResponse(res, 256 * 1024);
       const errJson = (captured.body && typeof captured.body === 'object' ? captured.body : {}) as any;
       const msg = errJson.error?.message || errJson.message || `Groq API error (Status ${res.status})`;
-      throw new Error(msg);
+      throw new Error(sanitizeProviderError(msg, cleanKey, `Groq API error (Status ${res.status})`));
     }
 
     const rawList = await readModelList(res);
@@ -249,7 +262,7 @@ export const GroqProvider: AIProvider = {
     } catch (err: any) {
       return {
         success: false,
-        message: err?.message || 'Failed to connect to Groq endpoint',
+        message: sanitizeProviderError(err, apiKey, 'Failed to connect to Groq endpoint'),
         modelAvailable: false,
         httpStatus,
       };

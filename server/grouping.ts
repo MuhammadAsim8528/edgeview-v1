@@ -1,3 +1,5 @@
+import { parseTradeNumeric } from './value_normalization';
+
 export const EXPRESS_COLUMN_MAP: Record<string, string> = {
   BE_DATE: 'Date', be_date: 'Date', shipment_date: 'Date', SHIP_DATE: 'Date', BE_DATE_1: 'Date',
   ITEM: 'Item', item: 'Item', product_name: 'Item', Drug_Class: 'Item', CAT_NUMBER: 'Item',
@@ -25,15 +27,13 @@ export function normalizeRow(row: Record<string, any>): Record<string, any> {
 
 const QTY_KEYS = ['Qty', 'qty', 'QTY', 'Quantity', 'quantity', 'QUANTITY'];
 
-function readQty(normR: Record<string, any>, row: Record<string, any>): number {
+function readQty(normR: Record<string, any>, row: Record<string, any>): number | null {
   for (const k of QTY_KEYS) {
     const val = normR[k] ?? row[k];
-    if (val !== undefined && val !== null && val !== '') {
-      const num = Number(val);
-      if (!isNaN(num) && num > 0) return num;
-    }
+    const num = parseTradeNumeric(val);
+    if (num !== null) return num;
   }
-  return NaN;
+  return null;
 }
 
 export function groupShipmentRows(rows: Record<string, any>[]): Record<string, any>[] {
@@ -100,14 +100,17 @@ export function groupShipmentRows(rows: Record<string, any>[]): Record<string, a
       group.items.push(itemVal);
     }
 
-    const fcVal = normR['Total Value (USD)'] || normR['Total FC (USD)'] || normR['TOT_FC'] || row['Total Value (USD)'] || row['Total FC (USD)'];
-    const numFc = Number(fcVal);
-    if (!isNaN(numFc) && numFc > 0) {
-      group.tot_fc_values.push(numFc);
+    const fcValues = [normR['Total Value (USD)'], normR['Total FC (USD)'], normR['TOT_FC'], row['Total Value (USD)'], row['Total FC (USD)']];
+    for (const value of fcValues) {
+      const numFc = parseTradeNumeric(value);
+      if (numFc !== null) {
+        group.tot_fc_values.push(numFc);
+        break;
+      }
     }
 
     const numQty = readQty(normR, row);
-    if (!isNaN(numQty) && numQty > 0) {
+    if (numQty !== null && numQty > 0) {
       group.qty_values.push(numQty);
     }
   }

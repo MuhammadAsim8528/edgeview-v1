@@ -21,6 +21,10 @@ export interface MonitoringVendorState {
 }
 
 export interface RuntimeState {
+  connection: {
+    status: 'CHECKING' | 'ONLINE' | 'OFFLINE';
+    reason: string | null;
+  };
   usageScope?: 'persisted_completed_provider_calls' | null;
   resources: {
     serper: number | null;
@@ -70,6 +74,7 @@ export interface RuntimeState {
 }
 
 const DEFAULT_STATE: RuntimeState = {
+  connection: { status: 'CHECKING', reason: 'Checking the EdgeView backend connection...' },
   usageScope: null,
   resources: { serper: null, hunter: null, nvidia: null, groq: null, directHttp: null, pagesAnalyzed: null, cacheHits: null, cacheMisses: null },
   jobs: { active: 0, completed: 0, failed: 0, partial: 0 },
@@ -144,18 +149,46 @@ function validRuntimePayload(value: unknown): value is RuntimeState & { success:
   });
 }
 
+function runtimeOffline(reason: string): RuntimeState {
+  return {
+    ...globalState,
+    connection: { status: 'OFFLINE', reason },
+    // Preserve loaded data/counts while withdrawing capabilities that can no
+    // longer be confirmed. Consumers must not infer a running job from the
+    // retained last-known enrichment snapshot while the backend is offline.
+    capabilities: Object.fromEntries(Object.entries(globalState.capabilities).map(([id, capability]) => [id, {
+      ...capability, available: false, status: 'UNAVAILABLE' as const, reason,
+      remediation: 'Check that the EdgeView backend is running, then retry.',
+    }])),
+  };
+}
+
 export function fetchRuntimeState(): Promise<RuntimeState> {
   if (inFlight) return inFlight;
   const controller = new AbortController();
   runtimeRequest = controller;
-  let timedOut = false;
-  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
-  const operation = (async () => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const deadline = new Promise<RuntimeState>(resolve => {
+    timeout = setTimeout(() => {
+      if (runtimeRequest !== controller) {
+        resolve(globalState);
+        return;
+      }
+      controller.abort();
+      // Publish the deadline even if the transport ignores AbortSignal and its
+      // promise never settles. A late response is rejected by the guards below.
+      globalState = runtimeOffline('Backend status timed out. EdgeView will retry automatically.');
+      listeners.forEach(fn => fn(globalState));
+      resolve(globalState);
+    }, 15000);
+  });
+  const request = (async () => {
     try {
       const { ok, data, error } = await safeFetchJson<any>('/api/runtime/state', { signal: controller.signal });
-      if (controller.signal.aborted && !timedOut) return globalState;
+      if (controller.signal.aborted || runtimeRequest !== controller) return globalState;
       if (ok && validRuntimePayload(data)) {
         globalState = {
+          connection: { status: 'ONLINE', reason: null },
           usageScope: data.usageScope ?? null,
           resources: data.resources, jobs: data.jobs, enrichment: data.enrichment, providers: data.providers,
           capabilities: data.capabilities || DEFAULT_STATE.capabilities,
@@ -163,22 +196,21 @@ export function fetchRuntimeState(): Promise<RuntimeState> {
           logs: data.logs || [],
         };
       } else {
-        const reason = timedOut ? 'Backend status timed out. EdgeView will retry automatically.'
-          : error || 'The backend returned incomplete runtime state. EdgeView will retry automatically.';
-        // Preserve loaded data/counts while withdrawing capabilities that can
-        // no longer be confirmed. A successful refresh restores backend truth.
-        globalState = { ...globalState, capabilities: Object.fromEntries(Object.entries(globalState.capabilities).map(([id, capability]) => [id, {
-          ...capability, available: false, status: 'UNAVAILABLE' as const, reason,
-          remediation: 'Check that the EdgeView backend is running, then retry.',
-        }])) };
+        globalState = runtimeOffline(error || 'The backend returned incomplete runtime state. EdgeView will retry automatically.');
       }
       listeners.forEach(fn => fn(globalState));
       return globalState;
-    } finally {
-      clearTimeout(timeout);
-      if (runtimeRequest === controller) runtimeRequest = null;
+    } catch {
+      if (controller.signal.aborted || runtimeRequest !== controller) return globalState;
+      globalState = runtimeOffline('Cannot reach the EdgeView backend. EdgeView will retry automatically.');
+      listeners.forEach(fn => fn(globalState));
+      return globalState;
     }
   })();
+  const operation = Promise.race([request, deadline]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+    if (runtimeRequest === controller) runtimeRequest = null;
+  });
   const shared = operation.finally(() => { if (inFlight === shared) inFlight = null; });
   inFlight = shared;
   return shared;

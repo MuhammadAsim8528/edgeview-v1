@@ -108,3 +108,21 @@ const unknownCountry = project('Kenya', [page('unknown-contact', 'Contact: unsco
 assert.deepEqual(unknownCountry.emails_list, [], 'absence of foreign evidence is not proof of Kenyan scope');
 assert.ok((unknownCountry as any).unscoped_facts?.some((fact: any) => fact.value === 'unscoped@scopeanchor.test'
   && fact.reason === 'COUNTRY_SCOPE_UNPROVEN' && fact.source_result_id === 'unknown-contact'), 'withheld fact remains attributable and observable');
+
+// M32: a denial is not affirmative local-contact country evidence.
+const negatedContact = page('negated-country', 'This is not the Kenya office\nnegated@scopeanchor.test');
+assert.equal(contactFactScope(negatedContact, 'negated@scopeanchor.test', 'Kenya', 'email').scope, 'unknown');
+assert.deepEqual(project('Kenya', [negatedContact]).emails_list, []);
+assert.equal(contactFactScope(page('affirmed-country', 'Kenya office\nlocal@scopeanchor.test'),
+  'local@scopeanchor.test', 'Kenya', 'email').scope, 'local');
+
+// M34: an address cannot borrow a country from unrelated HTML around it.
+const unrelatedAddress = { ...page('unrelated-address', 'Kenya summary'),
+  html: '<h2>Kenya</h2><p>40 Unlabelled Road, Nairobi</p>' };
+assert.equal(contactFactScope(unrelatedAddress, '40 Unlabelled Road, Nairobi', 'Kenya', 'address').scope, 'unknown');
+const ownAddressCountry = { ...unrelatedAddress,
+  html: '<h2>Pakistan</h2><p>40 Unlabelled Road, Nairobi, Kenya</p>' };
+assert.equal(contactFactScope(ownAddressCountry, '40 Unlabelled Road, Nairobi, Kenya', 'Kenya', 'address').scope, 'local');
+const sameAddressLine = { ...unrelatedAddress, html: '<h2>Head Office</h2><p>40 Unlabelled Road, Nairobi, Kenya</p>' };
+assert.equal(contactFactScope(sameAddressLine, '40 Unlabelled Road', 'Kenya', 'address').scope, 'local',
+  'the address own line can supply its country');

@@ -46,10 +46,10 @@ try {
     results: [{ id: `${id}-page`, run_id: id, raw_record_id: 'synthetic', query: '', provider: 'direct-http', rank: 1,
       title: '', url: fact.source_url, snippet: '', text: fact.quote, links: [], metadata: {}, search_latency_ms: 0, status: 'success' }] }));
   for (const run of runs) persistV1Run(run as any);
-  const before = runs.map(run => JSON.stringify(getV1Run(run.id)));
-  const historical = projectHistoricalContactFields(getV1Run('run-second')!);
+  const before = await Promise.all(runs.map(async run => JSON.stringify(await getV1Run(run.id))));
+  const historical = await projectHistoricalContactFields((await getV1Run('run-second'))!);
   assert.equal(historical.unscoped_facts.filter(item => item.value === fact.value).length, 1, 'actual history does not repeat identical unscoped source facts');
   assert.equal(historical.email, '', 'actual history still abstains on the local mailbox');
-  assert.deepEqual(runs.map(run => JSON.stringify(getV1Run(run.id))), before, 'both immutable historical captures remain unchanged');
+  assert.deepEqual(await Promise.all(runs.map(async run => JSON.stringify(await getV1Run(run.id)))), before, 'both immutable historical captures remain unchanged');
   console.log('PASS real immutable history projection deduplicates without local-contact promotion or raw changes');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

@@ -75,7 +75,7 @@ try {
       const age=name==='Old'?8*86400000:60000;
       const run={id:'run-policy-'+name.toLowerCase(),company_name:'Synthetic '+name+' Buyer',country:'Kenya',status:name==='Partial'?'PARTIAL':'COMPLETED',started_at:new Date(Date.now()-age-1000).toISOString(),completed_at:new Date(Date.now()-age).toISOString(),...(name==='Legacy'?{}:{research_context:createV1ResearchContext(name==='Bulk'?'bulk':'interactive')}),queries:[],results:[],raw_records:[],timeline:[],limits:{}};
       if(name==='OldPipeline')(run as any).research_context.pipeline_version=1;
-      persistV1Run(run as any);await persistV1ContactOverlay(id as string,run.id,projectHistoricalContactFields(run as any),true);
+      persistV1Run(run as any);await persistV1ContactOverlay(id as string,run.id,await projectHistoricalContactFields(run as any),true);
     }}main().catch(error=>{console.error(error);process.exitCode=1;});`, resolveDir: repo, loader: 'ts' }, outfile: seed, bundle: true, platform: 'node', format: 'cjs', packages: 'external', logLevel: 'silent' });
   const seeded = spawnSync(process.execPath, ['-r', denied, seed], { cwd: app, env, encoding: 'utf8', windowsHide: true, timeout: 30000 }); assert.equal(seeded.status, 0, seeded.stderr);
   const originalOld = fs.readFileSync(path.join(state, 'runs/run-policy-old.json'));
