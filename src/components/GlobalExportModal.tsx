@@ -39,6 +39,7 @@ export type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'all';
 export type ExportReportType = 'importer' | 'exporter' | 'both' | 'international_importer';
 
 const EXPORT_DEADLINE_MS = 120_000;
+const ALL_FORMATS_EXPORT_DEADLINE_MS = 180_000;
 
 interface GlobalExportModalProps {
   isOpen: boolean;
@@ -87,6 +88,7 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
     let timedOut = false;
+    const deadlineMs = selectedFormat === 'all' ? ALL_FORMATS_EXPORT_DEADLINE_MS : EXPORT_DEADLINE_MS;
     const deadline = setTimeout(() => {
       if (exportGenerationRef.current !== generation || exportControllerRef.current !== controller) return;
       timedOut = true;
@@ -98,8 +100,8 @@ const ExportDialog: React.FC<{ onClose: () => void; payload: GlobalExportPayload
       setExportProgress(0);
       setExportStep('');
       setExportNotice(null);
-      setExportError('Export timed out after 2 minutes. No download was saved. Try a smaller selection or a single format.');
-    }, EXPORT_DEADLINE_MS);
+      setExportError(`Export timed out after ${deadlineMs / 60_000} minutes. No download was saved. Try a smaller selection or a single format.`);
+    }, deadlineMs);
     exportDeadlineRef.current = deadline;
     const isCurrentRequest = () => exportGenerationRef.current === generation
       && exportControllerRef.current === controller && !controller.signal.aborted;

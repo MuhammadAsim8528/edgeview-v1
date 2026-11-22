@@ -25,15 +25,11 @@ Object.assign(env, { NODE_PATH: path.join(repo, 'node_modules'), NODE_ENV: 'test
 const engine = path.join(repo, 'server/v1_engine.ts'), manager = path.join(repo, 'server/job_manager.ts');
 let child, stderr = '';
 const operationCount = () => fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).length : 0;
-const request = async (url, body) => {
-  try { return await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); }
-  catch (error) { throw new Error(`Isolated request ${url} failed: ${error?.name || 'unknown error'}`, { cause: error }); }
-};
+const request = (url, body) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
 async function start() {
   stderr = '';
-  child = spawn(process.execPath, ['-r', denied, path.join(app, 'runtime-bootstrap.cjs')], { cwd: app, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  child = spawn(process.execPath, ['-r', denied, path.join(app, 'runtime-bootstrap.cjs')], { cwd: app, env, stdio: ['pipe', 'ignore', 'pipe'], windowsHide: true });
   child.stdin.on('error', () => {}); child.stderr.on('data', bytes => { stderr = (stderr + bytes).slice(-4000); });
-  child.stdout.on('data', bytes => { stderr = (stderr + bytes).slice(-4000); });
   for (const deadline = Date.now() + 30000; Date.now() < deadline;) {
     if (child.exitCode !== null) throw Error('Owned policy fixture exited: ' + stderr);
     try { const response = await fetch(base + '/api/health', { signal: AbortSignal.timeout(2000) }); if (response.ok) { assert.equal((await response.json()).app.pid, child.pid); return; } } catch { /* bounded startup */ }
@@ -42,12 +38,7 @@ async function start() {
   throw Error('Owned policy fixture readiness failed: ' + stderr);
 }
 async function stop() {
-  if (child && child.exitCode === null && child.signalCode === null) {
-    try {
-      const done = once(child, 'exit', { signal: AbortSignal.timeout(20000) });
-      child.stdin.end('shutdown\n'); assert.equal((await done)[0], 0);
-    } catch (error) { throw new Error(`Owned policy fixture shutdown failed: ${error?.name || 'unknown error'}; ${stderr}`, { cause: error }); }
-  }
+  if (child && child.exitCode === null && child.signalCode === null) { const done = once(child, 'exit', { signal: AbortSignal.timeout(20000) }); child.stdin.end('shutdown\n'); assert.equal((await done)[0], 0); }
   child = null;
 }
 async function complete(id) {

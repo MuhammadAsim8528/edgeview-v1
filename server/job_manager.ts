@@ -988,7 +988,13 @@ export function isJobActive(jobId: string): boolean {
 }
 
 export async function runJobLoop(jobId: string, forceFetch = false, reviewRetainedOnly = false): Promise<boolean> {
-  if (shuttingDown || ownedJobs.has(jobId)) return false;
+  if (shuttingDown) return false;
+  if (ownedJobs.has(jobId)) {
+    if (!forceFetch) return false;
+    const deadline = Date.now() + 600_000;
+    while (ownedJobs.has(jobId) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    if (ownedJobs.has(jobId) || shuttingDown) return false;
+  }
   const releaseIdentityWork = acquireCompanyIdentityWork();
   const jobController = new AbortController();
   jobControllers.set(jobId, jobController);

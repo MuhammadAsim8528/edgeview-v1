@@ -63,7 +63,9 @@ test('large stored trade context exports through the real Contacts proceed contr
           const document = await documentZip.file('word/document.xml')!.async('string');
           for (const marker of markers) expect(document, `ZIP DOCX includes ${marker}`).toContain(marker);
         } else if (extension === 'pdf') {
-          assertPdfContainsText(memberBytes, ['Synthetic Large Buyer', String(count), 'Synthetic Supplier'], 'large-export ZIP PDF');
+          // The report renderer deliberately uppercases company headings; assert
+          // the complete visible heading rather than a case that cannot occur.
+          assertPdfContainsText(memberBytes, [company.toUpperCase(), String(count), 'Synthetic Supplier'], 'large-export ZIP PDF');
         } else {
           const workbook = new ExcelJS.Workbook();
           await workbook.xlsx.load(memberBytes as any);

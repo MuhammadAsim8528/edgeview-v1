@@ -36,6 +36,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
   
   // Job Tracking
   const [controlError, setControlError] = useState<string | null>(null);
+  const [pollingError, setPollingError] = useState<string | null>(null);
   const [controlAction, setControlAction] = useState<'pause' | 'resume' | null>(null);
   const controlRequestRef = useRef<AbortController | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -132,6 +133,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
       setJobData(null);
       setResearchMode('recent');
       setControlError(null);
+      setPollingError(null);
       setControlAction(null);
       fetchGovernorInfo(controller.signal);
       fetchHistoricalJobs(controller.signal);
@@ -226,7 +228,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
     const session = new AbortController();
     pollRequestRef.current = session;
     setActiveJobId(jobId);
-    setControlError(null);
+    setPollingError(null);
     // A different job must not render the previous job's rows while its first
     // request is in flight. Same-job resume may retain its own last checkpoint.
     setJobData(previous => initialSnapshot || (previous?.id === jobId ? previous : null));
@@ -283,12 +285,12 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
           refreshData?.();
           return;
         }
-        setControlError(null);
+        setPollingError(null);
         await fetchGovernorInfo(session.signal);
       } catch (error) {
         if (isCurrentRequest()) {
           failures++;
-          setControlError(failures >= MAX_POLL_FAILURES
+          setPollingError(failures >= MAX_POLL_FAILURES
             ? `Research status could not be refreshed after ${MAX_POLL_FAILURES} attempts. Close this panel or use Retry. ${error instanceof Error ? error.message : ''}`
             : 'Research status is temporarily unavailable. EdgeView is retrying with a bounded delay.');
           if (failures >= MAX_POLL_FAILURES) stopPolling();
@@ -602,7 +604,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                   </div>
                 </div>
 
-                {controlError && <p role="alert" className="text-xs text-amber-300">{controlError}</p>}
+                {(controlError || pollingError) && <p role="alert" className="text-xs text-amber-300">{controlError || pollingError}</p>}
                 {/* Queue Actions (Pause/Resume/Checkpoint reset) */}
                 <div className="flex items-center space-x-3 pt-1">
                   {['PENDING', 'DISCOVERING', 'CRAWLING', 'EXTRACTING'].includes(jobData.status) ? (
@@ -637,6 +639,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                       setActiveJobId(null);
                       setJobData(null);
                       setControlError(null);
+                      setPollingError(null);
                     }}
                     className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-xs font-medium text-white transition-colors cursor-pointer"
                   >
@@ -885,6 +888,7 @@ export const BatchEnrichmentModal: React.FC<BatchEnrichmentModalProps> = ({
                           controlRequestRef.current?.abort();
                           controlRequestRef.current = null;
                           setControlAction(null);
+                          setControlError(null);
                           startPolling(hj.id);
                         }}
                         className={`p-2 bg-[#1c1c1c] border rounded-md hover:bg-[#262626] cursor-pointer transition-colors ${
