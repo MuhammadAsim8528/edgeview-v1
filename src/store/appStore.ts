@@ -217,7 +217,7 @@ export function useAppStore() {
     try {
       setLoading(true);
       const targetFile = files.find((f) => f.id === fileId);
-      const { ok, error: delErr } = await safeFetchJson(`/api/files/${fileId}`, { method: 'DELETE' });
+      const { ok, error: delErr } = await safeFetchJson(`/api/files/${fileId}?keep_history=true`, { method: 'DELETE' });
       if (!ok) throw new Error(delErr || 'Failed to delete file');
 
       await fetchFiles();
@@ -232,7 +232,7 @@ export function useAppStore() {
           setSelectedFile(null);
         }
       }
-      showToast(`Deleted ${targetFile?.name || 'file'}`, 'info');
+      showToast(`Removed ${targetFile?.name || 'file'} from Files. Saved history retained.`, 'info');
     } catch (err: any) {
       setError(err?.message || 'Failed to delete file');
       showToast(err?.message || 'Failed to delete file', 'error');
@@ -348,6 +348,7 @@ export function useAppStore() {
     loading,
     uploading,
     error,
+    dismissError: () => setError(null),
     toasts,
     showToast,
     dismissToast,

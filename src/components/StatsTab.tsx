@@ -1,3 +1,4 @@
+import { hasTradeParties } from '../../shared/dataset_columns';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { processAndValidateExportResponse } from '../utils/exportValidator';
 import { safeFetchJson } from '../utils/safeFetch';
@@ -51,7 +52,23 @@ interface StatsTabProps {
 type PeriodMode = 'full' | 'yearly' | 'monthly' | 'custom';
 type SortField = 'date' | 'invoice_no' | 'product' | 'quantity' | 'total_value' | 'exporter';
 
-export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSelectFile, onOpenExport }) => {
+export const StatsTab: React.FC<StatsTabProps> = props => {
+  const [scope, setScope] = useState(props.selectedFileId ?? '');
+  const [historyFiles, setHistoryFiles] = useState<HistoryFileItem[]>([]);
+  const options = new Map(props.files.map(file => [file.id, { name: file.name, compatible: hasTradeParties(file.columns ?? []) }]));
+  for (const file of historyFiles) options.set(file.id, { name: file.file_name, compatible: file.trade_compatible !== false });
+  return <div className="flex-1 overflow-y-auto">
+    <label className="block p-4">History dataset <select value={scope} onChange={event => setScope(event.target.value)}>
+      <option value="">Choose a file</option>
+      {Array.from(options, ([id, item]) => <option key={id} value={id}>{item.name}</option>)}
+      <option value="__combined__">Combined active trade files</option>
+    </select></label>
+    {scope && options.get(scope)?.compatible === false && <p className="px-4">This dataset has no importer or exporter field. Trade statistics are unavailable.</p>}
+    <StatsContent key={scope} {...props} selectedFileId={scope === '__combined__' ? null : scope || '__none__'} onHistoryFiles={setHistoryFiles} />
+  </div>;
+};
+
+const StatsContent: React.FC<StatsTabProps & { onHistoryFiles: (items: HistoryFileItem[]) => void }> = ({ files, selectedFileId, onSelectFile, onOpenExport, onHistoryFiles }) => {
   // Global Metrics State
   const [globalStats, setGlobalStats] = useState<GlobalStatsSummary | null>(null);
   const [countries, setCountries] = useState<StatsCountryItem[]>([]);
@@ -110,6 +127,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
       const { ok, data } = await safeFetchJson<any>('/api/stats/history-files');
       if (ok && data && data.success && Array.isArray(data.data)) {
         setHistoryFiles(data.data);
+        onHistoryFiles(data.data);
       }
     } catch (err) {
       console.error('Failed to fetch history files list:', err);
@@ -146,21 +164,6 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
         if (!f) return false;
         // Strictly exclude test data records
         if (f.source === 'test') return false;
-        const nameLower = (f.file_name || '').toLowerCase().trim();
-        if (
-          nameLower.includes('sample') ||
-          nameLower.includes('test') ||
-          nameLower.includes('demo') ||
-          nameLower.includes('mock') ||
-          nameLower.includes('pharma_imports_2026') ||
-          nameLower.includes('shipments_q2') ||
-          nameLower.includes('suppliers_master') ||
-          nameLower.includes('trade_manifest') ||
-          nameLower.includes('compliance_audit_report')
-        ) {
-          return false;
-        }
-
         if (historyFileSearch.trim()) {
           return f.file_name.toLowerCase().includes(historyFileSearch.toLowerCase().trim());
         }
@@ -261,7 +264,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
     const timeout = setTimeout(() => controller.abort(), 15000);
     setStatsError(null);
     setAppliedExportScope(null);
-    const exportScope = { fileIds: selectedFileId ? [selectedFileId] : files.map(file => file.id), country: selectedCountry, importer: selectedImporter, startDate, endDate };
+    const exportScope = { fileIds: selectedFileId ? [selectedFileId] : files.filter(file => hasTradeParties(file.columns ?? [])).map(file => file.id), country: selectedCountry, importer: selectedImporter, startDate, endDate };
     setIsLoadingStats(true);
     setCurrentPage(1);
     setSelectedExporterFilter('');
@@ -728,7 +731,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ files, selectedFileId, onSel
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
-                        {onSelectFile && (
+                        {onSelectFile && !file.archived && (
                           <button
                             onClick={() => onSelectFile(file.id)}
                             className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-[#10b981] border border-emerald-500/20 rounded-md text-xs font-medium transition-colors"

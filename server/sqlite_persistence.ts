@@ -10,6 +10,7 @@ function getJsonPaths(): { main: string; legacy: string } {
 }
 
 export interface UploadedFileRecord {
+  archived?: boolean;
   id: string;
   file_name: string;
   file_hash: string;
@@ -115,6 +116,7 @@ export function decodePersistenceRecords(raw: string | Uint8Array, testProcess =
 
       return {
         id: fId,
+        ...(r.archived === true ? { archived: true } : {}),
         file_name: fName,
         file_hash: r.file_hash || '',
         row_count: r.row_count !== undefined ? r.row_count : (rws.length || r.total_rows || 0),
@@ -269,6 +271,7 @@ export async function saveFileToDb(fileRecord: FileRecord, fileHash: string, exp
 
   const existingIdx = records.findIndex((r) => r.id === fileRecord.id || (r.file_hash && r.file_hash === fileHash));
   if (existingIdx >= 0) {
+    if (records[existingIdx].id === fileRecord.id && records[existingIdx].file_hash) newRecord.file_hash = records[existingIdx].file_hash;
     records[existingIdx] = newRecord;
   } else {
     records.unshift(newRecord);
@@ -282,7 +285,7 @@ export async function loadAllFilesFromDb(): Promise<FileRecord[]> {
   const records = readRecordsFromDisk();
   records.sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
 
-  return records.map((row, idx) => {
+  return records.filter(row => !row.archived).map((row, idx) => {
     const id = row.id || `file-${Date.now()}-${idx + 1}`;
     const columns = row.file_data?.columns || [];
     const rows = row.file_data?.rows || [];
@@ -316,11 +319,28 @@ export async function getHistoryFilesFromDb(): Promise<UploadedFileRecord[]> {
   return realRecords;
 }
 
-export async function findFileByHash(fileHash: string): Promise<FileRecord | null> {
+export function archiveUploadedFile(id: string): boolean {
+  const records = readRecordsFromDisk();
+  const record = records.find(row => row.id === id);
+  if (!record) return false;
+  record.archived = true;
+  writeRecordsToDisk(records);
+  return true;
+}
+
+export function archivedFileRows(id: string) {
+  return readRecordsFromDisk().find(record => record.id === id && record.archived)?.file_data;
+}
+
+export async function findFileByHash(fileHash: string, reopen = false): Promise<FileRecord | null> {
   const records = readRecordsFromDisk();
   const found = records.find((r) => r.file_hash === fileHash);
 
   if (!found) return null;
+  if (found.archived && reopen) {
+    delete found.archived;
+    writeRecordsToDisk(records);
+  }
 
   return {
     id: found.id,

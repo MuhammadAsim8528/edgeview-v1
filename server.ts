@@ -1,3 +1,4 @@
+import { hasTradeParties } from './shared/dataset_columns';
 import { identityWorkHandler } from './server/company_identity_work';
 import express from 'express';
 import { buildCountryOverview } from './shared/country_overview';
@@ -23,6 +24,8 @@ import {
   computeFileHash,
   findFileByHash,
   deleteFileFromHistory,
+  archiveUploadedFile,
+  archivedFileRows,
   persistenceDatabaseExists,
   isTestRecord,
   PersistenceReadError,
@@ -455,6 +458,7 @@ app.post(['/api/files/:id/save-to-history', '/api/stats/save-to-history'], ident
       return res.status(404).json({ success: false, error: 'File not found in active session' });
     }
 
+    if (!hasTradeParties(file.columns ?? [])) return res.status(422).json({ success: false, error: 'Trade history requires an importer or exporter field.' });
     const fileHash = computeFileHash(Buffer.from(JSON.stringify(file.rows || [])));
     const saved = await saveFileToDb(file, fileHash, 'real');
 
@@ -520,6 +524,13 @@ app.delete('/api/files/:id', identityWorkHandler(async (req, res) => {
     }
 
     const file = db.files.get(id)!;
+    if (req.query.keep_history === 'true') {
+      if (!archiveUploadedFile(id)) return res.status(409).json({ error: 'Saved file unavailable. File remains open.' });
+      db.files.delete(id);
+      db.syncCompaniesFromFiles();
+      db.pruneOrphanedContacts();
+      return res.json({ success: true, history_retained: true, deleted_id: id });
+    }
     if (await hasUnattributedHistory(file.name)) return res.status(409).json(HISTORY_RECONCILIATION_REQUIRED);
 
     // 1. Persist the primary file deletion first so it cannot reappear after
@@ -1920,7 +1931,7 @@ app.post('/api/export', async (req, res) => {
     const payload = req.body?.dataset === 'contacts'
       ? resolveStoredContactExport(req.body, Array.from(db.contacts.values()))
       : ['summary','country','stats'].includes(req.body?.dataset)
-      ? resolveStoredDerivedExport(req.body, db.files)
+      ? resolveStoredDerivedExport(req.body, db.files, archivedFileRows)
       : req.body?.dataset === 'reports'
       ? resolveStoredReportExport(req.body, db.reports)
       : req.body;

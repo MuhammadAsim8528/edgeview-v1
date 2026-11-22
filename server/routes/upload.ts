@@ -1,3 +1,4 @@
+import { hasTradeParties } from '../../shared/dataset_columns';
 import { identityWorkHandler } from '../company_identity_work';
 import express from 'express';
 import multer from 'multer';
@@ -120,7 +121,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
 
     // 4. Check for Duplicate Files
     try {
-      const existingFile = await findFileByHash(fileHash);
+      const existingFile = await findFileByHash(fileHash, true);
       if (existingFile) {
         db.files.set(existingFile.id, existingFile);
         db.syncCompaniesFromFiles();
@@ -134,7 +135,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
         });
       }
     } catch (hashErr) {
-      console.warn('Duplicate check warning:', hashErr);
+      return res.status(503).json({ success: false, error: 'Could not check or reopen saved files. Retry the upload.' });
     }
 
     // 5. Graceful Parser Execution
@@ -200,7 +201,7 @@ async function handleUpload(req: express.Request, res: express.Response) {
       const { getDb } = await import('../sqlite');
       sqlDb = await getDb();
       await sqlDb.run('DELETE FROM history_data WHERE file_id = ?', [fileRecord.id]);
-      if (parsed.rows && parsed.rows.length > 0) {
+      if (parsed.rows && parsed.rows.length > 0 && hasTradeParties(fileRecord.columns ?? [])) {
         const stmt = await sqlDb.prepare(`
           INSERT INTO history_data (
             be_link, be_date, hs_code, item, importer, exporter, country, tot_fc, qty, unit, agent_name, file_name, file_id

@@ -6,6 +6,7 @@ interface UploadAreaProps {
   onFileUpload: (file: File) => Promise<any>;
   uploading: boolean;
   error: string | null;
+  onDismissError?: () => void;
   existingFiles?: ParsedFile[];
 }
 
@@ -13,6 +14,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   onFileUpload,
   uploading,
   error,
+  onDismissError,
   existingFiles = [],
 }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -185,6 +187,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
       {error && (
         <div className="mt-2.5 p-3 bg-red-950/40 border border-red-800/50 rounded-lg text-xs text-red-300 font-medium">
           Error parsing file: {error}
+          {onDismissError && <button type="button" aria-label="Dismiss upload error" className="ml-3" onClick={onDismissError}>&times;</button>}
         </div>
       )}
     </div>

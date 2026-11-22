@@ -1,3 +1,4 @@
+import { detectColumns, hasTradeParties, type DisplayColumn } from '../../shared/dataset_columns';
 import React, { useState, useMemo, useEffect } from 'react';
 import { safeFetchJson } from '../utils/safeFetch';
 import { loadFilePage, type FilePageResult } from '../utils/filePage';
@@ -30,179 +31,12 @@ import { ParsedFile } from '../types';
 import { GlobalExportPayload } from './GlobalExportModal';
 
 interface FileViewerProps {
+  justUploaded?: boolean;
   file: ParsedFile | null;
   onExportCSV: () => void;
   onSaveToHistory?: (fileId: string) => Promise<any>;
   onOpenExport: (payload: GlobalExportPayload) => void;
 }
-
-export interface DisplayColumn {
-  key: string;
-  label: string;
-  actualCol: string | null;
-  sourceValue?: boolean;
-}
-
-// Config for the 8 required columns in exact order with detection keywords
-const TARGET_COLUMNS_CONFIG = [
-  {
-    key: 'date',
-    label: 'Date',
-    keywords: [
-      'be_date',
-      'lc_date',
-      'invoice date',
-      'be_dt',
-      'date',
-      'dt',
-      'invoice_date',
-      'transaction_date',
-      'tx_date',
-      'be_d',
-    ],
-  },
-  {
-    key: 'importer',
-    label: 'Importer',
-    keywords: [
-      'importer',
-      'buyer',
-      'customer',
-      'consignee',
-      'importer_name',
-      'buyer_name',
-      'consignee_name',
-    ],
-  },
-  {
-    key: 'country',
-    label: 'Country',
-    keywords: [
-      'country',
-      'cntry',
-      'origin',
-      'destination_country',
-      'country_name',
-      'c_name',
-      'country_of_origin',
-    ],
-  },
-  {
-    key: 'exporter',
-    label: 'Exporter',
-    keywords: [
-      'exporter',
-      'seller',
-      'supplier',
-      'shipper',
-      'exporter_name',
-      'seller_name',
-      'supplier_name',
-    ],
-  },
-  {
-    key: 'item',
-    label: 'Item',
-    keywords: [
-      'item',
-      'description',
-      'product',
-      'commodity',
-      'product_name',
-      'item_desc',
-      'prod_desc',
-      'goods_description',
-      'desc',
-    ],
-  },
-  {
-    key: 'total_fc_usd',
-    label: 'Total Value (USD)',
-    keywords: [
-      'total value (usd)',
-      'total value',
-      'total fc (usd)',
-      'total fc usd',
-      'totalfcusd',
-      'tot_fc',
-      'av_fc',
-      'dv_fc',
-      'val_usd',
-      'invoice_val',
-      'total cost',
-      'total_cost',
-      'amount',
-      'value',
-      'usd',
-      'cost',
-      'tot_cost',
-      'total_usd',
-    ],
-  },
-];
-
-/**
- * Column Detection Logic:
- * Scans file.columns for matching keywords and assigns actual column names to target headers.
- * If a required column is not found in the file, it is marked as missing.
- */
-const detectColumns = (fileColumns: string[]) => {
-  const normalizedFileCols = fileColumns.map((col) => ({
-    original: col,
-    clean: col.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-  }));
-
-  const usedOriginalCols = new Set<string>();
-
-  const displayColumns: DisplayColumn[] = TARGET_COLUMNS_CONFIG.map((target) => {
-    let bestMatch: string | null = null;
-    const allKeywords = [target.label.toLowerCase(), target.key, ...target.keywords];
-
-    // 1. Try exact keyword match
-    for (const kw of allKeywords) {
-      const cleanKw = kw.replace(/[^a-z0-9_]/g, '');
-      const match = normalizedFileCols.find(
-        (c) => !usedOriginalCols.has(c.original) && c.clean === cleanKw
-      );
-      if (match) {
-        bestMatch = match.original;
-        break;
-      }
-    }
-
-    // 2. Try substring match if exact match not found
-    if (!bestMatch) {
-      for (const kw of allKeywords) {
-        const cleanKw = kw.replace(/[^a-z0-9_]/g, '');
-        if (cleanKw.length < 2) continue;
-        const match = normalizedFileCols.find(
-          (c) => !usedOriginalCols.has(c.original) && c.clean.includes(cleanKw)
-        );
-        if (match) {
-          bestMatch = match.original;
-          break;
-        }
-      }
-    }
-
-    if (bestMatch) {
-      usedOriginalCols.add(bestMatch);
-    }
-
-    return {
-      key: target.key,
-      label: target.label,
-      actualCol: bestMatch,
-    };
-  });
-
-  const allowedKeys = ['date', 'importer', 'country', 'exporter', 'item', 'total_fc_usd'];
-  const missingColumns = displayColumns
-    .filter((col) => !col.actualCol && allowedKeys.includes(col.key))
-    .map((col) => col.label);
-
-  return { displayColumns, missingColumns };
-};
 
 // Helper to extract cell value across actualCol, label, key, or raw aliases
 const getCellValue = (row: Record<string, any> | any[], col: DisplayColumn, fileCols: string[] = []): any => {
@@ -494,7 +328,7 @@ const columnMapping: Record<string, string> = {
   tot_fc: 'Total Value (USD)',
 };
 
-export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSaveToHistory, onOpenExport }) => {
+export const FileViewer: React.FC<FileViewerProps> = ({ file, justUploaded, onExportCSV, onSaveToHistory, onOpenExport }) => {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -504,7 +338,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   const [viewMode, setViewMode] = useState<'table' | 'text'>('table');
 
   // Shipment Grouping and Granular Filters State
-  const [isGrouped, setIsGrouped] = useState<boolean>(() => readShipmentGrouping());
+  const [groupingPreference, setIsGrouped] = useState<boolean>(() => readShipmentGrouping());
   const [groupingPreferenceError, setGroupingPreferenceError] = useState(false);
   const [productFilter, setProductFilter] = useState<string>('');
   const [countryFilter, setCountryFilter] = useState<string>('');
@@ -517,7 +351,13 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   const [pageRetry, setPageRetry] = useState(0);
 
   const [viewFieldsByFile, setViewFieldsByFile] = useState<Record<string, { key: string; header: string }[]>>({});
-  const selectedFields = file ? viewFieldsByFile[file.id] : undefined;
+  const availableFields = useMemo(() => [...new Set(file?.columns ?? [])], [file?.columns]);
+  const genericTable = availableFields.length > 0 && !hasTradeParties(availableFields);
+  const isGrouped = groupingPreference && !genericTable;
+  const defaultFields = useMemo(() => genericTable ? availableFields.map(key => ({ key, header: key })) : undefined, [availableFields, genericTable]);
+  const selectedFields = (file ? viewFieldsByFile[file.id] : undefined) ?? defaultFields;
+  const [dismissedNotice, setDismissedNotice] = useState<string>();
+
   const sourceMode = !isGrouped && Boolean(selectedFields?.length);
   const [selectedRowsByFile, setSelectedRowsByFile] = useState<Record<string, number[]>>({});
   const selectedRows = file ? selectedRowsByFile[file.id] ?? [] : [];
@@ -528,9 +368,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
       return { ...previous, [fileId]: rows.includes(position) ? rows.filter(row => row !== position) : [...rows, position] };
     });
   };
-  const availableFields = [...new Set(file?.columns ?? [])];
+
   const updateViewerFields = (change: (fields: { key: string; header: string }[]) => { key: string; header: string }[]) => {
-    if (file) setViewFieldsByFile(previous => ({ ...previous, [file.id]: change(previous[file.id] ?? []) }));
+    if (file) setViewFieldsByFile(previous => ({ ...previous, [file.id]: change(previous[file.id] ?? defaultFields ?? []) }));
     setSortColumn(null);
     setCurrentPage(1);
   };
@@ -968,7 +808,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
   return (
     <div className="bg-[#1a1a1a] rounded-xl border border-[#262626] shadow-xs overflow-hidden">
       {/* Missing Columns Warning Banner */}
-      {missingColumns && missingColumns.length > 0 && (
+      {!genericTable && dismissedNotice !== file.id && missingColumns.length > 0 && (
         <div className="px-4 py-2.5 bg-amber-950/60 border-b border-amber-800/50 flex items-center justify-between text-xs text-amber-200">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -977,7 +817,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             </span>
           </div>
           <span className="text-[10px] text-amber-400/80 font-mono">
-            {fileColumns.length} fields found
+            {fileColumns.length} fields found <button aria-label="Dismiss column notice" onClick={() => setDismissedNotice(file.id)}>&times;</button>
           </span>
         </div>
       )}
@@ -995,11 +835,11 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           </div>
 
           <span className="text-xs text-[#9ca3af] font-medium">
-            ({rawRows.length || file.summary?.total_rows || effectiveTotalCount || 0} total product lines)
+            ({rawRows.length || file.summary?.total_rows || effectiveTotalCount || 0} {genericTable ? 'rows' : 'total product lines'})
           </span>
 
           {/* Grouping Toggle Switch */}
-          <button
+          {!genericTable && <button
             onClick={() => {
               const grouped = !isGrouped;
               setIsGrouped(grouped);
@@ -1016,7 +856,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Group Shipments {isGrouped ? 'ON' : 'OFF'}</span>
-          </button>
+          </button>}
           {groupingPreferenceError && <span role="alert" className="text-xs text-amber-300">View preference could not be saved in this browser.</span>}
         </div>
 
@@ -1053,7 +893,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           <button
             onClick={handleSaveToHistory}
             id="save-to-history-btn"
-            disabled={isSaving}
+            disabled={isSaving || genericTable}
             className={`inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors shadow-xs ${
               saveSuccess
                 ? 'bg-[#10b981] text-white border border-[#10b981]'
@@ -1068,7 +908,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             ) : (
               <Bookmark className="w-3.5 h-3.5" />
             )}
-            <span>{saveSuccess ? 'Saved to History ✓' : 'Save to History'}</span>
+            <span>{genericTable ? 'Trade history unavailable for these columns' : saveSuccess ? 'Saved to History ✓' : 'Save to History'}</span>
           </button>
 
           {/* Export Filtered View Button */}
@@ -1084,18 +924,18 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           </button>
 
           {availableFields.length > 0 && (
-            <details className="relative text-xs">
+            <details key={file.id} open={justUploaded || undefined} className="relative text-xs">
               <summary className="cursor-pointer rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-2">Display columns</summary>
               <div className="absolute right-0 z-20 mt-1 max-h-64 w-80 space-y-2 overflow-y-auto rounded-lg border border-[#444] bg-[#1a1a1a] p-3 shadow-lg">
                 {isGrouped ? <p>Turn off shipment grouping to display source columns.</p> : (
                   <>
-                    <p>Choose fields from this file. Clear the selection to use the standard view.</p>
+                    <p>Choose or rename columns for this file. Use the row checkboxes in the table to select records for export.</p>
                     {availableFields.map(key => {
                       const value = selectedFields?.find(field => field.key === key);
                       return (
                         <div className="grid grid-cols-2 items-center gap-2" key={key}>
                           <label className="flex min-w-0 items-center gap-2">
-                            <input type="checkbox" checked={Boolean(value)} disabled={!value && (selectedFields?.length ?? 0) >= 64}
+                            <input type="checkbox" checked={Boolean(value)} disabled={(!value && (selectedFields?.length ?? 0) >= 64) || (genericTable && Boolean(value) && selectedFields?.length === 1)}
                               onChange={event => updateViewerFields(fields => event.target.checked
                                 ? [...fields, { key, header: key.slice(0, 120) }] : fields.filter(field => field.key !== key))} />
                             <span className="truncate" title={key}>{key}</span>
@@ -1158,23 +998,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
           </button>
         </div>
       </div>
-
-      {/* Warnings for Missing Columns */}
-      {missingColumns.length > 0 && (
-        <div className="bg-amber-950/40 border-b border-amber-800/50 divide-y divide-amber-800/30">
-          {missingColumns.map((colName) => (
-            <div
-              key={colName}
-              className="p-2.5 px-4 flex items-center space-x-2 text-xs text-amber-300 font-medium"
-            >
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>
-                Column not found: <strong>{colName}</strong>
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* View Mode 1: Document View */}
       {viewMode === 'text' && file.raw_text ? (
@@ -1249,7 +1072,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
             </div>
 
             {/* Granular Filter Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {!genericTable && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {/* 1. Product Filter */}
               <div className="relative">
                 <label className="block text-[11px] font-bold text-[#9ca3af] uppercase tracking-wider mb-1 flex items-center gap-1">
@@ -1357,7 +1180,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                   className="w-full px-2.5 py-1.5 text-xs bg-[#1a1a1a] border border-[#333333] text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981]"
                 />
               </div>
-            </div>
+            </div>}
 
             {/* Quick Keyword Search + Table Meta */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -1365,7 +1188,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onExportCSV, onSav
                 <Search className="w-4 h-4 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Global keyword search across Date, Item, Importer, Cost..."
+                  placeholder={genericTable ? "Search this file" : "Global keyword search across Date, Item, Importer, Cost..."}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   className="w-full pl-9 pr-8 py-1.5 bg-[#1a1a1a] border border-[#333333] text-white rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981]"

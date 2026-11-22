@@ -263,7 +263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onDeleteFile(file.id);
                         }}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-400 hover:bg-red-950/40 transition-opacity"
-                        title="Delete file"
+                        title="Remove from Files and keep history"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

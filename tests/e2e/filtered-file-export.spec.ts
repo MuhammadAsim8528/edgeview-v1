@@ -79,7 +79,7 @@ test('detected headings and selected rows carry through to a stored-file downloa
   await page.locator('#file-upload-input').setInputFiles({ name: 'column-options.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
   expect((await uploaded).status()).toBe(201);
   await page.getByRole('button', { name: 'Group Shipments ON' }).click();
-  await page.getByText('Display columns', { exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Item', exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Item', exact: true }).check();
   await page.getByRole('textbox', { name: 'Display heading for Item' }).fill('Product label');
   await expect(page.getByRole('columnheader', { name: 'Product label' })).toBeVisible();

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from './db';
-import { getHistoryFilesFromDb, deleteFileFromHistory } from './sqlite_persistence';
+import { getHistoryFilesFromDb, deleteFileFromHistory, archivedFileRows } from './sqlite_persistence';
+import { hasTradeParties } from '../shared/dataset_columns';
 import { getSafeContentDisposition } from './utils/header_encoder';
 import { hasUnattributedHistory, HISTORY_RECONCILIATION_REQUIRED } from './history_ownership';
 
@@ -82,12 +83,14 @@ export function extractRowData(row: Record<string, any>) {
 }
 
 function getAllDatasetRows(fileId?: string) {
+  if (fileId === '__none__') return [];
   let rawRows: Record<string, any>[] = [];
   if (fileId) {
-    rawRows = db.files.get(fileId)?.rows || [];
+    const file = db.files.get(fileId) ?? archivedFileRows(fileId);
+    if (file && hasTradeParties(file.columns ?? [])) rawRows = file.rows || [];
   } else {
     for (const f of db.files.values()) {
-      rawRows.push(...(f.rows || []));
+      if (hasTradeParties(f.columns ?? [])) for (const row of f.rows || []) rawRows.push(row);
     }
   }
   return rawRows.map(extractRowData);
@@ -490,6 +493,8 @@ statsRouter.get('/history-files', async (req: Request, res: Response) => {
     const historyFiles = await getHistoryFilesFromDb();
     const formatted = historyFiles.map((f) => ({
       id: f.id,
+      archived: Boolean(f.archived),
+      trade_compatible: hasTradeParties(f.file_data.columns ?? []),
       file_name: f.file_name,
       uploaded_at: f.uploaded_at,
       row_count: f.row_count,
@@ -526,8 +531,8 @@ statsRouter.delete('/history-files/:id', async (req: Request, res: Response) => 
     }
 
     const fileInMem = db.files.get(fileId);
-    if (!fileInMem) return res.status(404).json({ success: false, code: 'FILE_NOT_FOUND', message: 'File not found.' });
-    const fileName = fileInMem ? fileInMem.name : 'Uploaded file';
+    const fileName = fileInMem?.name ?? (await getHistoryFilesFromDb()).find(file => file.id === fileId)?.file_name;
+    if (!fileName) return res.status(404).json({ success: false, code: 'FILE_NOT_FOUND', message: 'File not found.' });
     if (await hasUnattributedHistory(fileName)) return res.status(409).json(HISTORY_RECONCILIATION_REQUIRED);
     const deletedFromDisk = await deleteFileFromHistory(fileId);
     let historyCleanupError: string | null = null;

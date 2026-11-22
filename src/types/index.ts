@@ -310,6 +310,8 @@ export interface ShipmentDetailItem {
 }
 
 export interface HistoryFileItem {
+  archived?: boolean;
+  trade_compatible?: boolean;
   id: string;
   file_name: string;
   uploaded_at: string;

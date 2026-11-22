@@ -1,3 +1,4 @@
+import { hasTradeParties } from '../shared/dataset_columns';
 import React from 'react';
 import { useAppStore } from './store/appStore';
 import { Header } from './components/Header';
@@ -19,6 +20,8 @@ import { ResearchWorkspace } from './components/ResearchWorkspace';
 
 export default function App() {
   const store = useAppStore();
+  const tradeCompatible = store.selectedFile && hasTradeParties(store.selectedFile.columns ?? []);
+  const [uploadedId, setUploadedId] = React.useState<string>();
   const mainRef = React.useRef<HTMLElement>(null);
 
   React.useLayoutEffect(() => {
@@ -68,7 +71,12 @@ export default function App() {
                 {/* File Upload Drag & Drop Area */}
                 <ErrorBoundary fallbackTitle="Upload Component Error">
                   <UploadArea
-                    onFileUpload={store.uploadFile}
+                    onFileUpload={async file => {
+                      const uploaded = await store.uploadFile(file);
+                      if (uploaded?.id) setUploadedId(uploaded.id);
+                      return uploaded;
+                    }}
+                    onDismissError={store.dismissError}
                     uploading={store.uploading}
                     error={store.error}
                     existingFiles={store.files}
@@ -77,7 +85,8 @@ export default function App() {
 
                 {/* Main File Table / Viewer */}
                 <ErrorBoundary fallbackTitle="File Viewer Error">
-                  <FileViewer
+                  <FileViewer key={store.selectedFile?.id}
+                    justUploaded={Boolean(uploadedId && uploadedId === store.selectedFile?.id)}
                     file={store.selectedFile}
                     onExportCSV={store.exportCurrentFileToCSV}
                     onSaveToHistory={store.saveCurrentFileToHistory}
@@ -97,6 +106,7 @@ export default function App() {
                           </span>
                         </div>
 
+                        {tradeCompatible && <>
                         <div>
                           <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-widest">Exporters Found</span>
                           <span className="font-light text-[#10b981] font-mono text-xl mt-0.5 block">
@@ -120,6 +130,7 @@ export default function App() {
                             {formatCurrency(store.selectedFile.summary?.total_cost_usd || 0)}
                           </span>
                         </div>
+                        </>}
                       </div>
 
                       <button
@@ -138,7 +149,8 @@ export default function App() {
             {store.activeTab === 'summary' && (
               <div className="max-w-7xl mx-auto">
                 <ErrorBoundary fallbackTitle="Summary View Error">
-                  <Summary file={store.selectedFile} onOpenExport={store.openGlobalExport} />
+                  {store.selectedFile && !tradeCompatible ? <p>Trade summary requires an importer or exporter column. Open Files to explore this dataset.</p>
+                    : <Summary file={store.selectedFile} onOpenExport={store.openGlobalExport} />}
                 </ErrorBoundary>
               </div>
             )}
@@ -146,7 +158,8 @@ export default function App() {
             {store.activeTab === 'country' && (
               <div className="max-w-7xl mx-auto">
                 <ErrorBoundary fallbackTitle="Country View Error">
-                  <CountryView files={store.files} selectedFile={store.selectedFile} onOpenExport={store.openGlobalExport} />
+                  {store.selectedFile && !tradeCompatible ? <p>Country trade analysis requires an importer or exporter column.</p>
+                    : <CountryView files={store.files} selectedFile={store.selectedFile} onOpenExport={store.openGlobalExport} />}
                 </ErrorBoundary>
               </div>
             )}
