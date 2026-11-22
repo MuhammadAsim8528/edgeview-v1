@@ -3506,3 +3506,9 @@ Hosted174326d release42456369084: Docker128656134283 and native-launcher12865613
 
 
 Final hosted observation for exact174326d: release42456369084 completed SUCCESS. All4 jobs concluded success: Docker128656134283, Windows verify128656134416, browser128656134494 and native-launcher128656134569. No failed steps. Auxiliary research42456369075/inventory42456369065 also passed. This closes the current Docker-input regression and verifies this source checkpoint's automated checks; it does not close controlled alias activation, clean-Windows installation, trusted signing, real-company acceptance, updates/rollback or the remaining readiness ledger. Next implementation dependency remains identity mutation/publication coordination across research, uploads and deletion before exposing alias admission. No READY claim or deployment.
+
+### Public-company UI rehearsal and contact ordering
+- Installed revision 10, Contacts → Importers → Force Fetch → View Intelligence. Getz Pharma (Kenya) displayed the Nairobi address and Kenyan telephone listed on https://getzpharma.com/contact-us/. Personnel attribution remains unverified.
+- Emerchemie (Sri Lanka) displayed both published mailboxes but led with the warehouse. https://emerchemie.lk/contact-us.php distinguishes the head office from the warehouse. Its displayed telephone still needs independent corroboration.
+- Updated fresh and historical projections to prefer an already admitted general inbox over a warehouse/logistics primary on the same email domain. Other evidence and country admission are preserved.
+- Passed search_snippet_email_admission, company_country_field_scope and historical_evidence_preservation via tsx. Installed-build retest of the changed ordering is pending.

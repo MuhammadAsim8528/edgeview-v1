@@ -64,6 +64,11 @@ assert.deepEqual(projectSnippet('sales@trustanchor.co.ke', { status: 'error' as 
 assert.deepEqual(projectSnippet('sales@trustanchor.co.ke', { status: 'timeout' as any }).emails_list, [], 'noncanonical timeout status must not become success');
 const accepted = projectSnippet('SALES@TRUSTANCHOR.CO.KE sales@trustanchor.co.ke regional@sales.trustanchor.co.ke');
 assert.deepEqual(accepted.emails_list, ['sales@trustanchor.co.ke', 'regional@sales.trustanchor.co.ke'], 'case, duplicates and legitimate company subdomains work');
+const office = projectSnippet('warehouse@trustanchor.co.ke info@trustanchor.co.ke');
+assert.equal(office.email, 'info@trustanchor.co.ke');
+assert.deepEqual(office.emails_list, ['info@trustanchor.co.ke', 'warehouse@trustanchor.co.ke']);
+assert.equal(projectSnippet('warehouse@trustanchor.co.ke').email, 'warehouse@trustanchor.co.ke');
+assert.equal(projectSnippet('warehouse@trustanchor.co.ke info@other.example').email, 'warehouse@trustanchor.co.ke');
 const failedDomain = projectDeterministicContactFields({ ...base, results: [
   { ...official, status: 'failed' },
   result({ url: 'https://partner.example/profile', title: 'Partner directory', snippet: 'sales@trustanchor.co.ke' }),

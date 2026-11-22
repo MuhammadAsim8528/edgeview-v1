@@ -307,6 +307,16 @@ function leadershipFromLinkedInResults(results: Array<any>, companyName: string)
   return leaders;
 }
 
+function preferGeneralContactEmail(emails: string[]): string[] {
+  const first = /^(?:warehouse|logistics)@(.+)$/i.exec(emails[0] || '');
+  if (!first) return emails;
+  const domain = first[1].toLowerCase();
+  const index = emails.findIndex(email => ['info', 'contact', 'enquiries', 'inquiries']
+    .some(inbox => email.toLowerCase() === `${inbox}@${domain}`));
+  if (index < 0) return emails;
+  return [emails[index], ...emails.slice(0, index), ...emails.slice(index + 1)];
+}
+
 export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name' | 'results' | 'identity_resolution' | 'evidence_workspace'> & Partial<Pick<V1Run, 'country'>>) {
   const results = run.results;
   // Failure payloads remain in the immutable run, never as domain/contact proof.
@@ -478,7 +488,7 @@ export function projectDeterministicContactFields(run: Pick<V1Run, 'company_name
     return eligible.length > 0;
   };
   const contact_persons = [...leaderMap.values()].filter(person => admit('leader', person.name, person.source_url, person.designation)).slice(0, 50);
-  const finalEmails = [...new Set([...emails, ...citedEmails])].filter(value => admit('email', value)).slice(0, 50);
+  const finalEmails = preferGeneralContactEmail([...new Set([...emails, ...citedEmails])].filter(value => admit('email', value))).slice(0, 50);
   const finalPhones = [...new Set([...phones, ...citedPhones])].filter(value => admit('phone', value)).slice(0, 10);
   const scopedAddresses = addresses.filter(value => admit('address', value));
   const scopedSocials = social_links.filter(value => admit('social', value));
@@ -556,7 +566,7 @@ export function projectHistoricalContactFields(run: V1Run) {
     const key = String(person?.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     if (key && !people.has(key)) people.set(key, person);
   }
-  const emails = strings('emails_list', 'email');
+  const emails = preferGeneralContactEmail(strings('emails_list', 'email'));
   const phones = strings('phones_list', 'phone');
   const addresses = strings('addresses', 'address');
   const contactPersons = [...people.values()].slice(0, 50);
